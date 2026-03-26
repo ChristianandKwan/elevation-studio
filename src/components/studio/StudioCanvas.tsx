@@ -1,0 +1,96 @@
+'use client'
+
+import { useRef, useEffect } from 'react'
+import type { useStudio } from '@/hooks/useStudio'
+
+type StudioHook = ReturnType<typeof useStudio>
+
+interface Props {
+  studio: StudioHook
+  onStatus: (msg: string) => void
+}
+
+export default function StudioCanvas({ studio, onStatus }: Props) {
+  const { state, elevWrapRef, calibSvgRef, vpRef, changeZoom, setZoomFit } = studio
+
+  // Deselect on canvas background click
+  function onWrapClick(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.id === 'elev-img' || target === elevWrapRef.current) {
+      studio.selectArtwork(null)
+    }
+  }
+
+  const hasElev = !!state.elev
+
+  return (
+    <div className="canvas-area" id="canvas-area">
+      {!hasElev && (
+        <div className="canvas-empty">
+          <div className="empty-icon">🖼</div>
+          <p>Upload an elevation to begin</p>
+        </div>
+      )}
+
+      {hasElev && (
+        <div
+          className="canvas-viewport"
+          id="canvas-viewport"
+          ref={vpRef}
+        >
+          <div className="canvas-scroller">
+            <div
+              className="elev-wrap"
+              id="elev-wrap"
+              ref={elevWrapRef}
+              onClick={onWrapClick}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                id="elev-img"
+                className="elev-img"
+                src={state.elev?.imageUrl ?? ''}
+                alt="elevation"
+                draggable={false}
+              />
+
+              {/* Calibration hint */}
+              <div className="calib-hint" id="calib-hint">
+                Click and drag to draw a scale line
+              </div>
+
+              {/* Calibration SVG */}
+              <svg
+                className="calib-svg"
+                id="calib-svg"
+                ref={calibSvgRef}
+                onMouseDown={studio.onCalibMouseDown}
+                onMouseMove={studio.onCalibMouseMove}
+                onMouseUp={studio.onCalibMouseUp}
+              >
+                <line id="rl-bg" className="calib-ruler-bg" display="none" />
+                <line id="rl"    className="calib-ruler"    display="none" />
+                <line id="rc1"   className="calib-tick"     display="none" />
+                <line id="rc2"   className="calib-tick"     display="none" />
+                <circle id="rd1" className="calib-cap" r="4" display="none" />
+                <circle id="rd2" className="calib-cap" r="4" display="none" />
+              </svg>
+
+              {/* Artwork overlays injected here imperatively by useStudio */}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Zoom controls */}
+      {hasElev && (
+        <div className="zoom-controls">
+          <button className="zoom-btn" onClick={() => changeZoom(-0.1, state)} title="Zoom out">−</button>
+          <div className="zoom-label" id="zoom-label">{Math.round(state.zoom * 100)}%</div>
+          <button className="zoom-btn" onClick={() => changeZoom(0.1, state)} title="Zoom in">+</button>
+          <button className="zoom-btn" style={{ fontSize: 10, width: 40 }} onClick={() => setZoomFit(state)} title="Fit">Fit</button>
+        </div>
+      )}
+    </div>
+  )
+}

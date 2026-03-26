@@ -1,0 +1,251 @@
+'use client'
+
+import { useRef } from 'react'
+import type { useStudio } from '@/hooks/useStudio'
+import { priceLabel, formatPrice } from '@/lib/utils'
+
+type StudioHook = ReturnType<typeof useStudio>
+
+interface Props {
+  studio: StudioHook
+  optionId: string
+  projectId: string
+  onStatus: (msg: string) => void
+}
+
+export default function StudioSidebar({ studio, onStatus }: Props) {
+  const { state, uploadElevation, startCalibration, setShowArtModal } = studio
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const hasElev = !!state.elev
+  const hasScale = !!state.scale
+  const hasArts = state.artworks.length > 0
+
+  function pickElevation() {
+    fileInputRef.current?.click()
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    uploadElevation(file)
+    e.target.value = ''
+  }
+
+  const visibleArtworksWithPrice = state.artworks.filter(a => a.visible && a.price)
+  const elevationTotal = visibleArtworksWithPrice.reduce((s, a) => s + a.price, 0)
+  const hasMixedPricing = (() => {
+    if (visibleArtworksWithPrice.length < 2) return false
+    const first = visibleArtworksWithPrice[0].priceIncludes
+    return visibleArtworksWithPrice.some(a => a.priceIncludes !== first)
+  })()
+
+  return (
+    <div className="studio-sidebar">
+      {/* Step 1: Elevation */}
+      <div className="sidebar-section">
+        <div className="s-title">
+          <span className={`step-badge${hasElev ? ' done' : ''}`}>1</span>
+          Elevation
+        </div>
+        <div className={`upload-zone${hasElev ? ' has-file' : ''}`} onClick={pickElevation}>
+          {hasElev ? 'Elevation loaded — click to replace' : (
+            <>Upload elevation image<br /><span style={{ fontSize: 10, opacity: .7 }}>JPG, PNG, TIFF — any resolution</span></>
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={onFileChange}
+        />
+      </div>
+
+      {/* Step 2: Scale */}
+      <div className="sidebar-section">
+        <div className="s-title">
+          <span className={`step-badge${hasScale ? ' done' : ''}`}>2</span>
+          Scale Calibration
+        </div>
+        <button
+          className="btn btn-sm btn-full"
+          disabled={!hasElev}
+          onClick={startCalibration}
+        >
+          {hasScale ? 'Redraw Scale Line' : 'Draw Scale Line'}
+        </button>
+        {hasScale && (
+          <div className="scale-chip">
+            Scale: <strong>{state.scale!.origPxPerCm.toFixed(2)} px/cm</strong>
+          </div>
+        )}
+      </div>
+
+      {/* Step 3: Artworks */}
+      <div className="sidebar-section" style={{ flex: 1 }}>
+        <div className="s-title">
+          <span className={`step-badge${hasArts ? ' done' : ''}`}>3</span>
+          Artworks
+        </div>
+        <button
+          className="btn btn-sm btn-primary btn-full"
+          disabled={!hasScale}
+          onClick={() => setShowArtModal(true)}
+        >
+          + Add Artwork
+        </button>
+
+        {hasArts && (
+          <>
+            <div className="artwork-list">
+              {state.artworks.map(art => (
+                <ArtworkItem
+                  key={art.id}
+                  art={art}
+                  isSelected={art.id === state.selId}
+                  onSelect={() => studio.selectArtwork(art.id)}
+                  onToggleVis={() => studio.toggleVisibility(art.id)}
+                  onDelete={() => studio.deleteArtwork(art.id)}
+                  onDimsChange={(w, h) => studio.updateArtworkDims(art.id, w, h)}
+                  onPriceChange={(p) => studio.updateArtworkPrice(art.id, p)}
+                />
+              ))}
+            </div>
+
+            {hasArts && (
+              <div className="kb-hint">
+                ↑↓←→ nudge · Shift+arrow = 10px · Delete = remove
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Cost summary */}
+      {visibleArtworksWithPrice.length > 0 && (
+        <div className="cost-summary">
+          <div style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--mid)', marginBottom: 8 }}>
+            Cost Summary
+          </div>
+          {visibleArtworksWithPrice.map(a => (
+            <div key={a.id} className="cost-row">
+              <span className="cost-row-label">{a.name}</span>
+              <span className="cost-row-value">{formatPrice(a.price)}</span>
+            </div>
+          ))}
+          <div className="cost-row cost-total">
+            <span>Elevation Total</span>
+            <span className="cost-row-value">{formatPrice(elevationTotal)}</span>
+          </div>
+          {hasMixedPricing && (
+            <div style={{ marginTop: 8, padding: '7px 9px', background: '#FFF8F0', border: '1px solid rgba(139,111,71,.3)', fontSize: 10.5, color: 'var(--accent)', lineHeight: 1.5 }}>
+              ⚠ Mixed pricing — some artworks include framing &amp; installation, others don't.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ArtworkItemProps {
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean }
+  isSelected: boolean
+  onSelect: () => void
+  onToggleVis: () => void
+  onDelete: () => void
+  onDimsChange: (w: number, h: number) => void
+  onPriceChange: (p: number) => void
+}
+
+function ArtworkItem({ art, isSelected, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange }: ArtworkItemProps) {
+  const dimsRef = useRef<HTMLDivElement>(null)
+  const editBtnRef = useRef<HTMLButtonElement>(null)
+
+  function toggleDims() {
+    const dr = dimsRef.current
+    const btn = editBtnRef.current
+    if (!dr || !btn) return
+    const open = dr.classList.toggle('visible')
+    btn.classList.toggle('edit-active', open)
+  }
+
+  return (
+    <div className={`aw-item${isSelected ? ' selected' : ''}`}>
+      <div className="aw-item-top" onClick={onSelect}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="aw-thumb" src={art.imageUrl ?? ''} alt={art.name} />
+        <div className="aw-info">
+          <div className="aw-name">{art.name}</div>
+          <div className="aw-price">
+            {art.price ? `${formatPrice(art.price)} (${priceLabel(art.priceIncludes)})` : 'No price set'}
+          </div>
+        </div>
+        <div className="aw-btns">
+          <button
+            ref={editBtnRef}
+            className="icon-btn"
+            title="Edit dimensions & price"
+            onClick={e => { e.stopPropagation(); toggleDims() }}
+          >
+            <EditIcon />
+          </button>
+          <button
+            className={`icon-btn${art.visible ? '' : ' hidden-art'}`}
+            title={art.visible ? 'Hide' : 'Show'}
+            onClick={e => { e.stopPropagation(); onToggleVis() }}
+          >
+            {art.visible ? <EyeIcon /> : <EyeOffIcon />}
+          </button>
+          <button
+            className="icon-btn del"
+            title="Remove"
+            onClick={e => { e.stopPropagation(); onDelete() }}
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      </div>
+
+      <div className="aw-dims-row" ref={dimsRef}>
+        <label>W</label>
+        <input
+          type="number" className="dim-input" defaultValue={art.wCm} min={1} step={0.5}
+          onClick={e => e.stopPropagation()}
+          onBlur={e => { const w = parseFloat(e.target.value); if (w > 0) onDimsChange(w, art.hCm) }}
+          onKeyDown={e => { if (e.key === 'Enter') { const w = parseFloat((e.target as HTMLInputElement).value); if (w > 0) onDimsChange(w, art.hCm) } }}
+        />
+        <span className="dim-sep">×</span>
+        <label>H</label>
+        <input
+          type="number" className="dim-input" defaultValue={art.hCm} min={1} step={0.5}
+          onClick={e => e.stopPropagation()}
+          onBlur={e => { const h = parseFloat(e.target.value); if (h > 0) onDimsChange(art.wCm, h) }}
+          onKeyDown={e => { if (e.key === 'Enter') { const h = parseFloat((e.target as HTMLInputElement).value); if (h > 0) onDimsChange(art.wCm, h) } }}
+        />
+        <label>cm</label>
+        <label style={{ marginLeft: 6 }}>£</label>
+        <input
+          type="number" className="price-input" defaultValue={art.price || ''} placeholder="Price"
+          onClick={e => e.stopPropagation()}
+          onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
+          onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function EditIcon() {
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+}
+function EyeIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+}
+function EyeOffIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+}
+function TrashIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+}
