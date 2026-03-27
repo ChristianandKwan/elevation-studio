@@ -27,7 +27,7 @@ interface ClientOption {
   zoom: number
   approved: boolean
   approved_at: string | null
-  foreground_masks: unknown
+  foreground_masks?: any[] | null
   artworks: ClientArtwork[]
 }
 

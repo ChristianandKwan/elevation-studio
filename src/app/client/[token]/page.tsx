@@ -62,7 +62,7 @@ export default async function ClientPortalPage({ params }: Props) {
           id: string; option: string; image_path: string | null;
           orig_w: number; orig_h: number; scale_px_per_cm: number | null;
           zoom: number; approved: boolean; approved_at: string | null;
-          foreground_masks: unknown;
+          foreground_masks?: any[] | null;
           artworks: Array<{
             id: string; name: string; image_path: string;
             w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
