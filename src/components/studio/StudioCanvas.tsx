@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function StudioCanvas({ studio, onStatus }: Props) {
-  const { state, elevWrapRef, calibSvgRef, vpRef, changeZoom, setZoomFit } = studio
+  const { state, elevWrapRef, calibSvgRef, fgDrawSvgRef, vpRef, changeZoom, setZoomFit } = studio
 
   // Deselect on canvas background click
   function onWrapClick(e: React.MouseEvent) {
@@ -54,9 +54,52 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
                 draggable={false}
               />
 
+              {/* Foreground composite SVG — sits above artwork overlays, renders elevation clipped to mask polygons */}
+              <svg
+                id="fg-svg"
+                className="fg-svg"
+                style={{ display: 'none' }}
+              >
+                <defs>
+                  <clipPath id="fg-clip" />
+                </defs>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <image
+                  id="fg-image"
+                  href=""
+                  x="0"
+                  y="0"
+                  preserveAspectRatio="none"
+                  clipPath="url(#fg-clip)"
+                  style={{ pointerEvents: 'none' }}
+                />
+              </svg>
+
+              {/* Foreground drawing SVG — active only when mask draw mode is on */}
+              <svg
+                id="fg-draw-svg"
+                className="fg-draw-svg"
+                ref={fgDrawSvgRef}
+                onMouseMove={studio.onMaskMouseMove}
+                onClick={studio.onMaskClick}
+                onDoubleClick={studio.onMaskDblClick}
+              />
+
+              {/* Foreground highlight SVG — shows individual region on sidebar hover */}
+              <svg
+                id="fg-highlight-svg"
+                className="fg-highlight-svg"
+                style={{ display: 'none' }}
+              />
+
               {/* Calibration hint */}
               <div className="calib-hint" id="calib-hint">
                 Click and drag to draw a scale line
+              </div>
+
+              {/* Mask draw hint */}
+              <div className="calib-hint mask-hint" id="mask-hint">
+                Click to place points · Double-click or click the first point to close the shape · Esc to cancel
               </div>
 
               {/* Calibration SVG */}

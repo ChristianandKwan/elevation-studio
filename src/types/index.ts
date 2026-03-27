@@ -38,6 +38,7 @@ export interface ElevationOption {
   approved: boolean
   approvedAt: string | null
   artworks: Artwork[]
+  foregroundMasks: ForegroundMasks | null
 }
 
 export interface Elevation {
@@ -91,4 +92,16 @@ export interface CalibState {
   drawing: boolean
   start: { x: number; y: number } | null
   lineDispPx: number
+}
+
+export interface MaskPoint {
+  x: number // fraction 0-1 of original image width
+  y: number // fraction 0-1 of original image height
+}
+
+export type ForegroundMasks = MaskPoint[][]
+
+export interface MaskDrawState {
+  active: boolean
+  currentPoints: MaskPoint[]
 }

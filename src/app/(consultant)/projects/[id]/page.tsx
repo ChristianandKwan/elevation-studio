@@ -34,7 +34,7 @@ export default async function ProjectPage({ params }: Props) {
     .select(`
       id, name, display_order,
       elevation_options(
-        id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at,
+        id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks,
         artworks(
           id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order
         )
@@ -56,6 +56,7 @@ export default async function ProjectPage({ params }: Props) {
             w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
             visible: boolean; price: number; price_includes: string; display_order: number;
           }>;
+          foreground_masks: unknown;
         }) => {
           let imageUrl: string | null = null
           if (opt.image_path) {
