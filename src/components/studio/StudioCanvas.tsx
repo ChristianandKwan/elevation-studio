@@ -85,6 +85,13 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
                 onDoubleClick={studio.onMaskDblClick}
               />
 
+              {/* Foreground highlight SVG — shows individual region on sidebar hover */}
+              <svg
+                id="fg-highlight-svg"
+                className="fg-highlight-svg"
+                style={{ display: 'none' }}
+              />
+
               {/* Calibration hint */}
               <div className="calib-hint" id="calib-hint">
                 Click and drag to draw a scale line

@@ -76,6 +76,32 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     return { w: art.wCm * sc.dispPxPerCm, h: art.hCm * sc.dispPxPerCm }
   }
 
+  // ─── HIGHLIGHT MASK (sidebar hover) ──────────────────────────────
+  function highlightMask(index: number | null) {
+    const svg = document.getElementById('fg-highlight-svg') as SVGSVGElement | null
+    if (!svg) return
+    while (svg.firstChild) svg.removeChild(svg.firstChild)
+
+    const s = stateRef.current
+    if (index === null || !s.elev) {
+      svg.style.display = 'none'
+      return
+    }
+
+    const polygon = s.masks[index]
+    if (!polygon || polygon.length < 3) { svg.style.display = 'none'; return }
+
+    svg.style.display = ''
+    svg.setAttribute('width', String(s.elev.dispW))
+    svg.setAttribute('height', String(s.elev.dispH))
+
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+    const pts = polygon.map(p => `${p.x * s.elev!.dispW},${p.y * s.elev!.dispH}`).join(' ')
+    poly.setAttribute('points', pts)
+    poly.setAttribute('class', 'fg-highlight-poly')
+    svg.appendChild(poly)
+  }
+
   // ─── FOREGROUND SVG RENDERING ─────────────────────────────────────
   function renderForegroundSVG(masks: ForegroundMasks, elev: StudioElev | null, imageUrl: string | null) {
     const svg = document.getElementById('fg-svg') as SVGSVGElement | null
@@ -203,11 +229,17 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     renderArtworksDOM(artworks, elev, newScale)
     renderForegroundSVG(masks ?? [], elev, elev.imageUrl)
 
-    // Resize draw SVG and re-render its contents at new scale
+    // Resize draw + highlight SVGs and re-render draw contents at new scale
     const drawSvg = document.getElementById('fg-draw-svg') as SVGSVGElement | null
     if (drawSvg) {
       drawSvg.setAttribute('width', String(dW))
       drawSvg.setAttribute('height', String(dH))
+    }
+    // Clear highlight on zoom — user can re-hover to see it again at new scale
+    const highlightSvg = document.getElementById('fg-highlight-svg') as SVGSVGElement | null
+    if (highlightSvg) {
+      highlightSvg.style.display = 'none'
+      while (highlightSvg.firstChild) highlightSvg.removeChild(highlightSvg.firstChild)
     }
     renderDrawSVG(
       masks ?? [],
@@ -965,5 +997,6 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     onMaskDblClick,
     deletePolygon,
     clearAllMasks,
+    highlightMask,
   }
 }

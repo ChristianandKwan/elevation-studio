@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function StudioSidebar({ studio, onStatus }: Props) {
-  const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks } = studio
+  const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const hasElev = !!state.elev
@@ -145,12 +145,17 @@ export default function StudioSidebar({ studio, onStatus }: Props) {
               {hasMasks && (
                 <div style={{ marginTop: 8 }}>
                   {state.masks.map((_, i) => (
-                    <div key={i} className="mask-region-row">
+                    <div
+                      key={i}
+                      className="mask-region-row"
+                      onMouseEnter={() => highlightMask(i)}
+                      onMouseLeave={() => highlightMask(null)}
+                    >
                       <span className="mask-region-label">Region {i + 1}</span>
                       <button
                         className="icon-btn del"
                         title="Delete region"
-                        onClick={() => deletePolygon(i)}
+                        onClick={() => { highlightMask(null); deletePolygon(i) }}
                       >
                         <TrashIcon />
                       </button>

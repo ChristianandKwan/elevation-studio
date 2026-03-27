@@ -350,6 +350,10 @@ body {
 .fg-draw-line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 3; fill: none; }
 .fg-close-hint { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0.6; }
 
+/* Foreground highlight layer (sidebar hover) */
+#fg-highlight-svg, .fg-highlight-svg { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5; }
+.fg-highlight-poly { fill: rgba(200, 40, 40, 0.35); stroke: rgba(200, 40, 40, 0.75); stroke-width: 2; }
+
 /* Foreground sidebar section */
 .mask-region-row {
   display: flex; align-items: center; justify-content: space-between;
