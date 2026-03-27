@@ -338,6 +338,31 @@ body {
 }
 .calib-hint.show { opacity: 1; }
 
+/* Foreground masking SVG layers */
+.aw-overlay { z-index: 1; }
+#fg-svg, .fg-svg { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 2; }
+#fg-draw-svg, .fg-draw-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+#fg-draw-svg.active, .fg-draw-svg.active { pointer-events: all; cursor: crosshair; }
+.calib-svg { z-index: 10; }
+.fg-mask-preview { fill: rgba(139,111,71,0.28); stroke: var(--accent); stroke-width: 1.5; }
+.fg-mask-preview-live { fill: rgba(139,111,71,0.18); }
+.fg-draw-dot { fill: var(--accent); }
+.fg-draw-line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 3; fill: none; }
+.fg-close-hint { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0.6; }
+
+/* Foreground sidebar section */
+.mask-region-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 0; font-size: 11.5px; border-bottom: 1px solid var(--border);
+}
+.mask-region-row:last-of-type { border-bottom: none; }
+.mask-region-label { color: var(--charcoal); }
+.mask-draw-panel { margin-top: 4px; }
+.mask-draw-status {
+  font-size: 11px; color: var(--mid); line-height: 1.5; padding: 7px 9px;
+  background: var(--cream); border: 1px solid var(--border); margin-bottom: 4px;
+}
+
 /* Output section */
 .output-section { padding: 16px 18px; border-top: 1px solid var(--border); background: var(--warm-white); flex-shrink: 0; }
 .output-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }

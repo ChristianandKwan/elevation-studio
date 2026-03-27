@@ -29,6 +29,7 @@ interface DbElevation {
     zoom: number
     approved: boolean
     approved_at: string | null
+    foreground_masks: unknown
     artworks: Array<Artwork & { imageUrl: string | null }>
   }>
 }
@@ -71,6 +72,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       scalePxPerCm: activeOptData.scale_px_per_cm,
       zoom: activeOptData.zoom,
       artworks: activeOptData.artworks ?? [],
+      foregroundMasks: (activeOptData.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
     })
   }, [activeElevId, activeOption]) // eslint-disable-line
 
@@ -86,6 +88,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         return
       }
       if (e.key === 'Escape') {
+        if (s.maskDraw.active) {
+          if (s.maskDraw.currentPoints.length > 0) { studio.clearCurrentPoints(); return }
+          studio.cancelMaskDraw(); return
+        }
         if (s.calib.active) { studio.cancelCalibration(); return }
         studio.selectArtwork(null)
         return
@@ -126,8 +132,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order,
       elevation_options: [
-        { id: '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, artworks: [] },
-        { id: '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, artworks: [] },
+        { id: '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
+        { id: '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])

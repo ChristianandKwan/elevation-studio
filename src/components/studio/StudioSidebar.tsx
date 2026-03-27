@@ -14,12 +14,15 @@ interface Props {
 }
 
 export default function StudioSidebar({ studio, onStatus }: Props) {
-  const { state, uploadElevation, startCalibration, setShowArtModal } = studio
+  const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const hasElev = !!state.elev
   const hasScale = !!state.scale
   const hasArts = state.artworks.length > 0
+  const hasMasks = state.masks.length > 0
+  const maskDrawActive = state.maskDraw.active
+  const pointsPlaced = state.maskDraw.currentPoints.length
 
   function pickElevation() {
     fileInputRef.current?.click()
@@ -121,6 +124,89 @@ export default function StudioSidebar({ studio, onStatus }: Props) {
           </>
         )}
       </div>
+
+      {/* Step 4: Foreground */}
+      {hasElev && (
+        <div className="sidebar-section">
+          <div className="s-title">
+            <span className={`step-badge${hasMasks ? ' done' : ''}`}>4</span>
+            Foreground
+          </div>
+
+          {!maskDrawActive ? (
+            <>
+              <button
+                className="btn btn-sm btn-full"
+                disabled={!hasElev}
+                onClick={startMaskDraw}
+              >
+                {hasMasks ? 'Edit Foreground Regions' : 'Define Foreground'}
+              </button>
+              {hasMasks && (
+                <div style={{ marginTop: 8 }}>
+                  {state.masks.map((_, i) => (
+                    <div key={i} className="mask-region-row">
+                      <span className="mask-region-label">Region {i + 1}</span>
+                      <button
+                        className="icon-btn del"
+                        title="Delete region"
+                        onClick={() => deletePolygon(i)}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    className="btn btn-sm btn-full"
+                    style={{ marginTop: 6, color: 'var(--mid)', background: 'transparent', border: '1px solid var(--border)' }}
+                    onClick={clearAllMasks}
+                  >
+                    Clear All Regions
+                  </button>
+                </div>
+              )}
+              {!hasMasks && (
+                <div style={{ marginTop: 6, fontSize: 11, color: 'var(--mid)', lineHeight: 1.5 }}>
+                  Define areas that appear in front of artworks — e.g. light fixtures, plants, furniture.
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="mask-draw-panel">
+              <div className="mask-draw-status">
+                {pointsPlaced === 0
+                  ? 'Click on the elevation to place points'
+                  : pointsPlaced < 3
+                    ? `${pointsPlaced} point${pointsPlaced > 1 ? 's' : ''} placed — need at least 3`
+                    : `${pointsPlaced} points — double-click or click the first point to close`
+                }
+              </div>
+              {state.masks.length > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--mid)', marginBottom: 6 }}>
+                  {state.masks.length} region{state.masks.length > 1 ? 's' : ''} already defined
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button className="btn btn-sm btn-primary" style={{ flex: 1 }} onClick={finishMaskDraw}>
+                  Done
+                </button>
+                <button className="btn btn-sm" style={{ flex: 1 }} onClick={cancelMaskDraw}>
+                  Cancel
+                </button>
+              </div>
+              {pointsPlaced > 0 && (
+                <button
+                  className="btn btn-sm btn-full"
+                  style={{ marginTop: 6, color: 'var(--mid)', background: 'transparent', border: '1px solid var(--border)' }}
+                  onClick={clearCurrentPoints}
+                >
+                  Clear Current Shape
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Cost summary */}
       {visibleArtworksWithPrice.length > 0 && (

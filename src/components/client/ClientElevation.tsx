@@ -27,6 +27,7 @@ interface ClientOption {
   zoom: number
   approved: boolean
   approved_at: string | null
+  foreground_masks: unknown
   artworks: ClientArtwork[]
 }
 
@@ -305,6 +306,38 @@ function ClientCanvas({
 
         wrap.appendChild(aw)
       })
+
+      // Foreground composite SVG — renders elevation clipped to mask polygons, above artworks
+      const masks = Array.isArray(optData.foreground_masks) ? optData.foreground_masks as Array<Array<{ x: number; y: number }>> : []
+      const fgSvg = wrap.querySelector('#client-fg-svg') as SVGSVGElement | null
+      if (fgSvg) {
+        const W = img.naturalWidth * s
+        const H = img.naturalHeight * s
+        fgSvg.setAttribute('width', String(W))
+        fgSvg.setAttribute('height', String(H))
+
+        const clipPath = fgSvg.querySelector('#client-fg-clip')
+        if (clipPath) {
+          clipPath.innerHTML = ''
+          masks.forEach((polygon, i) => {
+            if (polygon.length < 3) return
+            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+            poly.id = `client-fg-poly-${i}`
+            const pts = polygon.map(p => `${p.x * W},${p.y * H}`).join(' ')
+            poly.setAttribute('points', pts)
+            clipPath.appendChild(poly)
+          })
+        }
+
+        const fgImg = fgSvg.querySelector('#client-fg-image') as SVGImageElement | null
+        if (fgImg) {
+          fgImg.setAttribute('width', String(W))
+          fgImg.setAttribute('height', String(H))
+          fgImg.setAttribute('href', optData.imageUrl!)
+        }
+
+        fgSvg.style.display = masks.length > 0 ? '' : 'none'
+      }
     }
     img.src = optData.imageUrl
   }, [optData?.id, optData?.imageUrl, optData?.approved]) // eslint-disable-line
@@ -329,6 +362,22 @@ function ClientCanvas({
             draggable={false}
             style={{ display: 'block', maxWidth: '100%' }}
           />
+
+          {/* Foreground composite SVG */}
+          <svg id="client-fg-svg" className="fg-svg" style={{ display: 'none' }}>
+            <defs>
+              <clipPath id="client-fg-clip" />
+            </defs>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <image
+              id="client-fg-image"
+              href=""
+              x="0"
+              y="0"
+              preserveAspectRatio="none"
+              style={{ pointerEvents: 'none' }}
+            />
+          </svg>
         </div>
       </div>
     </div>

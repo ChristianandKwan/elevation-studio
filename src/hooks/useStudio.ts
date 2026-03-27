@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Artwork, Scale, CalibState } from '@/types'
+import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
 
 export interface StudioElev {
   imagePath: string
@@ -21,10 +21,15 @@ export interface StudioState {
   selId: string | null
   zoom: number
   calib: CalibState
+  masks: ForegroundMasks
+  maskDraw: MaskDrawState
 }
 
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 4.0
+
+const DEFAULT_CALIB: CalibState = { active: false, drawing: false, start: null, lineDispPx: 0 }
+const DEFAULT_MASK_DRAW: MaskDrawState = { active: false, currentPoints: [] }
 
 interface UseStudioOptions {
   projectId: string
@@ -39,13 +44,23 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     artworks: [],
     selId: null,
     zoom: 1.0,
-    calib: { active: false, drawing: false, start: null, lineDispPx: 0 },
+    calib: DEFAULT_CALIB,
+    masks: [],
+    maskDraw: DEFAULT_MASK_DRAW,
   })
+
+  // Keep a ref in sync for reading state in non-React event handlers (e.g. mousemove)
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   // Refs for imperative canvas DOM (mirrors prototype)
   const elevWrapRef = useRef<HTMLDivElement>(null)
   const calibSvgRef = useRef<SVGSVGElement>(null)
+  const fgDrawSvgRef = useRef<SVGSVGElement>(null)
   const vpRef = useRef<HTMLDivElement>(null)
+
+  // Mask draw: hover point tracked in ref to avoid setState on every mousemove
+  const maskHoverRef = useRef<MaskPoint | null>(null)
 
   // Pending scale modal data
   const pendingCalibPx = useRef(0)
@@ -61,8 +76,134 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     return { w: art.wCm * sc.dispPxPerCm, h: art.hCm * sc.dispPxPerCm }
   }
 
+  // ─── FOREGROUND SVG RENDERING ─────────────────────────────────────
+  function renderForegroundSVG(masks: ForegroundMasks, elev: StudioElev | null, imageUrl: string | null) {
+    const svg = document.getElementById('fg-svg') as SVGSVGElement | null
+    if (!svg) return
+
+    if (!elev || !imageUrl || masks.length === 0) {
+      svg.style.display = 'none'
+      return
+    }
+
+    svg.style.display = ''
+    svg.setAttribute('width', String(elev.dispW))
+    svg.setAttribute('height', String(elev.dispH))
+
+    const fgImg = document.getElementById('fg-image') as SVGImageElement | null
+    if (fgImg) {
+      fgImg.setAttribute('width', String(elev.dispW))
+      fgImg.setAttribute('height', String(elev.dispH))
+      if (fgImg.getAttribute('href') !== imageUrl) {
+        fgImg.setAttribute('href', imageUrl)
+      }
+    }
+
+    const clipPath = document.getElementById('fg-clip')
+    if (clipPath) {
+      clipPath.innerHTML = ''
+      masks.forEach((polygon, i) => {
+        if (polygon.length < 3) return
+        const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+        poly.id = `fg-poly-${i}`
+        const pts = polygon.map(p => `${p.x * elev.dispW},${p.y * elev.dispH}`).join(' ')
+        poly.setAttribute('points', pts)
+        clipPath.appendChild(poly)
+      })
+    }
+  }
+
+  // ─── DRAW SVG RENDERING ───────────────────────────────────────────
+  function renderDrawSVG(
+    masks: ForegroundMasks,
+    currentPoints: MaskPoint[],
+    hoverPoint: MaskPoint | null,
+    elev: StudioElev | null
+  ) {
+    const svg = fgDrawSvgRef.current
+    if (!svg || !elev) return
+
+    const W = elev.dispW
+    const H = elev.dispH
+
+    function toSvgPt(p: MaskPoint) { return { x: p.x * W, y: p.y * H } }
+    function pointsAttr(pts: MaskPoint[]) { return pts.map(p => `${p.x * W},${p.y * H}`).join(' ') }
+    function svgEl(tag: string) { return document.createElementNS('http://www.w3.org/2000/svg', tag) }
+
+    // Clear
+    while (svg.firstChild) svg.removeChild(svg.firstChild)
+
+    // Committed masks — semi-transparent overlay so user sees existing regions
+    masks.forEach(polygon => {
+      if (polygon.length < 3) return
+      const poly = svgEl('polygon')
+      poly.setAttribute('points', pointsAttr(polygon))
+      poly.setAttribute('class', 'fg-mask-preview')
+      svg.appendChild(poly)
+    })
+
+    if (currentPoints.length === 0) return
+
+    // In-progress polygon preview fill (rendered first so dots appear above)
+    if (currentPoints.length >= 2 && hoverPoint) {
+      const previewPts = [...currentPoints, hoverPoint]
+      const poly = svgEl('polygon')
+      poly.setAttribute('points', pointsAttr(previewPts))
+      poly.setAttribute('class', 'fg-mask-preview fg-mask-preview-live')
+      svg.appendChild(poly)
+    }
+
+    // Confirmed edges
+    for (let i = 1; i < currentPoints.length; i++) {
+      const a = toSvgPt(currentPoints[i - 1])
+      const b = toSvgPt(currentPoints[i])
+      const line = svgEl('line')
+      line.setAttribute('x1', String(a.x)); line.setAttribute('y1', String(a.y))
+      line.setAttribute('x2', String(b.x)); line.setAttribute('y2', String(b.y))
+      line.setAttribute('class', 'fg-draw-line')
+      svg.appendChild(line)
+    }
+
+    // Live preview line from last point to cursor
+    if (hoverPoint && currentPoints.length > 0) {
+      const last = toSvgPt(currentPoints[currentPoints.length - 1])
+      const hover = toSvgPt(hoverPoint)
+      const preview = svgEl('line')
+      preview.setAttribute('x1', String(last.x)); preview.setAttribute('y1', String(last.y))
+      preview.setAttribute('x2', String(hover.x)); preview.setAttribute('y2', String(hover.y))
+      preview.setAttribute('class', 'fg-draw-line')
+      svg.appendChild(preview)
+    }
+
+    // Confirmed point dots
+    currentPoints.forEach((p, i) => {
+      const { x, y } = toSvgPt(p)
+
+      // Close-hint ring around first point when ≥3 points placed
+      if (i === 0 && currentPoints.length >= 3) {
+        const ring = svgEl('circle')
+        ring.setAttribute('cx', String(x)); ring.setAttribute('cy', String(y))
+        ring.setAttribute('r', '11')
+        ring.setAttribute('class', 'fg-close-hint')
+        svg.appendChild(ring)
+      }
+
+      const dot = svgEl('circle')
+      dot.setAttribute('cx', String(x)); dot.setAttribute('cy', String(y))
+      dot.setAttribute('r', '5')
+      dot.setAttribute('class', 'fg-draw-dot')
+      svg.appendChild(dot)
+    })
+  }
+
   // ─── ZOOM ──────────────────────────────────────────────────────────
-  const applyZoom = useCallback((zoom: number, elev: StudioElev, scale: Scale | null, artworks: Artwork[]) => {
+  const applyZoom = useCallback((
+    zoom: number,
+    elev: StudioElev,
+    scale: Scale | null,
+    artworks: Artwork[],
+    masks?: ForegroundMasks
+  ) => {
     const dW = Math.round(elev.origW * zoom)
     const dH = Math.round(elev.origH * zoom)
     elev.dispW = dW
@@ -78,8 +219,17 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
     const newScale = scale ? { ...scale, dispPxPerCm: scale.origPxPerCm * zoom } : null
     renderArtworksDOM(artworks, elev, newScale)
+    renderForegroundSVG(masks ?? [], elev, elev.imageUrl)
+
+    // Resize draw SVG too
+    const drawSvg = document.getElementById('fg-draw-svg') as SVGSVGElement | null
+    if (drawSvg) {
+      drawSvg.setAttribute('width', String(dW))
+      drawSvg.setAttribute('height', String(dH))
+    }
+
     return newScale
-  }, [])
+  }, []) // eslint-disable-line
 
   function changeZoom(delta: number, currentState: StudioState) {
     if (!currentState.elev) return
@@ -88,7 +238,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     const yf = vp ? (vp.scrollTop + vp.clientHeight / 2) / vp.scrollHeight : 0.5
     const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((currentState.zoom + delta) * 10) / 10))
     const newElev = { ...currentState.elev }
-    const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks)
+    const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
     setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
     requestAnimationFrame(() => {
       if (vp) {
@@ -110,7 +260,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     )
     const newZoom = Math.round(fit * 10) / 10 || 1
     const newElev = { ...currentState.elev }
-    const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks)
+    const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
     setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
     requestAnimationFrame(() => {
       const vp = vpRef.current
@@ -162,7 +312,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
         if ((e.target as HTMLElement).classList.contains('aw-resize-hint')) return
         e.preventDefault(); e.stopPropagation()
         setState(s => {
-          if (s.calib.active) return s
+          if (s.calib.active || s.maskDraw.active) return s
           const rect = wrap.getBoundingClientRect()
           const sx = e.clientX - rect.left, sy = e.clientY - rect.top
           const sxF = art.xF, syF = art.yF
@@ -241,13 +391,16 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     imageUrl: string | null; imagePath: string | null;
     origW: number; origH: number; scalePxPerCm: number | null;
     zoom: number; artworks: Array<Artwork & { imageUrl: string | null }>;
+    foregroundMasks: ForegroundMasks | null;
   }) {
     if (!opts.imageUrl) {
-      setState({ elev: null, scale: null, artworks: [], selId: null, zoom: 1, calib: { active: false, drawing: false, start: null, lineDispPx: 0 } })
+      setState({ elev: null, scale: null, artworks: [], selId: null, zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
+      renderForegroundSVG([], null, null)
       return
     }
 
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.onload = () => {
       const elev: StudioElev = {
         imagePath: opts.imagePath ?? '',
@@ -265,6 +418,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
       if (elevImg) elevImg.src = opts.imageUrl!
 
+      const masks = opts.foregroundMasks ?? []
       const newArts = opts.artworks.map(a => ({ ...a }))
 
       // Load artwork images
@@ -273,10 +427,10 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
         if (++loaded >= newArts.length) {
           setState({
             elev, scale, artworks: newArts, selId: null, zoom: opts.zoom,
-            calib: { active: false, drawing: false, start: null, lineDispPx: 0 },
+            calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
           })
           requestAnimationFrame(() => {
-            applyZoom(opts.zoom, elev, scale, newArts)
+            applyZoom(opts.zoom, elev, scale, newArts, masks)
           })
         }
       }
@@ -284,14 +438,15 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       if (newArts.length === 0) {
         setState({
           elev, scale, artworks: [], selId: null, zoom: opts.zoom,
-          calib: { active: false, drawing: false, start: null, lineDispPx: 0 },
+          calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
         })
-        requestAnimationFrame(() => applyZoom(opts.zoom, elev, scale, []))
+        requestAnimationFrame(() => applyZoom(opts.zoom, elev, scale, [], masks))
         return
       }
 
       newArts.forEach((a, i) => {
         const ai = new Image()
+        ai.crossOrigin = 'anonymous'
         ai.onload = () => { newArts[i].img = ai; tryFinish() }
         ai.onerror = () => tryFinish()
         if (a.imageUrl) ai.src = a.imageUrl
@@ -313,23 +468,25 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     if (!url) return
 
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.onload = () => {
       const elev: StudioElev = {
         imagePath: path, imageUrl: url, img,
         origW: img.naturalWidth, origH: img.naturalHeight, dispW: 0, dispH: 0,
       }
-      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, zoom: 1 }))
+      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, zoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW }))
+      renderForegroundSVG([], null, null)
 
       // Persist to DB
       supabase.from('elevation_options').update({
         image_path: path, orig_w: img.naturalWidth, orig_h: img.naturalHeight,
-        scale_px_per_cm: null, zoom: 1,
+        scale_px_per_cm: null, zoom: 1, foreground_masks: null,
       }).eq('id', optionId).then(() => {})
 
       requestAnimationFrame(() => {
         const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
         if (elevImg) elevImg.src = url
-        setZoomFit({ elev, scale: null, artworks: [], selId: null, zoom: 1, calib: { active: false, drawing: false, start: null, lineDispPx: 0 } })
+        setZoomFit({ elev, scale: null, artworks: [], selId: null, zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
       })
 
       onStatus('Elevation loaded — draw a scale line to continue')
@@ -339,6 +496,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
   // ─── CALIBRATION ─────────────────────────────────────────────────
   function startCalibration() {
+    if (stateRef.current.maskDraw.active) return // mutually exclusive
     setState(s => ({ ...s, calib: { active: true, drawing: false, start: null, lineDispPx: 0 } }))
     const svg = calibSvgRef.current
     if (svg) svg.classList.add('active')
@@ -348,7 +506,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   }
 
   function cancelCalibration() {
-    setState(s => ({ ...s, calib: { active: false, drawing: false, start: null, lineDispPx: 0 } }))
+    setState(s => ({ ...s, calib: DEFAULT_CALIB }))
     const svg = calibSvgRef.current
     if (svg) svg.classList.remove('active')
     const hint = document.getElementById('calib-hint')
@@ -443,6 +601,148 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, String(v)))
   }
 
+  // ─── MASK DRAWING ─────────────────────────────────────────────────
+
+  function getMaskSvgPoint(e: React.MouseEvent<SVGSVGElement>): MaskPoint | null {
+    const svg = fgDrawSvgRef.current
+    const elev = stateRef.current.elev
+    if (!svg || !elev) return null
+    const r = svg.getBoundingClientRect()
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - r.left) / elev.dispW)),
+      y: Math.max(0, Math.min(1, (e.clientY - r.top) / elev.dispH)),
+    }
+  }
+
+  function startMaskDraw() {
+    if (stateRef.current.calib.active) return // mutually exclusive
+    setState(s => ({ ...s, maskDraw: { active: true, currentPoints: [] } }))
+    const svg = fgDrawSvgRef.current
+    if (svg) svg.classList.add('active')
+    const hint = document.getElementById('mask-hint')
+    if (hint) hint.classList.add('show')
+  }
+
+  function finishMaskDraw() {
+    setState(s => {
+      // If there's an in-progress polygon with ≥3 points, commit it
+      let masks = s.masks
+      if (s.maskDraw.currentPoints.length >= 3) {
+        masks = [...s.masks, s.maskDraw.currentPoints]
+        renderForegroundSVG(masks, s.elev, s.elev?.imageUrl ?? null)
+      }
+      debounceSave({ ...s, masks })
+      renderDrawSVG(masks, [], null, s.elev)
+      return { ...s, masks, maskDraw: DEFAULT_MASK_DRAW }
+    })
+    const svg = fgDrawSvgRef.current
+    if (svg) svg.classList.remove('active')
+    const hint = document.getElementById('mask-hint')
+    if (hint) hint.classList.remove('show')
+    maskHoverRef.current = null
+  }
+
+  function cancelMaskDraw() {
+    setState(s => {
+      renderDrawSVG(s.masks, [], null, s.elev)
+      return { ...s, maskDraw: DEFAULT_MASK_DRAW }
+    })
+    const svg = fgDrawSvgRef.current
+    if (svg) svg.classList.remove('active')
+    const hint = document.getElementById('mask-hint')
+    if (hint) hint.classList.remove('show')
+    maskHoverRef.current = null
+  }
+
+  function clearCurrentPoints() {
+    setState(s => {
+      renderDrawSVG(s.masks, [], maskHoverRef.current, s.elev)
+      return { ...s, maskDraw: { ...s.maskDraw, currentPoints: [] } }
+    })
+  }
+
+  function onMaskMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    const s = stateRef.current
+    if (!s.maskDraw.active || !s.elev) return
+    const pt = getMaskSvgPoint(e)
+    if (!pt) return
+    maskHoverRef.current = pt
+    renderDrawSVG(s.masks, s.maskDraw.currentPoints, pt, s.elev)
+  }
+
+  function onMaskClick(e: React.MouseEvent<SVGSVGElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setState(s => {
+      if (!s.maskDraw.active || !s.elev) return s
+      const svg = fgDrawSvgRef.current
+      if (!svg) return s
+      const r = svg.getBoundingClientRect()
+      const pt: MaskPoint = {
+        x: Math.max(0, Math.min(1, (e.clientX - r.left) / s.elev.dispW)),
+        y: Math.max(0, Math.min(1, (e.clientY - r.top) / s.elev.dispH)),
+      }
+      const pts = s.maskDraw.currentPoints
+
+      // Snap-to-close: if ≥3 points and click is within 8px of first point, commit polygon
+      if (pts.length >= 3) {
+        const first = pts[0]
+        const dx = (pt.x - first.x) * s.elev.dispW
+        const dy = (pt.y - first.y) * s.elev.dispH
+        if (Math.sqrt(dx * dx + dy * dy) < 12) {
+          const masks = [...s.masks, pts]
+          renderForegroundSVG(masks, s.elev, s.elev.imageUrl)
+          renderDrawSVG(masks, [], maskHoverRef.current, s.elev)
+          debounceSave({ ...s, masks })
+          return { ...s, masks, maskDraw: { ...s.maskDraw, currentPoints: [] } }
+        }
+      }
+
+      const newPts = [...pts, pt]
+      renderDrawSVG(s.masks, newPts, maskHoverRef.current, s.elev)
+      return { ...s, maskDraw: { ...s.maskDraw, currentPoints: newPts } }
+    })
+  }
+
+  function onMaskDblClick(e: React.MouseEvent<SVGSVGElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setState(s => {
+      if (!s.maskDraw.active || !s.elev) return s
+      // Remove last point (added by the second click of the dblclick)
+      const pts = s.maskDraw.currentPoints.slice(0, -1)
+      if (pts.length < 3) {
+        onStatus('Draw at least 3 points to close a shape')
+        renderDrawSVG(s.masks, pts, maskHoverRef.current, s.elev)
+        return { ...s, maskDraw: { ...s.maskDraw, currentPoints: pts } }
+      }
+      const masks = [...s.masks, pts]
+      renderForegroundSVG(masks, s.elev, s.elev.imageUrl)
+      renderDrawSVG(masks, [], maskHoverRef.current, s.elev)
+      debounceSave({ ...s, masks })
+      return { ...s, masks, maskDraw: { ...s.maskDraw, currentPoints: [] } }
+    })
+  }
+
+  function deletePolygon(index: number) {
+    setState(s => {
+      const masks = s.masks.filter((_, i) => i !== index)
+      renderForegroundSVG(masks, s.elev, s.elev?.imageUrl ?? null)
+      renderDrawSVG(masks, s.maskDraw.currentPoints, maskHoverRef.current, s.elev)
+      debounceSave({ ...s, masks })
+      return { ...s, masks }
+    })
+  }
+
+  function clearAllMasks() {
+    setState(s => {
+      renderForegroundSVG([], s.elev, s.elev?.imageUrl ?? null)
+      renderDrawSVG([], s.maskDraw.currentPoints, maskHoverRef.current, s.elev)
+      debounceSave({ ...s, masks: [] })
+      return { ...s, masks: [] }
+    })
+  }
+
   // ─── ADD ARTWORKS ─────────────────────────────────────────────────
   async function addArtworks(files: File[], meta: {
     name: string; wCm: number; hCm: number; price: number; priceIncludes: 'artwork' | 'all'
@@ -481,6 +781,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       if (!artRow) continue
 
       const img = new Image()
+      img.crossOrigin = 'anonymous'
       await new Promise<void>(resolve => {
         img.onload = () => resolve()
         img.onerror = () => resolve()
@@ -522,8 +823,11 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
   async function persistOption(s: StudioState) {
     const supabase = createClient()
-    // Update option zoom
-    await supabase.from('elevation_options').update({ zoom: s.zoom }).eq('id', optionId)
+    // Update option zoom and foreground masks
+    await supabase.from('elevation_options').update({
+      zoom: s.zoom,
+      foreground_masks: s.masks.length > 0 ? s.masks : null,
+    }).eq('id', optionId)
     // Update each artwork position/dims
     await Promise.all(
       s.artworks.map(art =>
@@ -598,12 +902,32 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     const c = document.createElement('canvas')
     c.width = s.elev.origW; c.height = s.elev.origH
     const ctx = c.getContext('2d')!
+
+    // 1. Draw base elevation
     ctx.drawImage(s.elev.img, 0, 0)
+
+    // 2. Draw artworks
     s.artworks.forEach(art => {
       if (!art.visible || !art.img || !s.scale) return
       ctx.drawImage(art.img, art.xF * s.elev!.origW, art.yF * s.elev!.origH,
         art.wCm * s.scale.origPxPerCm, art.hCm * s.scale.origPxPerCm)
     })
+
+    // 3. Composite foreground layer (elevation painted again, clipped to mask polygons)
+    if (s.masks.length > 0) {
+      ctx.save()
+      ctx.beginPath()
+      s.masks.forEach(polygon => {
+        if (polygon.length < 3) return
+        ctx.moveTo(polygon[0].x * s.elev!.origW, polygon[0].y * s.elev!.origH)
+        polygon.slice(1).forEach(pt => ctx.lineTo(pt.x * s.elev!.origW, pt.y * s.elev!.origH))
+        ctx.closePath()
+      })
+      ctx.clip()
+      ctx.drawImage(s.elev.img, 0, 0, s.elev.origW, s.elev.origH)
+      ctx.restore()
+    }
+
     const a = document.createElement('a')
     a.href = c.toDataURL('image/png')
     a.download = 'elevation-artwork.png'
@@ -616,6 +940,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     setState,
     elevWrapRef,
     calibSvgRef,
+    fgDrawSvgRef,
     vpRef,
     showScaleModal,
     setShowScaleModal,
@@ -643,5 +968,14 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     renderArtworksDOM,
     exportPng,
     hideCalibLine,
+    startMaskDraw,
+    finishMaskDraw,
+    cancelMaskDraw,
+    clearCurrentPoints,
+    onMaskMouseMove,
+    onMaskClick,
+    onMaskDblClick,
+    deletePolygon,
+    clearAllMasks,
   }
 }
