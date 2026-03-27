@@ -119,6 +119,12 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
                 <circle id="rd2" className="calib-cap" r="4" display="none" />
               </svg>
 
+              {/* Snap guide lines — rendered imperatively by useStudio during drag */}
+              <svg
+                id="snap-svg"
+                style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', display: 'none', overflow: 'visible' }}
+              />
+
               {/* Artwork overlays injected here imperatively by useStudio */}
             </div>
           </div>

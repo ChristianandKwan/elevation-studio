@@ -18,7 +18,8 @@ export interface StudioState {
   elev: StudioElev | null
   scale: Scale | null
   artworks: Artwork[]
-  selId: string | null
+  selId: string | null       // last selected id (for single-select compat)
+  selIds: Set<string>        // all selected ids
   zoom: number
   calib: CalibState
   masks: ForegroundMasks
@@ -43,6 +44,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     scale: null,
     artworks: [],
     selId: null,
+    selIds: new Set<string>(),
     zoom: 1.0,
     calib: DEFAULT_CALIB,
     masks: [],
@@ -69,6 +71,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   const [showShareModal, setShowShareModal] = useState(false)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // ─── HELPERS ──────────────────────────────────────────────────────
   function dispSize(art: Artwork, sc: Scale | null): { w: number; h: number } {
@@ -292,7 +295,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   }
 
   // ─── RENDER ARTWORKS (imperative DOM, mirrors prototype) ──────────
-  function renderArtworksDOM(artworks: Artwork[], elev: StudioElev | null, sc: Scale | null, selId?: string) {
+  function renderArtworksDOM(artworks: Artwork[], elev: StudioElev | null, sc: Scale | null, selIds?: Set<string>) {
     const wrap = elevWrapRef.current
     if (!wrap || !elev) return
     wrap.querySelectorAll('.aw-overlay').forEach(el => el.remove())
@@ -304,7 +307,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       const y = art.yF * elev.dispH
 
       const div = document.createElement('div')
-      div.className = 'aw-overlay' + (art.id === selId ? ' selected' : '')
+      div.className = 'aw-overlay' + (selIds?.has(art.id) ? ' selected' : '')
       div.dataset.id = art.id
       div.style.left = x + 'px'
       div.style.top = y + 'px'
@@ -327,31 +330,133 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       div.appendChild(tag)
       div.appendChild(rh)
 
-      // Drag to move
+      // Drag to move (multi-select aware)
       div.addEventListener('mousedown', (e) => {
         if ((e.target as HTMLElement).classList.contains('aw-resize-hint')) return
         e.preventDefault(); e.stopPropagation()
         setState(s => {
           if (s.calib.active || s.maskDraw.active) return s
+
+          // Determine new selection
+          let newSelIds: Set<string>
+          if (e.shiftKey) {
+            // Shift+click: toggle this artwork in/out of selection
+            newSelIds = new Set(s.selIds)
+            if (newSelIds.has(art.id)) newSelIds.delete(art.id)
+            else newSelIds.add(art.id)
+          } else if (s.selIds.has(art.id) && s.selIds.size > 1) {
+            // Clicking a selected artwork in a multi-selection: keep the group
+            newSelIds = s.selIds
+          } else {
+            // Regular click: select only this artwork
+            newSelIds = new Set([art.id])
+          }
+
           const rect = wrap.getBoundingClientRect()
           const sx = e.clientX - rect.left, sy = e.clientY - rect.top
-          const sxF = art.xF, syF = art.yF
+
+          // Store starting positions for all selected artworks
+          const startPositions = new Map<string, { xF: number; yF: number }>()
+          stateRef.current.artworks.forEach(a => {
+            if (newSelIds.has(a.id)) startPositions.set(a.id, { xF: a.xF, yF: a.yF })
+          })
+
+          const SNAP_PX = 8
+
+          function renderSnapGuides(xLines: number[], yLines: number[]) {
+            const svg = document.getElementById('snap-svg') as SVGSVGElement | null
+            if (!svg) return
+            const elevW = stateRef.current.elev?.dispW ?? 1
+            const elevH = stateRef.current.elev?.dispH ?? 1
+            svg.innerHTML = ''
+            if (xLines.length === 0 && yLines.length === 0) { svg.style.display = 'none'; return }
+            svg.setAttribute('width', String(elevW))
+            svg.setAttribute('height', String(elevH))
+            svg.style.display = ''
+            xLines.forEach(x => {
+              const l = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+              l.setAttribute('x1', String(x)); l.setAttribute('y1', '0')
+              l.setAttribute('x2', String(x)); l.setAttribute('y2', String(elevH))
+              l.setAttribute('stroke', 'var(--accent)'); l.setAttribute('stroke-width', '1')
+              l.setAttribute('stroke-dasharray', '4 3'); svg.appendChild(l)
+            })
+            yLines.forEach(y => {
+              const l = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+              l.setAttribute('x1', '0'); l.setAttribute('y1', String(y))
+              l.setAttribute('x2', String(elevW)); l.setAttribute('y2', String(y))
+              l.setAttribute('stroke', 'var(--accent)'); l.setAttribute('stroke-width', '1')
+              l.setAttribute('stroke-dasharray', '4 3'); svg.appendChild(l)
+            })
+          }
 
           function move(ev: MouseEvent) {
             const dx = ev.clientX - rect.left - sx, dy = ev.clientY - rect.top - sy
-            const sz2 = dispSize(art, s.scale)
-            art.xF = Math.max(0, Math.min(1 - sz2.w / (s.elev?.dispW ?? 1), sxF + dx / (s.elev?.dispW ?? 1)))
-            art.yF = Math.max(0, Math.min(1 - sz2.h / (s.elev?.dispH ?? 1), syF + dy / (s.elev?.dispH ?? 1)))
-            const el = wrap?.querySelector(`[data-id="${art.id}"]`) as HTMLElement | null
-            if (el) {
-              el.style.left = (art.xF * (s.elev?.dispW ?? 1)) + 'px'
-              el.style.top = (art.yF * (s.elev?.dispH ?? 1)) + 'px'
-            }
+            const elevW = stateRef.current.elev?.dispW ?? 1
+            const elevH = stateRef.current.elev?.dispH ?? 1
+            const snapXLines: number[] = [], snapYLines: number[] = []
+
+            stateRef.current.artworks.forEach(a => {
+              if (!newSelIds.has(a.id)) return
+              const start = startPositions.get(a.id)
+              if (!start) return
+              const sz2 = dispSize(a, stateRef.current.scale)
+              let rawXF = Math.max(0, Math.min(1 - sz2.w / elevW, start.xF + dx / elevW))
+              let rawYF = Math.max(0, Math.min(1 - sz2.h / elevH, start.yF + dy / elevH))
+
+              // Snap: compute candidate edge/center positions for this artwork
+              const rawLeft = rawXF * elevW, rawRight = rawLeft + sz2.w, rawCenterX = rawLeft + sz2.w / 2
+              const rawTop = rawYF * elevH, rawBottom = rawTop + sz2.h, rawCenterY = rawTop + sz2.h / 2
+
+              // Check against non-selected artworks
+              stateRef.current.artworks.forEach(other => {
+                if (newSelIds.has(other.id)) return
+                const osz = dispSize(other, stateRef.current.scale)
+                const oLeft = other.xF * elevW, oRight = oLeft + osz.w, oCenterX = oLeft + osz.w / 2
+                const oTop = other.yF * elevH, oBottom = oTop + osz.h, oCenterY = oTop + osz.h / 2
+
+                const xCandidates: Array<[number, number]> = [
+                  [rawLeft, oLeft], [rawLeft, oRight], [rawLeft, oCenterX],
+                  [rawRight, oLeft], [rawRight, oRight], [rawRight, oCenterX],
+                  [rawCenterX, oLeft], [rawCenterX, oRight], [rawCenterX, oCenterX],
+                ]
+                for (const [myEdge, otherEdge] of xCandidates) {
+                  if (Math.abs(myEdge - otherEdge) < SNAP_PX) {
+                    rawXF = (otherEdge - (myEdge - rawLeft)) / elevW
+                    snapXLines.push(otherEdge)
+                    break
+                  }
+                }
+                const yCandidates: Array<[number, number]> = [
+                  [rawTop, oTop], [rawTop, oBottom], [rawTop, oCenterY],
+                  [rawBottom, oTop], [rawBottom, oBottom], [rawBottom, oCenterY],
+                  [rawCenterY, oTop], [rawCenterY, oBottom], [rawCenterY, oCenterY],
+                ]
+                for (const [myEdge, otherEdge] of yCandidates) {
+                  if (Math.abs(myEdge - otherEdge) < SNAP_PX) {
+                    rawYF = (otherEdge - (myEdge - rawTop)) / elevH
+                    snapYLines.push(otherEdge)
+                    break
+                  }
+                }
+              })
+
+              a.xF = Math.max(0, Math.min(1 - sz2.w / elevW, rawXF))
+              a.yF = Math.max(0, Math.min(1 - sz2.h / elevH, rawYF))
+              const el = wrap?.querySelector(`[data-id="${a.id}"]`) as HTMLElement | null
+              if (el) {
+                el.style.left = (a.xF * elevW) + 'px'
+                el.style.top = (a.yF * elevH) + 'px'
+              }
+            })
+            renderSnapGuides([...new Set(snapXLines)], [...new Set(snapYLines)])
           }
 
           function up() {
             document.removeEventListener('mousemove', move)
             document.removeEventListener('mouseup', up)
+            // Clear snap guides
+            const svg = document.getElementById('snap-svg') as SVGSVGElement | null
+            if (svg) { svg.innerHTML = ''; svg.style.display = 'none' }
             setState(st => {
               debounceSave(st)
               return { ...st, artworks: [...st.artworks] }
@@ -360,14 +465,22 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
           document.addEventListener('mousemove', move)
           document.addEventListener('mouseup', up)
-          return { ...s, selId: art.id }
+          return { ...s, selId: art.id, selIds: newSelIds }
         })
       })
 
-      // Click to select
+      // Click to select (shift for multi-select)
       div.addEventListener('click', (e) => {
         e.stopPropagation()
-        setState(s => ({ ...s, selId: art.id }))
+        setState(s => {
+          if (e.shiftKey) {
+            const newSelIds = new Set(s.selIds)
+            if (newSelIds.has(art.id)) newSelIds.delete(art.id)
+            else newSelIds.add(art.id)
+            return { ...s, selId: art.id, selIds: newSelIds }
+          }
+          return { ...s, selId: art.id, selIds: new Set([art.id]) }
+        })
       })
 
       // Resize handle
@@ -385,7 +498,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
             art.wCm = Math.round((newW / (s.scale?.dispPxPerCm ?? 1)) * 2) / 2
             art.hCm = Math.round(art.wCm * ratio * 2) / 2
             setState(st => {
-              renderArtworksDOM(st.artworks, st.elev, st.scale, st.selId ?? undefined)
+              renderArtworksDOM(st.artworks, st.elev, st.scale, st.selIds)
               return { ...st, artworks: [...st.artworks] }
             })
           }
@@ -414,7 +527,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     foregroundMasks: ForegroundMasks | null;
   }) {
     if (!opts.imageUrl) {
-      setState({ elev: null, scale: null, artworks: [], selId: null, zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
+      setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
       renderForegroundSVG([], null, null)
       return
     }
@@ -446,7 +559,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       function tryFinish() {
         if (++loaded >= newArts.length) {
           setState({
-            elev, scale, artworks: newArts, selId: null, zoom: opts.zoom,
+            elev, scale, artworks: newArts, selId: null, selIds: new Set(), zoom: opts.zoom,
             calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
           })
           requestAnimationFrame(() => {
@@ -457,7 +570,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
       if (newArts.length === 0) {
         setState({
-          elev, scale, artworks: [], selId: null, zoom: opts.zoom,
+          elev, scale, artworks: [], selId: null, selIds: new Set(), zoom: opts.zoom,
           calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
         })
         requestAnimationFrame(() => applyZoom(opts.zoom, elev, scale, [], masks))
@@ -494,7 +607,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
         imagePath: path, imageUrl: url, img,
         origW: img.naturalWidth, origH: img.naturalHeight, dispW: 0, dispH: 0,
       }
-      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, zoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW }))
+      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW }))
       renderForegroundSVG([], null, null)
 
       // Persist to DB
@@ -506,7 +619,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       requestAnimationFrame(() => {
         const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
         if (elevImg) elevImg.src = url
-        setZoomFit({ elev, scale: null, artworks: [], selId: null, zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
+        setZoomFit({ elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
       })
 
       onStatus('Elevation loaded — draw a scale line to continue')
@@ -541,7 +654,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     const scale: Scale = { origPxPerCm, dispPxPerCm }
     setState(s => {
       const newState = { ...s, scale }
-      renderArtworksDOM(newState.artworks, newState.elev, scale, newState.selId ?? undefined)
+      renderArtworksDOM(newState.artworks, newState.elev, scale, newState.selIds)
       debounceSave(newState)
       return newState
     })
@@ -764,14 +877,15 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   }
 
   // ─── ADD ARTWORKS ─────────────────────────────────────────────────
-  async function addArtworks(files: File[], meta: {
+  async function addArtworks(files: File[], metas: Array<{
     name: string; wCm: number; hCm: number; price: number; priceIncludes: 'artwork' | 'all'
-  }) {
+  }>) {
     const supabase = createClient()
     let placed = 0
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
+      const meta = metas[i] ?? metas[0]
       const path = `${projectId}/${optionId}/art-${Date.now()}-${i}.${file.name.split('.').pop()}`
       const { error } = await supabase.storage.from('artwork-images').upload(path, file)
       if (error) { onStatus('Upload failed: ' + error.message); continue }
@@ -780,7 +894,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       const url = signed?.signedUrl
       if (!url) continue
 
-      const name = files.length === 1 ? meta.name || file.name.replace(/\.[^.]+$/, '') : file.name.replace(/\.[^.]+$/, '')
+      const name = meta.name || file.name.replace(/\.[^.]+$/, '')
       const off = 0.06 * i
 
       // Persist artwork
@@ -825,7 +939,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
       setState(s => {
         const newArts = [...s.artworks, newArt]
-        renderArtworksDOM(newArts, s.elev, s.scale, s.selId ?? undefined)
+        renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
         return { ...s, artworks: newArts }
       })
       placed++
@@ -838,30 +952,38 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   // ─── SAVE (debounced) ─────────────────────────────────────────────
   function debounceSave(currentState: StudioState) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSaveStatus('saving')
     saveTimer.current = setTimeout(() => persistOption(currentState), 1500)
   }
 
   async function persistOption(s: StudioState) {
     const supabase = createClient()
-    // Update option zoom and foreground masks
-    await supabase.from('elevation_options').update({
-      zoom: s.zoom,
-      foreground_masks: s.masks.length > 0 ? s.masks : null,
-    }).eq('id', optionId)
-    // Update each artwork position/dims
-    await Promise.all(
-      s.artworks.map(art =>
-        supabase.from('artworks').update({
-          x_fraction: art.xF,
-          y_fraction: art.yF,
-          w_cm: art.wCm,
-          h_cm: art.hCm,
-          visible: art.visible,
-          price: art.price,
-          price_includes: art.priceIncludes,
-        }).eq('id', art.id)
+    try {
+      // Update option zoom and foreground masks
+      await supabase.from('elevation_options').update({
+        zoom: s.zoom,
+        foreground_masks: s.masks.length > 0 ? s.masks : null,
+      }).eq('id', optionId)
+      // Update each artwork position/dims
+      await Promise.all(
+        s.artworks.map(art =>
+          supabase.from('artworks').update({
+            x_fraction: art.xF,
+            y_fraction: art.yF,
+            w_cm: art.wCm,
+            h_cm: art.hCm,
+            visible: art.visible,
+            price: art.price,
+            price_includes: art.priceIncludes,
+          }).eq('id', art.id)
+        )
       )
-    )
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } catch {
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 5000)
+    }
   }
 
   // ─── DELETE ARTWORK ───────────────────────────────────────────────
@@ -870,9 +992,11 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     await supabase.from('artworks').delete().eq('id', artId)
     setState(s => {
       const newArts = s.artworks.filter(a => a.id !== artId)
-      const newSel = s.selId === artId ? null : s.selId
-      renderArtworksDOM(newArts, s.elev, s.scale, newSel ?? undefined)
-      return { ...s, artworks: newArts, selId: newSel }
+      const newSelIds = new Set(s.selIds)
+      newSelIds.delete(artId)
+      const newSelId = s.selId === artId ? null : s.selId
+      renderArtworksDOM(newArts, s.elev, s.scale, newSelIds)
+      return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
     })
   }
 
@@ -880,7 +1004,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   async function toggleVisibility(artId: string) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, visible: !a.visible } : a)
-      renderArtworksDOM(newArts, s.elev, s.scale, s.selId ?? undefined)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       const supabase = createClient()
       const art = newArts.find(a => a.id === artId)
       if (art) supabase.from('artworks').update({ visible: art.visible }).eq('id', artId).then(() => {})
@@ -892,7 +1016,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   function updateArtworkDims(artId: string, wCm: number, hCm: number) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, wCm, hCm } : a)
-      renderArtworksDOM(newArts, s.elev, s.scale, s.selId ?? undefined)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
     })
@@ -909,8 +1033,9 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   // ─── SELECT ───────────────────────────────────────────────────────
   function selectArtwork(id: string | null) {
     setState(s => {
-      renderArtworksDOM(s.artworks, s.elev, s.scale, id ?? undefined)
-      return { ...s, selId: id }
+      const newSelIds = id ? new Set([id]) : new Set<string>()
+      renderArtworksDOM(s.artworks, s.elev, s.scale, newSelIds)
+      return { ...s, selId: id, selIds: newSelIds }
     })
   }
 
@@ -998,5 +1123,6 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     deletePolygon,
     clearAllMasks,
     highlightMask,
+    saveStatus,
   }
 }

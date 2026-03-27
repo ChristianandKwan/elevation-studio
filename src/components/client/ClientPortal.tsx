@@ -64,9 +64,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     <div className="client-wrapper">
       {/* Header */}
       <div className="client-header">
-        <div style={{ fontFamily: "'Cormorant Garant', serif", fontSize: 18, fontWeight: 400, letterSpacing: '0.1em', color: 'white' }}>
-          ELEVATION STUDIO
-        </div>
+        <img src="/ck-wordmark-white.png" alt="Christian & Kwan" className="client-logo" />
         <div className="client-project-label">{project.name}</div>
       </div>
 
@@ -77,13 +75,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           <div className="client-cover-title">{project.name}</div>
           <div style={{ fontSize: 14, opacity: .7, marginTop: 4 }}>{project.clientName}</div>
           <div className="client-cover-date">Prepared {project.preparedAt}</div>
-        </div>
-        <div className="client-cover-right">
-          <div className="client-cover-team-label">Your Consultant</div>
-          <div className="client-cover-consultant">
-            <div className="client-cover-avatar">{project.consultantInitials}</div>
-            <div className="client-cover-consultant-name">{project.consultantName}</div>
-          </div>
         </div>
       </div>
 

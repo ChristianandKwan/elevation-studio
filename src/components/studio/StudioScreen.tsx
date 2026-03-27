@@ -83,8 +83,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
 
       const s = studio.state
-      if ((e.key === 'Delete' || e.key === 'Backspace') && s.selId) {
-        studio.deleteArtwork(s.selId)
+      if ((e.key === 'Delete' || e.key === 'Backspace') && s.selIds.size > 0) {
+        s.selIds.forEach(id => studio.deleteArtwork(id))
         return
       }
       if (e.key === 'Escape') {
@@ -96,15 +96,17 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         studio.selectArtwork(null)
         return
       }
-      if (s.selId && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
-        const art = s.artworks.find(a => a.id === s.selId)
-        if (!art || !s.elev) return
+      if (s.selIds.size > 0 && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+        if (!s.elev) return
         const step = e.shiftKey ? 10 : 1
-        if (e.key === 'ArrowLeft')  art.xF = Math.max(0, art.xF - step / s.elev.dispW)
-        if (e.key === 'ArrowRight') art.xF = Math.min(1, art.xF + step / s.elev.dispW)
-        if (e.key === 'ArrowUp')    art.yF = Math.max(0, art.yF - step / s.elev.dispH)
-        if (e.key === 'ArrowDown')  art.yF = Math.min(1, art.yF + step / s.elev.dispH)
-        studio.renderArtworksDOM(s.artworks, s.elev, s.scale, s.selId ?? undefined)
+        s.artworks.forEach(art => {
+          if (!s.selIds.has(art.id) || !s.elev) return
+          if (e.key === 'ArrowLeft')  art.xF = Math.max(0, art.xF - step / s.elev.dispW)
+          if (e.key === 'ArrowRight') art.xF = Math.min(1, art.xF + step / s.elev.dispW)
+          if (e.key === 'ArrowUp')    art.yF = Math.max(0, art.yF - step / s.elev.dispH)
+          if (e.key === 'ArrowDown')  art.yF = Math.min(1, art.yF + step / s.elev.dispH)
+        })
+        studio.renderArtworksDOM(s.artworks, s.elev, s.scale, s.selIds)
         e.preventDefault()
       }
       if ((e.key === '=' || e.key === '+') && (e.metaKey || e.ctrlKey)) { studio.changeZoom(0.1, s); e.preventDefault() }
@@ -114,6 +116,38 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [studio])
+
+  async function handleSwitch(elevId: string, opt: string) {
+    // If switching to Option B and B has no image but A does, copy A's image data
+    if (opt === 'B') {
+      const elev = elevations.find(e => e.id === elevId)
+      const optA = elev?.elevation_options.find(o => o.option === 'A')
+      const optB = elev?.elevation_options.find(o => o.option === 'B')
+      if (optA?.imagePath && !optB?.imagePath && optB?.id) {
+        const supabase = createClient()
+        await supabase.from('elevation_options').update({
+          image_path: optA.imagePath,
+          orig_w: optA.orig_w,
+          orig_h: optA.orig_h,
+          scale_px_per_cm: optA.scale_px_per_cm,
+          zoom: optA.zoom,
+        }).eq('id', optB.id)
+        // Update local state so studio loads the correct data
+        setElevations(prev => prev.map(e => {
+          if (e.id !== elevId) return e
+          return {
+            ...e,
+            elevation_options: e.elevation_options.map(o => {
+              if (o.option !== 'B') return o
+              return { ...o, imagePath: optA.imagePath, imageUrl: optA.imageUrl, orig_w: optA.orig_w, orig_h: optA.orig_h, scale_px_per_cm: optA.scale_px_per_cm, zoom: optA.zoom }
+            }),
+          }
+        }))
+      }
+    }
+    setActiveElevId(elevId)
+    setActiveOption(opt as OptionKey)
+  }
 
   async function addElevation(name: string) {
     const supabase = createClient()
@@ -129,19 +163,25 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       { elevation_id: elev.id, option: 'B' },
     ])
 
+    // Fetch real option IDs immediately so artwork uploads work right away
+    const { data: opts } = await supabase
+      .from('elevation_options')
+      .select('id, option')
+      .eq('elevation_id', elev.id)
+
+    const optA = opts?.find(o => o.option === 'A')
+    const optB = opts?.find(o => o.option === 'B')
+
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order,
       elevation_options: [
-        { id: '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
-        { id: '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
+        { id: optA?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
+        { id: optB?.id ?? '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
     setActiveElevId(elev.id)
     setActiveOption('A')
-
-    // Refresh to get real option IDs
-    router.refresh()
   }
 
   async function generateShareToken(): Promise<string> {
@@ -174,6 +214,15 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             <strong>{project.name}</strong>
             {project.client_name && <span> — {project.client_name}</span>}
           </div>
+          {studio.saveStatus === 'saving' && (
+            <span className="save-status save-status--saving">Saving…</span>
+          )}
+          {studio.saveStatus === 'saved' && (
+            <span className="save-status save-status--saved">Saved ✓</span>
+          )}
+          {studio.saveStatus === 'error' && (
+            <span className="save-status save-status--error">Save failed</span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-sm btn-ghost" onClick={() => studio.setShowShareModal(true)}>
@@ -190,7 +239,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         elevations={elevations}
         activeElevId={activeElevId}
         activeOption={activeOption}
-        onSwitch={(elevId, opt) => { setActiveElevId(elevId); setActiveOption(opt as OptionKey) }}
+        onSwitch={handleSwitch}
         onAddElevation={addElevation}
       />
 

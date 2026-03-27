@@ -101,12 +101,19 @@ export default function StudioSidebar({ studio, onStatus }: Props) {
 
         {hasArts && (
           <>
+            {state.selIds.size > 1 && (
+              <div className="multi-select-bar">
+                <span>{state.selIds.size} selected</span>
+                <button onClick={() => state.selIds.forEach(id => studio.deleteArtwork(id))}>Delete all</button>
+                <button onClick={() => studio.selectArtwork(null)}>Deselect</button>
+              </div>
+            )}
             <div className="artwork-list">
               {state.artworks.map(art => (
                 <ArtworkItem
                   key={art.id}
                   art={art}
-                  isSelected={art.id === state.selId}
+                  isSelected={state.selIds.has(art.id)}
                   onSelect={() => studio.selectArtwork(art.id)}
                   onToggleVis={() => studio.toggleVisibility(art.id)}
                   onDelete={() => studio.deleteArtwork(art.id)}

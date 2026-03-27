@@ -41,20 +41,7 @@ export default function LoginPage() {
       }}
     >
       <div className="login-box">
-        {/* Logo placeholder — replace with <img src="/logo.svg" /> once assets exist */}
-        <div
-          style={{
-            textAlign: 'center',
-            marginBottom: 36,
-            fontFamily: "'Cormorant Garant', serif",
-            fontSize: 28,
-            color: 'white',
-            fontWeight: 300,
-            letterSpacing: '0.12em',
-          }}
-        >
-          ELEVATION STUDIO
-        </div>
+        <img src="/ck-wordmark-white.png" alt="Christian & Kwan" className="login-logo" />
 
         <div className="login-title">Welcome back</div>
         <div className="login-sub">Sign in to your consultant account</div>
