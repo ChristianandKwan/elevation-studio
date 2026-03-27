@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useStudio } from '@/hooks/useStudio'
@@ -61,9 +61,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   const studio = useStudio({ projectId: project.id, optionId, onStatus })
 
+  // When we call loadOption directly in handleSwitch we skip the effect for that one render
+  const skipNextLoadRef = useRef(false)
+
   // Load option into studio when tab changes
   useEffect(() => {
     if (!activeOptData) return
+    if (skipNextLoadRef.current) { skipNextLoadRef.current = false; return }
     studio.loadOption({
       imageUrl: activeOptData.imageUrl,
       imagePath: activeOptData.imagePath,
@@ -118,6 +122,28 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [studio])
 
   async function handleSwitch(elevId: string, opt: string) {
+    // Before switching: sync current artwork positions from studio state back into elevations,
+    // so if the user returns to this option the positions are up to date.
+    const currentArts = studio.state.artworks
+    if (currentArts.length > 0 && activeElevId && activeOption) {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== activeOption) return o
+            return {
+              ...o,
+              artworks: o.artworks.map(a => {
+                const cur = currentArts.find(ca => ca.id === a.id)
+                return cur ? { ...a, xF: cur.xF, yF: cur.yF } : a
+              }),
+            }
+          }),
+        }
+      }))
+    }
+
     // If switching to Option B and B has no image but A does, copy A's image data
     if (opt === 'B') {
       const elev = elevations.find(e => e.id === elevId)
@@ -132,7 +158,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           scale_px_per_cm: optA.scale_px_per_cm,
           zoom: optA.zoom,
         }).eq('id', optB.id)
-        // Update local state so studio loads the correct data
+        // Update local state
         setElevations(prev => prev.map(e => {
           if (e.id !== elevId) return e
           return {
@@ -143,6 +169,21 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             }),
           }
         }))
+        // Load directly — don't rely on the effect, which may fire before setElevations has taken effect
+        skipNextLoadRef.current = true
+        studio.loadOption({
+          imageUrl: optA.imageUrl,
+          imagePath: optA.imagePath,
+          origW: optA.orig_w,
+          origH: optA.orig_h,
+          scalePxPerCm: optA.scale_px_per_cm,
+          zoom: optA.zoom,
+          artworks: optB.artworks ?? [],
+          foregroundMasks: (optB.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
+        })
+        setActiveElevId(elevId)
+        setActiveOption(opt as OptionKey)
+        return
       }
     }
     setActiveElevId(elevId)
@@ -224,6 +265,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             <span className="save-status save-status--error">Save failed</span>
           )}
         </div>
+        <div className="header-app-title">Elevation Studio</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-sm btn-ghost" onClick={() => studio.setShowShareModal(true)}>
             Share with client

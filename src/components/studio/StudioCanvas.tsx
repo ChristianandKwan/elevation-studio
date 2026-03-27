@@ -13,8 +13,9 @@ interface Props {
 export default function StudioCanvas({ studio, onStatus }: Props) {
   const { state, elevWrapRef, calibSvgRef, fgDrawSvgRef, vpRef, changeZoom, setZoomFit } = studio
 
-  // Deselect on canvas background click
+  // Deselect on canvas background click (skip if a box-select drag just finished)
   function onWrapClick(e: React.MouseEvent) {
+    if (studio.boxSelectedRef.current) return
     const target = e.target as HTMLElement
     if (target.id === 'elev-img' || target === elevWrapRef.current) {
       studio.selectArtwork(null)
@@ -43,6 +44,7 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
               className="elev-wrap"
               id="elev-wrap"
               ref={elevWrapRef}
+              onMouseDown={studio.onWrapMouseDown}
               onClick={onWrapClick}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}

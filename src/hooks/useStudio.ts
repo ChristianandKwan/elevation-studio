@@ -64,6 +64,9 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   // Mask draw: hover point tracked in ref to avoid setState on every mousemove
   const maskHoverRef = useRef<MaskPoint | null>(null)
 
+  // Box-select: flag to suppress click-deselect after a successful drag
+  const boxSelectedRef = useRef(false)
+
   // Pending scale modal data
   const pendingCalibPx = useRef(0)
   const [showScaleModal, setShowScaleModal] = useState(false)
@@ -1080,6 +1083,81 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     onStatus('PNG exported')
   }
 
+  // ─── BOX SELECT (rubber-band drag on canvas background) ──────────
+  function onWrapMouseDown(e: React.MouseEvent) {
+    const s = stateRef.current
+    if (s.calib.active || s.maskDraw.active) return
+    const target = e.target as HTMLElement
+    // Only act on clicks directly on the elevation image or the wrap background — not on artwork overlays
+    if (target.id !== 'elev-img' && target !== elevWrapRef.current) return
+
+    e.preventDefault()
+    const wrap = elevWrapRef.current!
+    const wrapRect = wrap.getBoundingClientRect()
+    const startX = e.clientX - wrapRect.left
+    const startY = e.clientY - wrapRect.top
+
+    // Create selection rect element
+    const rectEl = document.createElement('div')
+    rectEl.style.cssText = 'position:absolute;border:1px dashed var(--accent);background:rgba(139,111,71,.06);pointer-events:none;z-index:200;box-sizing:border-box'
+    rectEl.style.left = startX + 'px'
+    rectEl.style.top = startY + 'px'
+    rectEl.style.width = '0px'
+    rectEl.style.height = '0px'
+    wrap.appendChild(rectEl)
+
+    let didDrag = false
+
+    function move(ev: MouseEvent) {
+      didDrag = true
+      const cx = ev.clientX - wrapRect.left
+      const cy = ev.clientY - wrapRect.top
+      const l = Math.min(startX, cx), t = Math.min(startY, cy)
+      rectEl.style.left = l + 'px'
+      rectEl.style.top = t + 'px'
+      rectEl.style.width = Math.abs(cx - startX) + 'px'
+      rectEl.style.height = Math.abs(cy - startY) + 'px'
+    }
+
+    function up(ev: MouseEvent) {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      rectEl.remove()
+
+      if (!didDrag) return
+
+      const cx = ev.clientX - wrapRect.left
+      const cy = ev.clientY - wrapRect.top
+      const selL = Math.min(startX, cx), selT = Math.min(startY, cy)
+      const selR = Math.max(startX, cx), selB = Math.max(startY, cy)
+      if (selR - selL < 4 || selB - selT < 4) return
+
+      const cur = stateRef.current
+      if (!cur.elev) return
+
+      const matched = new Set<string>()
+      cur.artworks.forEach(a => {
+        if (!a.visible) return
+        const sz = dispSize(a, cur.scale)
+        const aL = a.xF * cur.elev!.dispW
+        const aT = a.yF * cur.elev!.dispH
+        if (aL + sz.w > selL && aL < selR && aT + sz.h > selT && aT < selB) {
+          matched.add(a.id)
+        }
+      })
+
+      if (matched.size > 0) {
+        boxSelectedRef.current = true
+        setTimeout(() => { boxSelectedRef.current = false }, 100)
+        setState(s => ({ ...s, selIds: matched }))
+        renderArtworksDOM(cur.artworks, cur.elev, cur.scale, matched)
+      }
+    }
+
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
+
   return {
     state,
     setState,
@@ -1124,5 +1202,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     clearAllMasks,
     highlightMask,
     saveStatus,
+    onWrapMouseDown,
+    boxSelectedRef,
   }
 }

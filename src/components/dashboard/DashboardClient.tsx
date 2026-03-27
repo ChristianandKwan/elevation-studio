@@ -166,6 +166,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
         {/* Header */}
         <div className="dash-header">
           <img src="/ck-wordmark-black.png" alt="Christian & Kwan" className="dash-logo" />
+          <div className="header-app-title">Elevation Studio</div>
           <div className="dash-user">
             <span>Signed in as</span>
             <span className="dash-user-name">{profile.name}</span>

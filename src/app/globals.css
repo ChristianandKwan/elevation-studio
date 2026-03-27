@@ -105,8 +105,9 @@ body {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 40px; height: 80px; border-bottom: 1px solid var(--border);
   background: var(--warm-white); position: sticky; top: 0; z-index: 100;
+  position: relative;
 }
-.dash-logo { height: 44px; width: auto; }
+.dash-logo { height: 56px; width: auto; }
 .dash-user { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--mid); }
 .dash-user-name { font-weight: 500; color: var(--charcoal); }
 .dash-avatar {
@@ -193,7 +194,7 @@ body {
 .studio-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 20px; height: 58px; border-bottom: 1px solid var(--border);
-  background: var(--warm-white); flex-shrink: 0;
+  background: var(--warm-white); flex-shrink: 0; position: relative;
 }
 .studio-header-left { display: flex; align-items: center; gap: 16px; }
 .studio-back {
@@ -210,6 +211,13 @@ body {
 }
 .save-status--saving { color: var(--mid); }
 .save-status--saved  { color: var(--green); }
+
+.header-app-title {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-family: 'Cormorant Garant', serif; font-size: 15px; font-weight: 400;
+  letter-spacing: .12em; color: var(--charcoal); pointer-events: none;
+  white-space: nowrap;
+}
 .save-status--error  { color: var(--red); }
 
 .studio-tab-bar {
@@ -434,10 +442,10 @@ body {
 .client-wrapper { min-height: 100vh; background: var(--cream); }
 .client-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 28px; height: 48px; background: var(--charcoal); flex-shrink: 0;
+  padding: 0 40px; height: 64px; background: var(--charcoal); flex-shrink: 0;
   position: sticky; top: 0; z-index: 100;
 }
-.client-logo { height: 30px; width: auto; }
+.client-logo { height: 44px; width: auto; }
 .client-project-label { font-size: 11px; color: rgba(255,255,255,.5); font-family: 'Karla'; }
 
 .client-cover {
