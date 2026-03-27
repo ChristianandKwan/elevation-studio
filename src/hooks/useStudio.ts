@@ -133,25 +133,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     // Clear
     while (svg.firstChild) svg.removeChild(svg.firstChild)
 
-    // Committed masks — semi-transparent overlay so user sees existing regions
-    masks.forEach(polygon => {
-      if (polygon.length < 3) return
-      const poly = svgEl('polygon')
-      poly.setAttribute('points', pointsAttr(polygon))
-      poly.setAttribute('class', 'fg-mask-preview')
-      svg.appendChild(poly)
-    })
-
     if (currentPoints.length === 0) return
-
-    // In-progress polygon preview fill (rendered first so dots appear above)
-    if (currentPoints.length >= 2 && hoverPoint) {
-      const previewPts = [...currentPoints, hoverPoint]
-      const poly = svgEl('polygon')
-      poly.setAttribute('points', pointsAttr(previewPts))
-      poly.setAttribute('class', 'fg-mask-preview fg-mask-preview-live')
-      svg.appendChild(poly)
-    }
 
     // Confirmed edges
     for (let i = 1; i < currentPoints.length; i++) {
@@ -221,12 +203,18 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     renderArtworksDOM(artworks, elev, newScale)
     renderForegroundSVG(masks ?? [], elev, elev.imageUrl)
 
-    // Resize draw SVG too
+    // Resize draw SVG and re-render its contents at new scale
     const drawSvg = document.getElementById('fg-draw-svg') as SVGSVGElement | null
     if (drawSvg) {
       drawSvg.setAttribute('width', String(dW))
       drawSvg.setAttribute('height', String(dH))
     }
+    renderDrawSVG(
+      masks ?? [],
+      stateRef.current.maskDraw.currentPoints,
+      maskHoverRef.current,
+      elev
+    )
 
     return newScale
   }, []) // eslint-disable-line

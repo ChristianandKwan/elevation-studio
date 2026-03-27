@@ -70,6 +70,7 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
                   x="0"
                   y="0"
                   preserveAspectRatio="none"
+                  clipPath="url(#fg-clip)"
                   style={{ pointerEvents: 'none' }}
                 />
               </svg>
