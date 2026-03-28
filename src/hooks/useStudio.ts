@@ -472,60 +472,39 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
         })
       })
 
-      // Touch drag to move (mirrors mousedown handler above)
+      // Touch drag to move — single artwork only
       div.addEventListener('touchstart', (e) => {
         if ((e.target as HTMLElement).classList.contains('aw-resize-hint')) return
         e.stopPropagation()
+        const s = stateRef.current
+        if (s.calib.active || s.maskDraw.active) return
+
         const t0 = e.touches[0]
-        setState(s => {
-          if (s.calib.active || s.maskDraw.active) return s
+        const rect = wrap.getBoundingClientRect()
+        const sx = t0.clientX - rect.left, sy = t0.clientY - rect.top
+        const startXF = art.xF, startYF = art.yF
 
-          const newSelIds = s.selIds.has(art.id) && s.selIds.size > 1
-            ? s.selIds
-            : new Set([art.id])
+        function move(ev: TouchEvent) {
+          ev.preventDefault()
+          const t = ev.touches[0]
+          const dx = t.clientX - rect.left - sx, dy = t.clientY - rect.top - sy
+          const elevW = stateRef.current.elev?.dispW ?? 1
+          const elevH = stateRef.current.elev?.dispH ?? 1
+          const sz2 = dispSize(art, stateRef.current.scale)
+          art.xF = Math.max(0, Math.min(1 - sz2.w / elevW, startXF + dx / elevW))
+          art.yF = Math.max(0, Math.min(1 - sz2.h / elevH, startYF + dy / elevH))
+          div.style.left = (art.xF * elevW) + 'px'
+          div.style.top = (art.yF * elevH) + 'px'
+        }
 
-          const rect = wrap.getBoundingClientRect()
-          const sx = t0.clientX - rect.left, sy = t0.clientY - rect.top
+        function up() {
+          document.removeEventListener('touchmove', move)
+          document.removeEventListener('touchend', up)
+          setState(st => { debounceSave(st); return { ...st, artworks: [...st.artworks] } })
+        }
 
-          const startPositions = new Map<string, { xF: number; yF: number }>()
-          stateRef.current.artworks.forEach(a => {
-            if (newSelIds.has(a.id)) startPositions.set(a.id, { xF: a.xF, yF: a.yF })
-          })
-
-          function move(ev: TouchEvent) {
-            ev.preventDefault()
-            const t = ev.touches[0]
-            const dx = t.clientX - rect.left - sx, dy = t.clientY - rect.top - sy
-            const elevW = stateRef.current.elev?.dispW ?? 1
-            const elevH = stateRef.current.elev?.dispH ?? 1
-            stateRef.current.artworks.forEach(a => {
-              if (!newSelIds.has(a.id)) return
-              const start = startPositions.get(a.id)
-              if (!start) return
-              const sz2 = dispSize(a, stateRef.current.scale)
-              a.xF = Math.max(0, Math.min(1 - sz2.w / elevW, start.xF + dx / elevW))
-              a.yF = Math.max(0, Math.min(1 - sz2.h / elevH, start.yF + dy / elevH))
-              const el = wrap?.querySelector(`[data-id="${a.id}"]`) as HTMLElement | null
-              if (el) {
-                el.style.left = (a.xF * elevW) + 'px'
-                el.style.top = (a.yF * elevH) + 'px'
-              }
-            })
-          }
-
-          function up() {
-            document.removeEventListener('touchmove', move)
-            document.removeEventListener('touchend', up)
-            setState(st => {
-              debounceSave(st)
-              return { ...st, artworks: [...st.artworks] }
-            })
-          }
-
-          document.addEventListener('touchmove', move, { passive: false })
-          document.addEventListener('touchend', up)
-          return { ...s, selId: art.id, selIds: newSelIds }
-        })
+        document.addEventListener('touchmove', move, { passive: false })
+        document.addEventListener('touchend', up)
       }, { passive: true })
 
       // Click to select (shift for multi-select)
@@ -1218,80 +1197,6 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     document.addEventListener('mouseup', up)
   }
 
-  function onWrapTouchStart(e: TouchEvent) {
-    const s = stateRef.current
-    if (s.calib.active || s.maskDraw.active) return
-    const target = e.target as HTMLElement
-    if (target.id !== 'elev-img' && target !== elevWrapRef.current) return
-    if (e.touches.length !== 1) return
-
-    const wrap = elevWrapRef.current!
-    const wrapRect = wrap.getBoundingClientRect()
-    const t0 = e.touches[0]
-    const startX = t0.clientX - wrapRect.left
-    const startY = t0.clientY - wrapRect.top
-
-    const rectEl = document.createElement('div')
-    rectEl.style.cssText = 'position:absolute;border:1px dashed var(--accent);background:rgba(139,111,71,.06);pointer-events:none;z-index:200;box-sizing:border-box'
-    rectEl.style.left = startX + 'px'
-    rectEl.style.top = startY + 'px'
-    rectEl.style.width = '0px'
-    rectEl.style.height = '0px'
-    wrap.appendChild(rectEl)
-
-    let didDrag = false
-    let lastCx = startX, lastCy = startY
-
-    function move(ev: TouchEvent) {
-      ev.preventDefault()
-      didDrag = true
-      const t = ev.touches[0]
-      lastCx = t.clientX - wrapRect.left
-      lastCy = t.clientY - wrapRect.top
-      const l = Math.min(startX, lastCx), top = Math.min(startY, lastCy)
-      rectEl.style.left = l + 'px'
-      rectEl.style.top = top + 'px'
-      rectEl.style.width = Math.abs(lastCx - startX) + 'px'
-      rectEl.style.height = Math.abs(lastCy - startY) + 'px'
-    }
-
-    function up() {
-      document.removeEventListener('touchmove', move)
-      document.removeEventListener('touchend', up)
-      rectEl.remove()
-
-      if (!didDrag) return
-
-      const selL = Math.min(startX, lastCx), selT = Math.min(startY, lastCy)
-      const selR = Math.max(startX, lastCx), selB = Math.max(startY, lastCy)
-      if (selR - selL < 4 || selB - selT < 4) return
-
-      const cur = stateRef.current
-      if (!cur.elev) return
-
-      const matched = new Set<string>()
-      cur.artworks.forEach(a => {
-        if (!a.visible) return
-        const sz = dispSize(a, cur.scale)
-        const aL = a.xF * cur.elev!.dispW
-        const aT = a.yF * cur.elev!.dispH
-        if (aL + sz.w > selL && aL < selR && aT + sz.h > selT && aT < selB) {
-          matched.add(a.id)
-        }
-      })
-
-      if (matched.size > 0) {
-        boxSelectedRef.current = true
-        setTimeout(() => { boxSelectedRef.current = false }, 100)
-        setState(st => ({ ...st, selIds: matched }))
-        renderArtworksDOM(cur.artworks, cur.elev, cur.scale, matched)
-      }
-    }
-
-    document.addEventListener('touchmove', move, { passive: false })
-    document.addEventListener('touchend', up)
-  }
-
   return {
     state,
     setState,
@@ -1337,7 +1242,6 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     highlightMask,
     saveStatus,
     onWrapMouseDown,
-    onWrapTouchStart,
     boxSelectedRef,
   }
 }

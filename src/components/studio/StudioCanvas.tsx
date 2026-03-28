@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 
 type StudioHook = ReturnType<typeof useStudio>
@@ -12,15 +12,6 @@ interface Props {
 
 export default function StudioCanvas({ studio, onStatus }: Props) {
   const { state, elevWrapRef, calibSvgRef, fgDrawSvgRef, vpRef, changeZoom, setZoomFit } = studio
-
-  // Wire touch box-select via addEventListener (not JSX) — React attaches passive listeners by default
-  useEffect(() => {
-    const wrap = elevWrapRef.current
-    if (!wrap) return
-    const handler = studio.onWrapTouchStart
-    wrap.addEventListener('touchstart', handler, { passive: true })
-    return () => wrap.removeEventListener('touchstart', handler)
-  }, [elevWrapRef, studio.onWrapTouchStart]) // eslint-disable-line
 
   // Deselect on canvas background click (skip if a box-select drag just finished)
   function onWrapClick(e: React.MouseEvent) {
