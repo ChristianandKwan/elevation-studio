@@ -91,6 +91,8 @@ src/
 - **Client portal** (`src/components/client/`) — `optionsState` keyed `[elevId][optionLetter]` keeps positions/visibility across tab switches. Clients can move artworks and toggle visibility. Notes debounced 800ms to `elevation_options.client_notes`.
 - **Rubber-band select** — `useStudio.onWrapMouseDown`; `boxSelectedRef` + 100ms timeout suppresses the post-mouseup click-to-deselect.
 - **Option B** — auto-copies elevation image from Option A on first switch (via `handleSwitch` in `StudioScreen.tsx`).
+- **Perspective skew** — corners stored as 8 fractional floats on `elevation_options`. `src/lib/homography.ts` (`quadToCSSMatrix3d`) solves homography via DLT. Transform applied to `#artwork-layer` div (studio) and `#client-artwork-layer` div (client) — elevation image is unaffected.
+- **Snap guides** — both studio and client portal use inline SVG overlays (`#snap-svg` / `#client-snap-svg`) rendered imperatively during drag, cleared on mouseup. Edge-to-edge detection against other `.aw-overlay` / `.client-aw-overlay` elements.
 
 ---
 
@@ -104,6 +106,8 @@ Tables: `profiles`, `projects`, `elevations`, `elevation_options`, `artworks`, `
 - `elevation_options` has a `foreground_masks` JSONB column (added in `003_foreground_masks.sql`) — stores an array of polygons, each polygon being an array of `{x, y}` points in 0–1 fractional coordinates
 - `elevation_options` has a `client_notes text` column (added in `005_client_notes.sql`)
 - `elevations` has a `client_picked_option text` column; `elevation_options` has client-token RLS update policies (added in `006_client_approval.sql`)
+- `artworks` has a `brightness float DEFAULT 1.0` column (`009_brightness.sql`) ⚠️ pending prod apply
+- `elevation_options` has 9 skew columns: `skew_tl_x/y`, `skew_tr_x/y`, `skew_br_x/y`, `skew_bl_x/y` (all float nullable) + `skew_active boolean DEFAULT true` (`010_skew.sql`) ⚠️ pending prod apply
 
 ---
 
@@ -159,12 +163,12 @@ git push
 - ✅ Dashboard kebab menu outside-click fix (shipped in `feature/unarchive-and-kebab-fix`)
 
 ### Feature backlog
-1. **Artwork skewing** — allow consultants to skew/shear placed artworks to match perspective of the wall photo (e.g. angled walls, corner installations)
-2. **Client-side snap to grid** — grid overlay with snap-to-grid when clients drag artworks in the portal, so placements feel intentional rather than free-floating
-3. **Brightness and fade sliders** — per-artwork sliders to adjust brightness and opacity/fade, useful for blending artworks into the wall photo more naturally
-4. **Pick options UX review** — the two-stage Pick/Approve flow is shipped but needs real-world testing and likely tweaking based on how C&K and clients actually use it
+- No known backlog items. All planned waves shipped as of 2026-03-28.
+- ⚠️ Two DB migrations outstanding — must apply to production before brightness + skew features work live:
+  - `009_brightness.sql` — `ALTER TABLE artworks ADD COLUMN brightness float NOT NULL DEFAULT 1.0`
+  - `010_skew.sql` — 9 new columns on `elevation_options` (skew corners + skew_active)
 
-### What's shipped (as of 2026-03-28, all on `dev`, commit `657261d`)
+### What's shipped (as of 2026-03-28, all on `dev`, commit `b2ae772`)
 - ✅ Archived tab re-fetch guard (`archivedLoaded` flag in `DashboardClient.tsx`)
 - ✅ PNG export filename includes project + elevation + option name
 - ✅ Activity log collapsible History panel in studio sidebar
@@ -184,6 +188,15 @@ git push
 - ✅ Rubber-band drag-to-select; multi-select (Shift+click); keyboard nudge
 - ✅ Project archive and delete (kebab menu on dashboard cards)
 - ✅ Foreground masking (polygon regions, SVG compositing, PNG export)
+- ✅ **N-options per elevation** (Wave C) — A/B/C… tabs, add/remove per elevation
+- ✅ **Foreground mask sync** (Wave D) — masks auto-mirror to sibling options with same image
+- ✅ **Artwork frames** (Wave F) — type + width in mm; CSS border in studio + client portal
+- ✅ **Project budget** (Wave H) — consultant sets budget; artwork total shown as % of budget
+- ✅ **Client deselect pick** — "Change selection" button reopens option tabs after picking
+- ✅ **Client snap guides** — dashed SVG alignment guides when dragging artworks in portal
+- ✅ **Picked tab ✓ tick** — e.g. "A ✓" confirms client's chosen option tab
+- ✅ **Brightness slider** (Wave E) — per-artwork 0.5–1.5 brightness, "Apply to all" button. DB: `artworks.brightness float DEFAULT 1.0` (`009_brightness.sql`). ⚠️ Migration needs applying to prod.
+- ✅ **Perspective skew** (Wave G) — consultant clicks 4 wall corners → CSS `matrix3d` homography warps artwork layer to match wall perspective. Toggle on/off, remove. Client portal mirrors skew. DB: 9 new columns on `elevation_options` (`010_skew.sql`). ⚠️ Migration needs applying to prod.
 
 ---
 
