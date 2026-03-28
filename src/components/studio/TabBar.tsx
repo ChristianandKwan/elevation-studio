@@ -14,13 +14,15 @@ interface Props {
   onSwitch: (elevId: string, option: string) => void
   onAddElevation: (name: string) => void
   onRenameElevation: (elevId: string, newName: string) => void
+  onDeleteElevation: (elevId: string) => void
 }
 
-export default function TabBar({ elevations, activeElevId, activeOption, onSwitch, onAddElevation, onRenameElevation }: Props) {
+export default function TabBar({ elevations, activeElevId, activeOption, onSwitch, onAddElevation, onRenameElevation, onDeleteElevation }: Props) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [newName, setNewName] = useState('')
   const [renameElevId, setRenameElevId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
+  const [confirmDeleteElevId, setConfirmDeleteElevId] = useState<string | null>(null)
 
   function handleAdd() {
     const name = newName.trim() || 'New Elevation'
@@ -67,6 +69,15 @@ export default function TabBar({ elevations, activeElevId, activeOption, onSwitc
             >
               <PencilIcon />
             </button>
+            {elevations.length > 1 && (
+              <button
+                className="studio-tab-rename-btn"
+                title="Delete elevation"
+                onClick={() => setConfirmDeleteElevId(elev.id)}
+              >
+                <TrashIcon />
+              </button>
+            )}
           </div>
         ))}
         <button className="studio-tab-add" onClick={() => setShowAddModal(true)}>
@@ -127,6 +138,27 @@ export default function TabBar({ elevations, activeElevId, activeOption, onSwitc
           </div>
         </div>
       )}
+
+      {/* Delete Elevation confirmation modal */}
+      {confirmDeleteElevId && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteElevId(null) }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Delete Elevation</div>
+            <div className="modal-sub" style={{ color: 'var(--red)' }}>
+              This will permanently delete this elevation and all its artworks. This cannot be undone.
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setConfirmDeleteElevId(null)}>Cancel</button>
+              <button
+                className="btn btn-danger"
+                onClick={() => { onDeleteElevation(confirmDeleteElevId); setConfirmDeleteElevId(null) }}
+              >
+                Delete Elevation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -136,6 +168,17 @@ function PencilIcon() {
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14H6L5 6"/>
+      <path d="M10 11v6M14 11v6"/>
+      <path d="M9 6V4h6v2"/>
     </svg>
   )
 }

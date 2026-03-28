@@ -16,9 +16,10 @@ interface Props {
   otherOptionNotes?: string
   otherOptionKey?: string
   activityLogs?: ActivityLog[]
+  onRequestDeleteArtworks: (ids: Set<string>) => void
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [] }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [], onRequestDeleteArtworks }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -110,7 +111,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
             {state.selIds.size > 1 && (
               <div className="multi-select-bar">
                 <span>{state.selIds.size} selected</span>
-                <button onClick={() => state.selIds.forEach(id => studio.deleteArtwork(id))}>Delete all</button>
+                <button onClick={() => onRequestDeleteArtworks(new Set(state.selIds))}>Delete all</button>
                 <button onClick={() => studio.selectArtwork(null)}>Deselect</button>
               </div>
             )}
@@ -122,7 +123,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   isSelected={state.selIds.has(art.id)}
                   onSelect={() => studio.selectArtwork(art.id)}
                   onToggleVis={() => studio.toggleVisibility(art.id)}
-                  onDelete={() => studio.deleteArtwork(art.id)}
+                  onDelete={() => onRequestDeleteArtworks(new Set([art.id]))}
                   onDimsChange={(w, h) => studio.updateArtworkDims(art.id, w, h)}
                   onPriceChange={(p) => studio.updateArtworkPrice(art.id, p)}
                   onNameChange={(n) => studio.updateArtworkName(art.id, n)}
