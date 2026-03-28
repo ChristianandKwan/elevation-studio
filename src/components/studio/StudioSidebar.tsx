@@ -11,9 +11,10 @@ interface Props {
   optionId: string
   projectId: string
   onStatus: (msg: string) => void
+  clientNotes?: string
 }
 
-export default function StudioSidebar({ studio, onStatus }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -217,6 +218,16 @@ export default function StudioSidebar({ studio, onStatus }: Props) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Client notes (read-only) */}
+      {clientNotes && (
+        <div className="sidebar-section" style={{ background: 'var(--amber-light)', border: '1px solid rgba(139,111,71,.2)', padding: '10px 14px', marginTop: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
+            Client Notes
+          </div>
+          <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--charcoal)', whiteSpace: 'pre-wrap' }}>{clientNotes}</div>
         </div>
       )}
 

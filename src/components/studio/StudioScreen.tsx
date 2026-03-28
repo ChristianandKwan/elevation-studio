@@ -30,6 +30,7 @@ interface DbElevation {
     approved: boolean
     approved_at: string | null
     foreground_masks: unknown
+    clientNotes: string
     artworks: Array<Artwork & { imageUrl: string | null }>
   }>
 }
@@ -216,8 +217,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order,
       elevation_options: [
-        { id: optA?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
-        { id: optB?.id ?? '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, artworks: [] },
+        { id: optA?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
+        { id: optB?.id ?? '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
@@ -292,6 +293,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           optionId={optionId}
           projectId={project.id}
           onStatus={onStatus}
+          clientNotes={activeOptData?.clientNotes ?? ''}
         />
         <StudioCanvas studio={studio} onStatus={onStatus} />
       </div>

@@ -34,7 +34,7 @@ export default async function ProjectPage({ params }: Props) {
     .select(`
       id, name, display_order,
       elevation_options(
-        id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks,
+        id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
         artworks(
           id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order
         )
@@ -51,6 +51,7 @@ export default async function ProjectPage({ params }: Props) {
           id: string; option: string; image_path: string | null;
           orig_w: number; orig_h: number; scale_px_per_cm: number | null;
           zoom: number; approved: boolean; approved_at: string | null;
+          client_notes?: string | null;
           artworks: Array<{
             id: string; name: string; image_path: string;
             w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
@@ -86,7 +87,7 @@ export default async function ProjectPage({ params }: Props) {
               })
           )
 
-          return { ...opt, imageUrl, imagePath: opt.image_path, artworks }
+          return { ...opt, imageUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '' }
         })
       )
       return { ...elev, elevation_options: options }
