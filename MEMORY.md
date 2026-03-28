@@ -156,11 +156,10 @@ git push
 - [ ] Client portal token expiry — update schema default from 90 days to 42 days
 
 ### Bugs
-- [ ] **Dashboard kebab menu (3-dot) can't be dismissed by clicking away** — needs an outside-click handler to close the menu.
+- ✅ Dashboard kebab menu outside-click fix (shipped in `feature/unarchive-and-kebab-fix`)
 
-### Feature backlog (priority order)
-1. **Rename project / elevation** — inline edit or modal, saves to DB
-2. **Unarchive project** — recall from archive (`archived = false`), needs an archived view/tab on dashboard
+### Feature backlog
+- None currently. All planned features shipped on `dev` as of 2026-03-28.
 
 ### What's shipped (as of 2026-03-28, all on `dev`, commit `657261d`)
 - ✅ Archived tab re-fetch guard (`archivedLoaded` flag in `DashboardClient.tsx`)
