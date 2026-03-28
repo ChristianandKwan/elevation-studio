@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { timeNow } from '@/lib/utils'
@@ -56,6 +56,17 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
   const [renameProjectId, setRenameProjectId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const [renaming, setRenaming] = useState(false)
+  const [view, setView] = useState<'active' | 'archived'>('active')
+  const [archivedProjects, setArchivedProjects] = useState<{ id: string; name: string; client_name: string; status: string }[]>([])
+  const [loadingArchived, setLoadingArchived] = useState(false)
+
+  // Close kebab menu when clicking anywhere outside it
+  useEffect(() => {
+    if (!menuOpenId) return
+    function handleOutsideClick() { setMenuOpenId(null) }
+    document.addEventListener('click', handleOutsideClick)
+    return () => document.removeEventListener('click', handleOutsideClick)
+  }, [menuOpenId])
 
   function showStatus(msg: string) {
     setToast(msg)
@@ -123,6 +134,29 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     showStatus('Project archived')
   }
 
+  async function loadArchivedProjects() {
+    setLoadingArchived(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoadingArchived(false); return }
+    const { data } = await supabase
+      .from('projects')
+      .select('id, name, client_name, status')
+      .eq('consultant_id', user.id)
+      .eq('archived', true)
+      .order('created_at', { ascending: false })
+    setArchivedProjects(data ?? [])
+    setLoadingArchived(false)
+  }
+
+  async function unarchiveProject(id: string) {
+    const supabase = createClient()
+    await supabase.from('projects').update({ archived: false }).eq('id', id)
+    setArchivedProjects(prev => prev.filter(p => p.id !== id))
+    setMenuOpenId(null)
+    showStatus('Project restored')
+  }
+
   async function deleteProject(id: string) {
     setDeleting(true)
     const supabase = createClient()
@@ -155,6 +189,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     await supabase.from('projects').delete().eq('id', id)
 
     setProjects(prev => prev.filter(p => p.id !== id))
+    setArchivedProjects(prev => prev.filter(p => p.id !== id))
     setConfirmDeleteId(null)
     setMenuOpenId(null)
     setDeleting(false)
@@ -197,9 +232,60 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               <div className="dash-kicker">Projects</div>
               <div className="dash-section-title">Your Work</div>
             </div>
+            <div className="dash-view-tabs">
+              <button
+                className={`dash-view-tab${view === 'active' ? ' active' : ''}`}
+                onClick={() => setView('active')}
+              >Active</button>
+              <button
+                className={`dash-view-tab${view === 'archived' ? ' active' : ''}`}
+                onClick={() => {
+                  setView('archived')
+                  loadArchivedProjects()
+                }}
+              >Archived</button>
+            </div>
           </div>
 
-          <div className="projects-grid" onClick={() => setMenuOpenId(null)}>
+          {view === 'archived' ? (
+            <div className="projects-grid">
+              {loadingArchived ? (
+                <div style={{ color: 'var(--muted)', padding: '1rem' }}>Loading…</div>
+              ) : archivedProjects.length === 0 ? (
+                <div style={{ color: 'var(--muted)', padding: '1rem' }}>No archived projects.</div>
+              ) : archivedProjects.map(p => (
+                <div key={p.id} className="project-card project-card--archived">
+                  <div className="project-card-thumb project-card-thumb-empty">⬜</div>
+                  <div className="project-card-body">
+                    <div className="project-card-name">{p.name}</div>
+                    <div className="project-card-client">{p.client_name}</div>
+                    <div className="project-card-meta">
+                      <span className={`project-card-badge badge-${p.status}`}>
+                        {statusLabels[p.status] ?? p.status}
+                      </span>
+                      <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>Archived</span>
+                    </div>
+                  </div>
+                  {/* Kebab menu */}
+                  <div className="project-card-menu-wrap" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="project-card-menu-btn"
+                      onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === p.id ? null : p.id) }}
+                      title="Project options"
+                    >⋯</button>
+                    {menuOpenId === p.id && (
+                      <div className="project-card-dropdown">
+                        <button onClick={() => unarchiveProject(p.id)}>Restore</button>
+                        <button className="danger" onClick={() => { setConfirmDeleteId(p.id); setMenuOpenId(null) }}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+
+          <div className="projects-grid">
             {projects.map(p => (
               <div
                 key={p.id}
@@ -271,6 +357,8 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               <div className="project-card-new-label">New Project</div>
             </div>
           </div>
+
+          )}
         </div>
       </div>
 
