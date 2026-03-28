@@ -36,6 +36,7 @@ interface ClientOption {
 interface ClientElevationData {
   id: string
   name: string
+  clientPickedOption: string | null
   elevation_options: ClientOption[]
 }
 
@@ -57,15 +58,43 @@ interface Props {
 export default function ClientPortal({ token, project, elevations, approvalActivity }: Props) {
   const [toast, setToast] = useState('')
 
-  // Default to first elevation+option that has an image
-  const firstWithImage = elevations.flatMap(e =>
-    e.elevation_options.filter(o => o.imageUrl).map(o => ({ elevId: e.id, opt: o.option as 'A' | 'B' }))
-  )[0]
+  // Track which option the client has picked per elevation (persisted to DB)
+  const [pickedOptions, setPickedOptions] = useState<Record<string, 'A' | 'B' | null>>(() => {
+    const s: Record<string, 'A' | 'B' | null> = {}
+    elevations.forEach(e => { s[e.id] = (e.clientPickedOption as 'A' | 'B' | null) ?? null })
+    return s
+  })
 
-  const [activeElevId, setActiveElevId] = useState(firstWithImage?.elevId ?? elevations[0]?.id ?? '')
-  const [activeOpt, setActiveOpt] = useState<'A' | 'B'>(firstWithImage?.opt ?? 'A')
+  // Whether an elevation needs explicit picking (both A and B have images)
+  function needsPick(elev: ClientElevationData): boolean {
+    const hasA = elev.elevation_options.some(o => o.option === 'A' && o.imageUrl)
+    const hasB = elev.elevation_options.some(o => o.option === 'B' && o.imageUrl)
+    return hasA && hasB
+  }
 
-  // Central state for all options — artwork positions/visibility persist across tab switches
+  // Resolve the active option for an elevation (respecting pick state)
+  function resolveOpt(elev: ClientElevationData): 'A' | 'B' | null {
+    if (pickedOptions[elev.id]) return pickedOptions[elev.id]!
+    const hasA = elev.elevation_options.some(o => o.option === 'A' && o.imageUrl)
+    const hasB = elev.elevation_options.some(o => o.option === 'B' && o.imageUrl)
+    if (hasA) return 'A'
+    if (hasB) return 'B'
+    return null
+  }
+
+  // Initial active tab: prefer picked, then first with image
+  const firstTab = (() => {
+    for (const elev of elevations) {
+      const opt = resolveOpt(elev)
+      if (opt) return { elevId: elev.id, opt }
+    }
+    return null
+  })()
+
+  const [activeElevId, setActiveElevId] = useState(firstTab?.elevId ?? elevations[0]?.id ?? '')
+  const [activeOpt, setActiveOpt] = useState<'A' | 'B'>(firstTab?.opt ?? 'A')
+
+  // Central state: artwork positions/visibility persist across tab switches
   const [optionsState, setOptionsState] = useState<Record<string, Record<string, ClientOption>>>(() => {
     const s: Record<string, Record<string, ClientOption>> = {}
     elevations.forEach(elev => {
@@ -77,10 +106,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     return s
   })
 
-  // Increment to force canvas DOM re-render when artwork visibility changes
   const [rerenderKey, setRerenderKey] = useState(0)
-
-  // Debounce timer for notes auto-save
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clear debounce timer on unmount to prevent state updates on an unmounted component
@@ -142,7 +168,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         [activeOpt]: { ...prev[activeElevId][activeOpt], clientNotes: notes },
       },
     }))
-    // Debounced save
     if (notesTimer.current) clearTimeout(notesTimer.current)
     notesTimer.current = setTimeout(async () => {
       const supabase = createClient()
@@ -150,34 +175,38 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     }, 800)
   }
 
+  async function handlePick(elevId: string, opt: 'A' | 'B') {
+    const supabase = createClient()
+    await supabase.from('elevations').update({ client_picked_option: opt }).eq('id', elevId)
+    setPickedOptions(prev => ({ ...prev, [elevId]: opt }))
+    setActiveElevId(elevId)
+    setActiveOpt(opt)
+    await supabase.from('activity_logs').insert({
+      project_id: project.id,
+      type: 'pick',
+      text: `Client picked Option ${opt} for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
+    })
+    onStatus(`Option ${opt} selected`)
+  }
+
   async function handleApprove() {
     if (!optData) return
     const supabase = createClient()
-    const now = new Date().toISOString()
+    const now = new Date().toLocaleString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    })
 
+    // Save current artwork positions
     await Promise.all(
       optData.artworks.map(art =>
         supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
       )
     )
+
+    // Approve the option
     await supabase.from('elevation_options').update({ approved: true, approved_at: now }).eq('id', optData.id)
 
-    // Only mark project approved when ALL elevation options are approved
-    const allOptionIds = elevations.flatMap(e => e.elevation_options.map(o => o.id))
-    const { data: allOptions } = await supabase
-      .from('elevation_options')
-      .select('id, approved')
-      .in('id', allOptionIds)
-    const allApproved = (allOptions ?? []).every(o => o.id === optData.id ? true : o.approved)
-    if (allApproved) {
-      await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
-    }
-
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'approved',
-      text: `Client approved Option ${activeOpt} of ${activeElev?.name ?? ''}`,
-    })
+    // Update local state
     setOptionsState(prev => ({
       ...prev,
       [activeElevId]: {
@@ -185,8 +214,29 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         [activeOpt]: { ...prev[activeElevId][activeOpt], approved: true, approved_at: now },
       },
     }))
+
+    await supabase.from('activity_logs').insert({
+      project_id: project.id,
+      type: 'approved',
+      text: `Client approved Option ${activeOpt} of ${activeElev?.name ?? ''}`,
+    })
+
+    // Check if ALL elevations are fully done (picked + approved)
+    const allDone = elevations.every(elev => {
+      const requires = needsPick(elev)
+      const pickedOpt = requires ? pickedOptions[elev.id] : resolveOpt(elev)
+      if (!pickedOpt) return false
+      if (elev.id === activeElevId) return true  // just approved above
+      return optionsState[elev.id]?.[pickedOpt]?.approved ?? false
+    })
+
+    if (allDone) {
+      await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
+    }
+
     onStatus(`Option ${activeOpt} approved!`)
   }
+
 
   return (
     <div className="client-layout">
@@ -205,10 +255,17 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         {elevations.map((elev, i) => {
           const hasA = elev.elevation_options.some(o => o.option === 'A' && o.imageUrl)
           const hasB = elev.elevation_options.some(o => o.option === 'B' && o.imageUrl)
+          const bothExist = hasA && hasB
+          const picked = pickedOptions[elev.id]
+
+          // Once picked: only show the chosen option's tab
+          const showA = hasA && (!bothExist || !picked || picked === 'A')
+          const showB = hasB && (!bothExist || !picked || picked === 'B')
+
           return (
             <div key={elev.id} style={{ display: 'flex', alignItems: 'center' }}>
               {i > 0 && <div className="client-tab-divider" />}
-              {hasA && (
+              {showA && (
                 <button
                   className={`client-tab-btn${activeElevId === elev.id && activeOpt === 'A' ? ' active' : ''}`}
                   onClick={() => { setActiveElevId(elev.id); setActiveOpt('A') }}
@@ -217,7 +274,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
                   {elev.name}
                 </button>
               )}
-              {hasB && (
+              {showB && (
                 <button
                   className={`client-tab-btn${activeElevId === elev.id && activeOpt === 'B' ? ' active' : ''}`}
                   onClick={() => { setActiveElevId(elev.id); setActiveOpt('B') }}
@@ -240,6 +297,8 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           projectId={project.id}
           rerenderKey={rerenderKey}
           approvalActivity={approvalActivity}
+          isPicked={!activeElev ? true : !needsPick(activeElev) || pickedOptions[activeElevId] != null}
+          onPick={(opt) => handlePick(activeElevId, opt)}
           onArtworkMove={onArtworkMove}
           onToggleVisibility={toggleVisibility}
           onNotesChange={onNotesChange}

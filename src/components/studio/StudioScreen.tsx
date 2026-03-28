@@ -18,6 +18,7 @@ interface DbElevation {
   id: string
   name: string
   display_order: number
+  clientPickedOption: string | null
   elevation_options: Array<{
     id: string
     option: string
@@ -283,7 +284,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const optB = opts?.find(o => o.option === 'B')
 
     const newElev: DbElevation = {
-      id: elev.id, name: elev.name, display_order: elev.display_order,
+      id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null,
       elevation_options: [
         { id: optA?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
         { id: optB?.id ?? '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
@@ -332,6 +333,31 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     }
 
     return token
+  }
+
+  async function handleConsultantUnapprove() {
+    if (!activeOptData?.id) return
+    const supabase = createClient()
+    await supabase
+      .from('elevation_options')
+      .update({ approved: false, approved_at: null })
+      .eq('id', activeOptData.id)
+    setElevations(prev => prev.map(e => {
+      if (e.id !== activeElevId) return e
+      return {
+        ...e,
+        elevation_options: e.elevation_options.map(o => {
+          if (o.option !== activeOption) return o
+          return { ...o, approved: false, approved_at: null }
+        }),
+      }
+    }))
+    await supabase.from('activity_logs').insert({
+      project_id: project.id,
+      type: 'unapprove',
+      text: `C&K unapproved Option ${activeOption} of ${activeElev?.name ?? ''}`,
+    })
+    onStatus('Approval removed — client can make changes again')
   }
 
   const { state } = studio
@@ -401,6 +427,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           otherOptionKey={otherOptionKey}
           activityLogs={activityLogs}
           onRequestDeleteArtworks={requestDeleteArtworks}
+          approvalStatus={{
+            pickedOption: activeElev?.clientPickedOption ?? null,
+            approved: activeOptData?.approved ?? false,
+            approvedAt: activeOptData?.approved_at ?? null,
+          }}
+          onUnapprove={handleConsultantUnapprove}
         />
         <StudioCanvas studio={studio} onStatus={onStatus} />
       </div>

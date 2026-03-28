@@ -42,7 +42,7 @@ export default async function ClientPortalPage({ params }: Props) {
   const { data: elevations } = await supabase
     .from('elevations')
     .select(`
-      id, name, display_order,
+      id, name, display_order, client_picked_option,
       elevation_options(
         id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
         artworks(
@@ -98,7 +98,7 @@ export default async function ClientPortalPage({ params }: Props) {
           return { ...opt, imageUrl, artworks, clientNotes: opt.client_notes ?? '' }
         })
       )
-      return { ...elev, elevation_options: options }
+      return { ...elev, elevation_options: options, clientPickedOption: (elev as any).client_picked_option ?? null }
     })
   )
 

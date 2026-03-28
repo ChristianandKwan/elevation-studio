@@ -17,9 +17,15 @@ interface Props {
   otherOptionKey?: string
   activityLogs?: ActivityLog[]
   onRequestDeleteArtworks: (ids: Set<string>) => void
+  approvalStatus?: {
+    pickedOption: string | null
+    approved: boolean
+    approvedAt: string | null
+  }
+  onUnapprove?: () => void
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [], onRequestDeleteArtworks }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -225,6 +231,42 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Client approval status */}
+      {approvalStatus && (approvalStatus.pickedOption || approvalStatus.approved) && (
+        <div className="sidebar-section" style={{ padding: '10px 14px', marginTop: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--mid)', marginBottom: 8 }}>
+            Client Status
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {approvalStatus.pickedOption && (
+              <div className="studio-approval-chip picked">
+                ✓ Client picked Option {approvalStatus.pickedOption}
+              </div>
+            )}
+            {approvalStatus.approved ? (
+              <>
+                <div className="studio-approval-chip approved">
+                  ✓ Approved {approvalStatus.approvedAt ? `· ${approvalStatus.approvedAt}` : ''}
+                </div>
+                {onUnapprove && (
+                  <button
+                    className="btn btn-sm btn-ghost btn-full"
+                    style={{ marginTop: 4 }}
+                    onClick={onUnapprove}
+                  >
+                    Unapprove (reopen for client)
+                  </button>
+                )}
+              </>
+            ) : approvalStatus.pickedOption ? (
+              <div className="studio-approval-chip pending">
+                ◌ Awaiting client approval
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
 
