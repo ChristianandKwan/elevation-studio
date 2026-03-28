@@ -52,6 +52,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [activeOption, setActiveOption] = useState<OptionKey>('A')
   const [shareToken, setShareToken] = useState(existingToken)
   const [projectStatus, setProjectStatus] = useState(project.status)
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
 
   function onStatus(msg: string) {
     setToast(msg)
@@ -91,7 +92,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
       const s = studio.state
       if ((e.key === 'Delete' || e.key === 'Backspace') && s.selIds.size > 0) {
-        s.selIds.forEach(id => studio.deleteArtwork(id))
+        requestDeleteArtworks(new Set(s.selIds))
         return
       }
       if (e.key === 'Escape') {
@@ -191,6 +192,61 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     }
     setActiveElevId(elevId)
     setActiveOption(opt as OptionKey)
+  }
+
+  function requestDeleteArtworks(ids: Set<string>) {
+    setPendingDeleteIds(ids)
+  }
+
+  function confirmDeleteArtworks() {
+    if (!pendingDeleteIds) return
+    pendingDeleteIds.forEach(id => studio.deleteArtwork(id))
+    setPendingDeleteIds(null)
+  }
+
+  async function deleteElevation(elevId: string) {
+    const supabase = createClient()
+
+    // Fetch all elevation_options for this elevation
+    const { data: opts } = await supabase
+      .from('elevation_options')
+      .select('id, image_path')
+      .eq('elevation_id', elevId)
+
+    if (opts) {
+      // Fetch artwork image paths for all options
+      const optIds = opts.map(o => o.id)
+      const { data: arts } = await supabase
+        .from('artworks')
+        .select('image_path')
+        .in('option_id', optIds)
+
+      // Delete artwork images from storage
+      const artPaths = (arts ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
+      if (artPaths.length) {
+        await supabase.storage.from('artwork-images').remove(artPaths)
+      }
+
+      // Delete elevation images from storage
+      const elevPaths = opts.map(o => o.image_path).filter(Boolean) as string[]
+      if (elevPaths.length) {
+        await supabase.storage.from('elevation-images').remove(elevPaths)
+      }
+    }
+
+    // Delete the elevation row (DB cascades to options + artworks)
+    await supabase.from('elevations').delete().eq('id', elevId)
+
+    // Update local state and switch away if needed
+    setElevations(prev => {
+      const remaining = prev.filter(e => e.id !== elevId)
+      if (activeElevId === elevId && remaining.length > 0) {
+        setActiveElevId(remaining[0].id)
+        setActiveOption('A')
+      }
+      return remaining
+    })
+    onStatus('Elevation deleted')
   }
 
   async function renameElevation(elevId: string, newName: string) {
@@ -327,6 +383,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         onSwitch={handleSwitch}
         onAddElevation={addElevation}
         onRenameElevation={renameElevation}
+        onDeleteElevation={deleteElevation}
       />
 
       {/* Main */}
@@ -338,6 +395,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onStatus={onStatus}
           clientNotes={activeOptData?.clientNotes ?? ''}
           activityLogs={activityLogs}
+          onRequestDeleteArtworks={requestDeleteArtworks}
         />
         <StudioCanvas studio={studio} onStatus={onStatus} />
       </div>
@@ -366,6 +424,24 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onClose={() => studio.setShowShareModal(false)}
           onStatus={onStatus}
         />
+      )}
+
+      {/* Artwork delete confirmation modal */}
+      {pendingDeleteIds && (
+        <div className="modal-bg open" onClick={() => setPendingDeleteIds(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">
+              Remove {pendingDeleteIds.size} artwork{pendingDeleteIds.size !== 1 ? 's' : ''}?
+            </div>
+            <div className="modal-sub" style={{ color: 'var(--red)' }}>
+              This cannot be undone.
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setPendingDeleteIds(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={confirmDeleteArtworks}>Remove</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <StatusToast message={toast} />
