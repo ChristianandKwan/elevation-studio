@@ -73,7 +73,7 @@ export default async function ClientPortalPage({ params }: Props) {
           if (opt.image_path) {
             const { data } = await supabase.storage
               .from('elevation-images')
-              .createSignedUrl(opt.image_path, 7200)
+              .createSignedUrl(opt.image_path, 259200) // 72hrs
             imageUrl = data?.signedUrl ?? null
           }
 
@@ -83,7 +83,7 @@ export default async function ClientPortalPage({ params }: Props) {
               .map(async (art) => {
                 const { data } = await supabase.storage
                   .from('artwork-images')
-                  .createSignedUrl(art.image_path, 7200)
+                  .createSignedUrl(art.image_path, 259200) // 72hrs
                 return {
                   ...art,
                   imageUrl: data?.signedUrl ?? null,

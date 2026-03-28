@@ -148,16 +148,26 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   async function handleApprove() {
     if (!optData) return
     const supabase = createClient()
-    const now = new Date().toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
+    const now = new Date().toISOString()
+
     await Promise.all(
       optData.artworks.map(art =>
         supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
       )
     )
     await supabase.from('elevation_options').update({ approved: true, approved_at: now }).eq('id', optData.id)
-    await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
+
+    // Only mark project approved when ALL elevation options are approved
+    const allOptionIds = elevations.flatMap(e => e.elevation_options.map(o => o.id))
+    const { data: allOptions } = await supabase
+      .from('elevation_options')
+      .select('id, approved')
+      .in('id', allOptionIds)
+    const allApproved = (allOptions ?? []).every(o => o.id === optData.id ? true : o.approved)
+    if (allApproved) {
+      await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
+    }
+
     await supabase.from('activity_logs').insert({
       project_id: project.id,
       type: 'approved',
