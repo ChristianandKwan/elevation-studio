@@ -159,7 +159,10 @@ git push
 - ✅ Dashboard kebab menu outside-click fix (shipped in `feature/unarchive-and-kebab-fix`)
 
 ### Feature backlog
-- None currently. All planned features shipped on `dev` as of 2026-03-28.
+1. **Artwork skewing** — allow consultants to skew/shear placed artworks to match perspective of the wall photo (e.g. angled walls, corner installations)
+2. **Client-side snap to grid** — grid overlay with snap-to-grid when clients drag artworks in the portal, so placements feel intentional rather than free-floating
+3. **Brightness and fade sliders** — per-artwork sliders to adjust brightness and opacity/fade, useful for blending artworks into the wall photo more naturally
+4. **Pick options UX review** — the two-stage Pick/Approve flow is shipped but needs real-world testing and likely tweaking based on how C&K and clients actually use it
 
 ### What's shipped (as of 2026-03-28, all on `dev`, commit `657261d`)
 - ✅ Archived tab re-fetch guard (`archivedLoaded` flag in `DashboardClient.tsx`)

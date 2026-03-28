@@ -127,7 +127,17 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
                 style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', display: 'none', overflow: 'visible' }}
               />
 
-              {/* Artwork overlays injected here imperatively by useStudio */}
+              {/* Artwork overlay layer — perspective transform applied here when skew is active */}
+              <div
+                id="artwork-layer"
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }}
+              />
+
+              {/* Skew corner handles — rendered imperatively by useStudio */}
+              <svg
+                id="skew-handles-svg"
+                style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', display: 'none', overflow: 'visible' }}
+              />
             </div>
           </div>
         </div>

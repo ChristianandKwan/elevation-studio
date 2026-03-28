@@ -25,6 +25,8 @@ export interface Artwork {
   /** Optional frame: type and width in mm (requires scale to be set) */
   frameType?: string | null
   frameWidthMm?: number | null
+  /** Per-artwork brightness effect via CSS filter (1.0 = unchanged) */
+  brightness?: number | null
   /** Loaded Image element for canvas rendering */
   img?: HTMLImageElement | null
 }
@@ -42,6 +44,13 @@ export interface ElevationOption {
   approvedAt: string | null
   artworks: Artwork[]
   foregroundMasks: ForegroundMasks | null
+  /** Perspective correction corners (fractional 0-1 relative to display dimensions) */
+  skewTL?: [number, number] | null
+  skewTR?: [number, number] | null
+  skewBR?: [number, number] | null
+  skewBL?: [number, number] | null
+  /** Whether perspective skew is applied to artwork overlays */
+  skewActive?: boolean
 }
 
 export interface Elevation {

@@ -32,6 +32,15 @@ interface DbElevation {
     approved_at: string | null
     foreground_masks: unknown
     clientNotes: string
+    skew_tl_x?: number | null
+    skew_tl_y?: number | null
+    skew_tr_x?: number | null
+    skew_tr_y?: number | null
+    skew_br_x?: number | null
+    skew_br_y?: number | null
+    skew_bl_x?: number | null
+    skew_bl_y?: number | null
+    skew_active?: boolean
     artworks: Array<Artwork & { imageUrl: string | null }>
   }>
 }
@@ -41,6 +50,18 @@ interface Props {
   elevations: DbElevation[]
   existingToken: string | null
   activityLogs: ActivityLog[]
+}
+
+type SkewOptData = Pick<DbElevation['elevation_options'][number],
+  'skew_tl_x' | 'skew_tl_y' | 'skew_tr_x' | 'skew_tr_y' |
+  'skew_br_x' | 'skew_br_y' | 'skew_bl_x' | 'skew_bl_y'>
+
+function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCorners | null {
+  const { skew_tl_x: tlx, skew_tl_y: tly, skew_tr_x: trx, skew_tr_y: try_,
+          skew_br_x: brx, skew_br_y: bry, skew_bl_x: blx, skew_bl_y: bly } = opt
+  if (tlx == null || tly == null || trx == null || try_ == null ||
+      brx == null || bry == null || blx == null || bly == null) return null
+  return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
 export default function StudioScreen({ project, elevations: initialElevations, existingToken, activityLogs }: Props) {
@@ -164,6 +185,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   useEffect(() => {
     if (!activeOptData) return
     if (skipNextLoadRef.current) { skipNextLoadRef.current = false; return }
+    const skewCorners = buildSkewCorners(activeOptData)
     studio.loadOption({
       imageUrl: activeOptData.imageUrl,
       imagePath: activeOptData.imagePath,
@@ -173,6 +195,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       zoom: activeOptData.zoom,
       artworks: activeOptData.artworks ?? [],
       foregroundMasks: (activeOptData.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
+      skewCorners,
+      skewActive: activeOptData.skew_active ?? false,
     })
   }, [activeElevId, activeOption]) // eslint-disable-line
 
@@ -272,6 +296,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         zoom: sourceOpt.zoom,
         artworks: targetOpt.artworks ?? [],
         foregroundMasks: (targetOpt.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
+        skewCorners: buildSkewCorners(targetOpt),
+        skewActive: targetOpt.skew_active ?? false,
       })
       setActiveElevId(elevId)
       setActiveOption(opt)

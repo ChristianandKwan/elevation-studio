@@ -139,6 +139,8 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   onPriceChange={(p) => studio.updateArtworkPrice(art.id, p)}
                   onNameChange={(n) => studio.updateArtworkName(art.id, n)}
                   onFrameChange={(ft, fw) => studio.updateArtworkFrame(art.id, ft, fw)}
+                  onBrightnessChange={(b) => studio.updateArtworkBrightness(art.id, b)}
+                  onBrightnessApplyAll={(b) => studio.updateAllArtworksBrightness(b)}
                 />
               ))}
             </div>
@@ -236,6 +238,64 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                 </button>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 5: Perspective */}
+      {hasElev && (
+        <div className="sidebar-section">
+          <div className="s-title">
+            <span className={`step-badge${state.skewCorners ? ' done' : ''}`}>5</span>
+            Perspective
+          </div>
+          {state.skewDefMode ? (
+            <div className="mask-draw-panel">
+              <div className="mask-draw-status">
+                Click 4 corners: TL → TR → BR → BL
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button className="btn btn-sm btn-full" onClick={studio.cancelSkewDef}>Cancel</button>
+              </div>
+            </div>
+          ) : state.skewCorners ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                <label style={{ fontSize: 11, color: 'var(--mid)', flex: 1 }}>Skew artworks</label>
+                <input
+                  type="checkbox"
+                  checked={state.skewActive}
+                  onChange={e => studio.setSkewActive(e.target.checked)}
+                />
+              </div>
+              <button
+                className="btn btn-sm btn-full"
+                style={{ marginTop: 8 }}
+                onClick={studio.startSkewDef}
+              >
+                Adjust corners
+              </button>
+              <button
+                className="btn btn-sm btn-full"
+                style={{ marginTop: 6, color: 'var(--mid)', background: 'transparent', border: '1px solid var(--border)' }}
+                onClick={studio.clearSkew}
+              >
+                Remove perspective
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn btn-sm btn-full"
+                disabled={!hasElev}
+                onClick={studio.startSkewDef}
+              >
+                Set Perspective
+              </button>
+              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--mid)', lineHeight: 1.5 }}>
+                Mark the 4 corners of the wall to apply perspective to artworks.
+              </div>
+            </>
           )}
         </div>
       )}
@@ -404,7 +464,7 @@ const FRAME_COLORS: Record<string, string> = {
 }
 
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null }
   isSelected: boolean
   hasScale: boolean
   onSelect: () => void
@@ -414,14 +474,18 @@ interface ArtworkItemProps {
   onPriceChange: (p: number) => void
   onNameChange: (name: string) => void
   onFrameChange: (frameType: string | null, frameWidthMm: number | null) => void
+  onBrightnessChange: (b: number) => void
+  onBrightnessApplyAll: (b: number) => void
 }
 
-function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
+  const [brightnessVal, setBrightnessVal] = useState(art.brightness ?? 1)
 
   useEffect(() => { setNameValue(art.name) }, [art.name])
+  useEffect(() => { setBrightnessVal(art.brightness ?? 1) }, [art.brightness])
 
   function toggleDims() {
     const dr = dimsRef.current
@@ -536,6 +600,32 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelet
               <label style={{ fontSize: 10, color: 'var(--mid)' }}>mm</label>
             </>
           )}
+        </div>
+        {/* Brightness */}
+        <div style={{ width: '100%', display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 54 }}>Brightness</label>
+          <input
+            type="range" min={0.5} max={1.5} step={0.05}
+            value={brightnessVal}
+            style={{ flex: 1 }}
+            onClick={e => e.stopPropagation()}
+            onChange={e => {
+              const v = parseFloat(e.target.value)
+              setBrightnessVal(v)
+              onBrightnessChange(v)
+            }}
+          />
+          <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 28, textAlign: 'right' }}>
+            {brightnessVal.toFixed(2)}
+          </span>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 10, padding: '1px 5px', height: 20 }}
+            title="Apply brightness to all artworks"
+            onClick={e => { e.stopPropagation(); onBrightnessApplyAll(brightnessVal) }}
+          >
+            All
+          </button>
         </div>
       </div>
     </div>

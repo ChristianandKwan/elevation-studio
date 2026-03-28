@@ -35,8 +35,9 @@ export default async function ProjectPage({ params }: Props) {
       id, name, display_order, client_picked_option,
       elevation_options(
         id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
+        skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm
+          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm, brightness
         )
       )
     `)
@@ -52,6 +53,11 @@ export default async function ProjectPage({ params }: Props) {
           orig_w: number; orig_h: number; scale_px_per_cm: number | null;
           zoom: number; approved: boolean; approved_at: string | null;
           client_notes?: string | null;
+          skew_tl_x?: number | null; skew_tl_y?: number | null;
+          skew_tr_x?: number | null; skew_tr_y?: number | null;
+          skew_br_x?: number | null; skew_br_y?: number | null;
+          skew_bl_x?: number | null; skew_bl_y?: number | null;
+          skew_active?: boolean;
           artworks: Array<{
             id: string; name: string; image_path: string;
             w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
@@ -85,6 +91,7 @@ export default async function ProjectPage({ params }: Props) {
                   priceIncludes: art.price_includes as 'artwork' | 'all',
                   frameType: (art as any).frame_type ?? null,
                   frameWidthMm: (art as any).frame_width_mm ?? null,
+                  brightness: (art as any).brightness ?? 1,
                 }
               })
           )

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
+import { quadToCSSMatrix3d } from '@/lib/homography'
 
 export interface StudioElev {
   imagePath: string
@@ -14,6 +15,8 @@ export interface StudioElev {
   dispH: number
 }
 
+export type SkewCorners = [[number, number], [number, number], [number, number], [number, number]]
+
 export interface StudioState {
   elev: StudioElev | null
   scale: Scale | null
@@ -24,6 +27,9 @@ export interface StudioState {
   calib: CalibState
   masks: ForegroundMasks
   maskDraw: MaskDrawState
+  skewCorners: SkewCorners | null
+  skewActive: boolean
+  skewDefMode: boolean
 }
 
 const MIN_ZOOM = 0.25
@@ -62,6 +68,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     calib: DEFAULT_CALIB,
     masks: [],
     maskDraw: DEFAULT_MASK_DRAW,
+    skewCorners: null,
+    skewActive: false,
+    skewDefMode: false,
   })
 
   // Keep a ref in sync for reading state in non-React event handlers (e.g. mousemove)
@@ -99,6 +108,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
   // Box-select: flag to suppress click-deselect after a successful drag
   const boxSelectedRef = useRef(false)
+
+  // Skew definition: accumulates corners during corner-placement session
+  const skewDefCornersRef = useRef<Array<[number, number]>>([])
 
   // Pending scale modal data
   const pendingCalibPx = useRef(0)
@@ -140,6 +152,138 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     poly.setAttribute('points', pts)
     poly.setAttribute('class', 'fg-highlight-poly')
     svg.appendChild(poly)
+  }
+
+  // ─── SKEW TRANSFORM + HANDLES ────────────────────────────────────
+  function applySkewTransform() {
+    const s = stateRef.current
+    const layer = document.getElementById('artwork-layer') as HTMLElement | null
+    if (!layer) return
+    if (!s.skewActive || !s.skewCorners || !s.elev) {
+      layer.style.transform = ''
+      return
+    }
+    const { dispW, dispH } = s.elev
+    const quad: [[number,number],[number,number],[number,number],[number,number]] = [
+      [s.skewCorners[0][0] * dispW, s.skewCorners[0][1] * dispH],
+      [s.skewCorners[1][0] * dispW, s.skewCorners[1][1] * dispH],
+      [s.skewCorners[2][0] * dispW, s.skewCorners[2][1] * dispH],
+      [s.skewCorners[3][0] * dispW, s.skewCorners[3][1] * dispH],
+    ]
+    const matrix = quadToCSSMatrix3d(dispW, dispH, quad)
+    if (matrix) layer.style.transform = matrix
+  }
+
+  function renderSkewHandles(corners: Array<[number, number]>, elev: StudioElev | null) {
+    const svg = document.getElementById('skew-handles-svg') as SVGSVGElement | null
+    if (!svg) return
+    svg.innerHTML = ''
+    if (corners.length === 0 || !elev) { svg.style.display = 'none'; return }
+    svg.setAttribute('width', String(elev.dispW))
+    svg.setAttribute('height', String(elev.dispH))
+    svg.style.display = ''
+
+    // Connecting lines
+    const len = Math.min(corners.length, 4)
+    for (let i = 0; i < len; i++) {
+      const nextIdx = i < len - 1 ? i + 1 : (len === 4 ? 0 : -1)
+      if (nextIdx === -1) break
+      const l = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+      l.setAttribute('x1', String(corners[i][0] * elev.dispW))
+      l.setAttribute('y1', String(corners[i][1] * elev.dispH))
+      l.setAttribute('x2', String(corners[nextIdx][0] * elev.dispW))
+      l.setAttribute('y2', String(corners[nextIdx][1] * elev.dispH))
+      l.setAttribute('stroke', 'var(--accent)')
+      l.setAttribute('stroke-width', '1.5')
+      l.setAttribute('stroke-dasharray', '4 3')
+      svg.appendChild(l)
+    }
+
+    // Corner handles
+    const labels = ['TL', 'TR', 'BR', 'BL']
+    corners.forEach((corner, i) => {
+      const cx = corner[0] * elev.dispW, cy = corner[1] * elev.dispH
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+      c.setAttribute('cx', String(cx)); c.setAttribute('cy', String(cy)); c.setAttribute('r', '6')
+      c.setAttribute('fill', 'var(--accent)'); c.setAttribute('fill-opacity', '0.85')
+      c.setAttribute('stroke', 'white'); c.setAttribute('stroke-width', '1.5')
+      svg.appendChild(c)
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+      t.setAttribute('x', String(cx + 8)); t.setAttribute('y', String(cy - 8))
+      t.setAttribute('font-size', '10'); t.setAttribute('fill', 'var(--accent)')
+      t.setAttribute('font-weight', '600')
+      t.textContent = labels[i] ?? ''
+      svg.appendChild(t)
+    })
+  }
+
+  async function persistSkew(
+    corners: SkewCorners | null,
+    active: boolean
+  ) {
+    const supabase = createClient()
+    await supabase.from('elevation_options').update({
+      skew_tl_x: corners?.[0][0] ?? null,
+      skew_tl_y: corners?.[0][1] ?? null,
+      skew_tr_x: corners?.[1][0] ?? null,
+      skew_tr_y: corners?.[1][1] ?? null,
+      skew_br_x: corners?.[2][0] ?? null,
+      skew_br_y: corners?.[2][1] ?? null,
+      skew_bl_x: corners?.[3][0] ?? null,
+      skew_bl_y: corners?.[3][1] ?? null,
+      skew_active: active,
+    }).eq('id', optionId)
+  }
+
+  function startSkewDef() {
+    skewDefCornersRef.current = []
+    renderSkewHandles([], stateRef.current.elev)
+    const layer = document.getElementById('artwork-layer') as HTMLElement | null
+    if (layer) layer.style.transform = ''
+    setState(s => ({ ...s, skewDefMode: true }))
+  }
+
+  function cancelSkewDef() {
+    skewDefCornersRef.current = []
+    const s = stateRef.current
+    // Restore handles from existing corners if any
+    if (s.skewCorners) renderSkewHandles([...s.skewCorners], s.elev)
+    else renderSkewHandles([], s.elev)
+    // Re-apply existing transform if it was active
+    requestAnimationFrame(() => applySkewTransform())
+    setState(st => ({ ...st, skewDefMode: false }))
+  }
+
+  function setSkewActive(active: boolean) {
+    setState(s => {
+      const newSt = { ...s, skewActive: active }
+      requestAnimationFrame(() => {
+        // stateRef will have new value after setState, but applySkewTransform reads stateRef
+        // so we manually pass the updated active flag via a closure trick
+        const layer = document.getElementById('artwork-layer') as HTMLElement | null
+        if (!layer) return
+        if (!active || !s.skewCorners || !s.elev) { layer.style.transform = ''; return }
+        const { dispW, dispH } = s.elev
+        const quad: [[number,number],[number,number],[number,number],[number,number]] = [
+          [s.skewCorners[0][0] * dispW, s.skewCorners[0][1] * dispH],
+          [s.skewCorners[1][0] * dispW, s.skewCorners[1][1] * dispH],
+          [s.skewCorners[2][0] * dispW, s.skewCorners[2][1] * dispH],
+          [s.skewCorners[3][0] * dispW, s.skewCorners[3][1] * dispH],
+        ]
+        const matrix = quadToCSSMatrix3d(dispW, dispH, quad)
+        if (matrix) layer.style.transform = matrix
+      })
+      persistSkew(s.skewCorners, active)
+      return newSt
+    })
+  }
+
+  function clearSkew() {
+    renderSkewHandles([], stateRef.current.elev)
+    const layer = document.getElementById('artwork-layer') as HTMLElement | null
+    if (layer) layer.style.transform = ''
+    setState(s => ({ ...s, skewCorners: null, skewActive: false, skewDefMode: false }))
+    persistSkew(null, false)
   }
 
   // ─── FOREGROUND SVG RENDERING ─────────────────────────────────────
@@ -268,6 +412,11 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const newScale = scale ? { ...scale, dispPxPerCm: scale.origPxPerCm * zoom } : null
     renderArtworksDOM(artworks, elev, newScale)
     renderForegroundSVG(masks ?? [], elev, elev.imageUrl)
+    // Re-render skew handles at new display size
+    const s = stateRef.current
+    if (s.skewCorners) renderSkewHandles([...s.skewCorners], elev)
+    const skewHandlesSvg = document.getElementById('skew-handles-svg') as SVGSVGElement | null
+    if (skewHandlesSvg && !s.skewCorners) { skewHandlesSvg.innerHTML = ''; skewHandlesSvg.style.display = 'none' }
 
     // Resize draw + highlight SVGs and re-render draw contents at new scale
     const drawSvg = document.getElementById('fg-draw-svg') as SVGSVGElement | null
@@ -338,6 +487,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const wrap = elevWrapRef.current
     if (!wrap || !elev) return
     wrap.querySelectorAll('.aw-overlay').forEach(el => el.remove())
+    const artworkLayer = (wrap.querySelector('#artwork-layer') as HTMLElement | null) ?? wrap
 
     artworks.forEach(art => {
       if (!art.visible) return
@@ -356,6 +506,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const img = document.createElement('img')
       img.src = art.imageUrl ?? ''
       img.draggable = false
+      if (art.brightness != null && art.brightness !== 1) {
+        img.style.filter = `brightness(${art.brightness})`
+      }
 
       const tag = document.createElement('div')
       tag.className = 'aw-tag'
@@ -600,8 +753,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         })
       })
 
-      wrap.appendChild(div)
+      artworkLayer.appendChild(div)
     })
+    requestAnimationFrame(() => applySkewTransform())
   }
 
   // ─── LOAD OPTION ──────────────────────────────────────────────────
@@ -610,10 +764,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     origW: number; origH: number; scalePxPerCm: number | null;
     zoom: number; artworks: Array<Artwork & { imageUrl: string | null }>;
     foregroundMasks: ForegroundMasks | null;
+    skewCorners?: SkewCorners | null;
+    skewActive?: boolean;
   }) {
     if (!opts.imageUrl) {
-      setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
+      setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false })
       renderForegroundSVG([], null, null)
+      renderSkewHandles([], null)
       return
     }
 
@@ -639,6 +796,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const masks = opts.foregroundMasks ?? []
       const newArts = opts.artworks.map(a => ({ ...a }))
 
+      const skewCorners = opts.skewCorners ?? null
+      const skewActive = opts.skewActive ?? false
+
       // Load artwork images
       let loaded = 0
       function tryFinish() {
@@ -646,9 +806,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           setState({
             elev, scale, artworks: newArts, selId: null, selIds: new Set(), zoom: opts.zoom,
             calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
+            skewCorners, skewActive, skewDefMode: false,
           })
           requestAnimationFrame(() => {
             applyZoom(opts.zoom, elev, scale, newArts, masks)
+            applySkewTransform()
+            if (skewCorners) renderSkewHandles([...skewCorners], elev)
+            else renderSkewHandles([], elev)
           })
         }
       }
@@ -657,8 +821,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         setState({
           elev, scale, artworks: [], selId: null, selIds: new Set(), zoom: opts.zoom,
           calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
+          skewCorners, skewActive, skewDefMode: false,
         })
-        requestAnimationFrame(() => applyZoom(opts.zoom, elev, scale, [], masks))
+        requestAnimationFrame(() => {
+          applyZoom(opts.zoom, elev, scale, [], masks)
+          applySkewTransform()
+          if (skewCorners) renderSkewHandles([...skewCorners], elev)
+          else renderSkewHandles([], elev)
+        })
         return
       }
 
@@ -692,8 +862,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         imagePath: path, imageUrl: url, img,
         origW: img.naturalWidth, origH: img.naturalHeight, dispW: 0, dispH: 0,
       }
-      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW }))
+      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false }))
       renderForegroundSVG([], null, null)
+      renderSkewHandles([], null)
 
       // Persist to DB
       supabase.from('elevation_options').update({
@@ -704,7 +875,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       requestAnimationFrame(() => {
         const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
         if (elevImg) elevImg.src = url
-        setZoomFit({ elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
+        setZoomFit({ elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false })
       })
 
       onElevationUploadedRef.current?.({ imagePath: path, imageUrl: url, origW: img.naturalWidth, origH: img.naturalHeight, zoom: 1 })
@@ -1022,6 +1193,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         priceIncludes: meta.priceIncludes,
         frameType: null,
         frameWidthMm: null,
+        brightness: 1,
         img,
       }
 
@@ -1085,6 +1257,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             visible: art.visible,
             price: art.price,
             price_includes: art.priceIncludes,
+            brightness: art.brightness ?? 1,
           }).eq('id', art.id)
         )
       )
@@ -1147,6 +1320,26 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       const supabase = createClient()
       supabase.from('artworks').update({ frame_type: frameType, frame_width_mm: frameWidthMm }).eq('id', artId).then(() => {})
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  function updateArtworkBrightness(artId: string, brightness: number) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, brightness } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      const supabase = createClient()
+      supabase.from('artworks').update({ brightness }).eq('id', artId).then(() => {})
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  function updateAllArtworksBrightness(brightness: number) {
+    setState(s => {
+      const newArts = s.artworks.map(a => ({ ...a, brightness }))
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      const supabase = createClient()
+      Promise.all(newArts.map(art => supabase.from('artworks').update({ brightness }).eq('id', art.id)))
       return { ...s, artworks: newArts }
     })
   }
@@ -1219,6 +1412,28 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // ─── BOX SELECT (rubber-band drag on canvas background) ──────────
   function onWrapMouseDown(e: React.MouseEvent) {
     const s = stateRef.current
+
+    // Skew corner placement mode
+    if (s.skewDefMode) {
+      e.preventDefault()
+      const wrap = elevWrapRef.current
+      if (!wrap || !s.elev) return
+      const rect = wrap.getBoundingClientRect()
+      const xF = (e.clientX - rect.left) / s.elev.dispW
+      const yF = (e.clientY - rect.top) / s.elev.dispH
+      const partials = [...skewDefCornersRef.current, [xF, yF] as [number, number]]
+      skewDefCornersRef.current = partials
+      renderSkewHandles(partials, s.elev)
+      if (partials.length === 4) {
+        const quad = partials as SkewCorners
+        skewDefCornersRef.current = []
+        setState(st => ({ ...st, skewCorners: quad, skewActive: true, skewDefMode: false }))
+        requestAnimationFrame(() => applySkewTransform())
+        persistSkew(quad, true)
+      }
+      return
+    }
+
     if (s.calib.active || s.maskDraw.active) return
     const target = e.target as HTMLElement
     // Only act on clicks directly on the elevation image or the wrap background — not on artwork overlays
@@ -1322,6 +1537,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkPrice,
     updateArtworkName,
     updateArtworkFrame,
+    updateArtworkBrightness,
+    updateAllArtworksBrightness,
     selectArtwork,
     renderArtworksDOM,
     exportPng,
@@ -1339,5 +1556,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     saveStatus,
     onWrapMouseDown,
     boxSelectedRef,
+    startSkewDef,
+    cancelSkewDef,
+    setSkewActive,
+    clearSkew,
   }
 }

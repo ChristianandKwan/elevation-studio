@@ -16,6 +16,7 @@ interface ClientArtwork {
   visible: boolean
   price: number
   priceIncludes: string
+  brightness?: number | null
 }
 
 interface ClientOption {
@@ -31,6 +32,15 @@ interface ClientOption {
   foreground_masks?: unknown
   artworks: ClientArtwork[]
   clientNotes: string
+  skew_tl_x?: number | null
+  skew_tl_y?: number | null
+  skew_tr_x?: number | null
+  skew_tr_y?: number | null
+  skew_br_x?: number | null
+  skew_br_y?: number | null
+  skew_bl_x?: number | null
+  skew_bl_y?: number | null
+  skew_active?: boolean
 }
 
 interface ClientElevationData {
@@ -183,6 +193,18 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     onStatus(`Option ${opt} selected`)
   }
 
+  async function handleClearPick(elevId: string) {
+    const supabase = createClient()
+    await supabase.from('elevations').update({ client_picked_option: null }).eq('id', elevId)
+    setPickedOptions(prev => ({ ...prev, [elevId]: null }))
+    await supabase.from('activity_logs').insert({
+      project_id: project.id,
+      type: 'pick_cleared',
+      text: `Client cleared option selection for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
+    })
+    onStatus('Selection cleared')
+  }
+
   async function handleApprove() {
     if (!optData) return
     const supabase = createClient()
@@ -268,7 +290,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
                     onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
                   >
                     <span className={tagClass} style={{ marginRight: 5 }}>{opt.option}</span>
-                    {elev.name}
+                    {elev.name}{picked === opt.option ? ' ✓' : ''}
                   </button>
                 ) : (
                   <button
@@ -296,6 +318,11 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           approvalActivity={approvalActivity}
           isPicked={!activeElev ? true : !needsPick(activeElev) || pickedOptions[activeElevId] != null}
           onPick={(opt) => handlePick(activeElevId, opt)}
+          onClearPick={
+            activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null && !optData?.approved
+              ? () => handleClearPick(activeElevId)
+              : undefined
+          }
           onArtworkMove={onArtworkMove}
           onToggleVisibility={toggleVisibility}
           onNotesChange={onNotesChange}

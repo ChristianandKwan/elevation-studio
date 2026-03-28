@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react'
 import { formatPrice, priceLabel } from '@/lib/utils'
+import { quadToCSSMatrix3d } from '@/lib/homography'
 
 interface ClientArtwork {
   id: string
@@ -16,6 +17,7 @@ interface ClientArtwork {
   priceIncludes: string
   frameType?: string | null
   frameWidthMm?: number | null
+  brightness?: number | null
 }
 
 interface ClientOption {
@@ -31,6 +33,15 @@ interface ClientOption {
   foreground_masks?: unknown
   artworks: ClientArtwork[]
   clientNotes: string
+  skew_tl_x?: number | null
+  skew_tl_y?: number | null
+  skew_tr_x?: number | null
+  skew_tr_y?: number | null
+  skew_br_x?: number | null
+  skew_br_y?: number | null
+  skew_bl_x?: number | null
+  skew_bl_y?: number | null
+  skew_active?: boolean
 }
 
 interface Props {
@@ -43,6 +54,8 @@ interface Props {
   /** Whether the client has already picked an option for this elevation */
   isPicked: boolean
   onPick: (opt: string) => void
+  /** When defined, a "Change selection" button is shown in Stage 2 */
+  onClearPick?: () => void
   onArtworkMove: (artId: string, xF: number, yF: number) => void
   onToggleVisibility: (artId: string) => void
   onNotesChange: (notes: string) => void
@@ -51,7 +64,7 @@ interface Props {
 
 export default function ClientElevation({
   optData, elevationName, activeOpt, rerenderKey,
-  approvalActivity, isPicked, onPick,
+  approvalActivity, isPicked, onPick, onClearPick,
   onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
   const [showApproveWarning, setShowApproveWarning] = useState(false)
@@ -212,6 +225,15 @@ export default function ClientElevation({
               <button className="btn btn-green btn-sm btn-full" onClick={handleApproveClick}>
                 ✓ Approve Option {activeOpt}
               </button>
+              {onClearPick && (
+                <button
+                  className="btn btn-ghost btn-sm btn-full"
+                  style={{ marginTop: 6 }}
+                  onClick={onClearPick}
+                >
+                  Change selection
+                </button>
+              )}
             </>
           )}
 
@@ -302,11 +324,23 @@ function ClientCanvas({
       const maxW = Math.min((canvasRef.current?.clientWidth ?? 900) - 64, img.naturalWidth)
       const s = maxW / img.naturalWidth
 
-      const wrap = elevWrapRef.current
+      const wrap = elevWrapRef.current!
       if (!wrap) return
 
       // Clear existing overlays
       wrap.querySelectorAll('.client-aw-overlay').forEach(e => e.remove())
+
+      // Ensure artwork layer div exists (inserted before fg SVG so foreground mask renders above artworks)
+      let artLayer = wrap.querySelector('#client-artwork-layer') as HTMLDivElement | null
+      if (!artLayer) {
+        artLayer = document.createElement('div')
+        artLayer.id = 'client-artwork-layer'
+        artLayer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform-origin:0 0'
+        const fgSvg = wrap.querySelector('#client-fg-svg')
+        if (fgSvg) wrap.insertBefore(artLayer, fgSvg)
+        else wrap.appendChild(artLayer)
+      }
+      artLayer.innerHTML = ''
 
       const elevImg = wrap.querySelector('.client-elev-img') as HTMLImageElement | null
       if (elevImg) {
@@ -343,6 +377,9 @@ function ClientCanvas({
         const ai = document.createElement('img')
         ai.src = art.imageUrl!
         ai.draggable = false
+        if (art.brightness != null && art.brightness !== 1) {
+          ai.style.filter = `brightness(${art.brightness})`
+        }
         aw.appendChild(ai)
 
         const tag = document.createElement('div')
@@ -353,6 +390,31 @@ function ClientCanvas({
         if (!locked) {
           aw.style.cursor = 'grab'
           const sx = { val: 0 }, sy = { val: 0 }, sl = { val: 0 }, st = { val: 0 }
+          const SNAP_PX = 8
+
+          function renderSnapGuides(xLines: number[], yLines: number[], elevW: number, elevH: number) {
+            const svg = wrap.querySelector('#client-snap-svg') as SVGSVGElement | null
+            if (!svg) return
+            svg.innerHTML = ''
+            if (xLines.length === 0 && yLines.length === 0) { svg.style.display = 'none'; return }
+            svg.setAttribute('width', String(elevW))
+            svg.setAttribute('height', String(elevH))
+            svg.style.display = ''
+            xLines.forEach(x => {
+              const l = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+              l.setAttribute('x1', String(x)); l.setAttribute('y1', '0')
+              l.setAttribute('x2', String(x)); l.setAttribute('y2', String(elevH))
+              l.setAttribute('stroke', 'var(--accent)'); l.setAttribute('stroke-width', '1')
+              l.setAttribute('stroke-dasharray', '4 3'); svg.appendChild(l)
+            })
+            yLines.forEach(y => {
+              const l = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+              l.setAttribute('x1', '0'); l.setAttribute('y1', String(y))
+              l.setAttribute('x2', String(elevW)); l.setAttribute('y2', String(y))
+              l.setAttribute('stroke', 'var(--accent)'); l.setAttribute('stroke-width', '1')
+              l.setAttribute('stroke-dasharray', '4 3'); svg.appendChild(l)
+            })
+          }
 
           aw.addEventListener('mousedown', e => {
             e.preventDefault(); e.stopPropagation()
@@ -362,15 +424,59 @@ function ClientCanvas({
             const wW = parseFloat(aw.style.width), wH = parseFloat(aw.style.height)
 
             function mv(ev: MouseEvent) {
-              const nl = Math.max(0, Math.min(eW - wW, sl.val + (ev.clientX - sx.val)))
-              const nt = Math.max(0, Math.min(eH - wH, st.val + (ev.clientY - sy.val)))
+              let rawLeft = Math.max(0, Math.min(eW - wW, sl.val + (ev.clientX - sx.val)))
+              let rawTop = Math.max(0, Math.min(eH - wH, st.val + (ev.clientY - sy.val)))
+              const snapXLines: number[] = [], snapYLines: number[] = []
+
+              wrap.querySelectorAll('.client-aw-overlay').forEach(other => {
+                if ((other as HTMLElement).dataset.id === art.id) return
+                const oLeft = parseFloat((other as HTMLElement).style.left)
+                const oTop = parseFloat((other as HTMLElement).style.top)
+                const oW = parseFloat((other as HTMLElement).style.width)
+                const oH = parseFloat((other as HTMLElement).style.height)
+                if (isNaN(oLeft) || isNaN(oW)) return
+                const rawRight = rawLeft + wW, rawCenterX = rawLeft + wW / 2
+                const rawBottom = rawTop + wH, rawCenterY = rawTop + wH / 2
+                const oRight = oLeft + oW, oCenterX = oLeft + oW / 2
+                const oBottom = oTop + oH, oCenterY = oTop + oH / 2
+                const xCands: Array<[number, number]> = [
+                  [rawLeft, oLeft], [rawLeft, oRight], [rawLeft, oCenterX],
+                  [rawRight, oLeft], [rawRight, oRight], [rawRight, oCenterX],
+                  [rawCenterX, oLeft], [rawCenterX, oRight], [rawCenterX, oCenterX],
+                ]
+                for (const [myEdge, otherEdge] of xCands) {
+                  if (Math.abs(myEdge - otherEdge) < SNAP_PX) {
+                    rawLeft = otherEdge - (myEdge - rawLeft)
+                    snapXLines.push(otherEdge)
+                    break
+                  }
+                }
+                const yCands: Array<[number, number]> = [
+                  [rawTop, oTop], [rawTop, oBottom], [rawTop, oCenterY],
+                  [rawBottom, oTop], [rawBottom, oBottom], [rawBottom, oCenterY],
+                  [rawCenterY, oTop], [rawCenterY, oBottom], [rawCenterY, oCenterY],
+                ]
+                for (const [myEdge, otherEdge] of yCands) {
+                  if (Math.abs(myEdge - otherEdge) < SNAP_PX) {
+                    rawTop = otherEdge - (myEdge - rawTop)
+                    snapYLines.push(otherEdge)
+                    break
+                  }
+                }
+              })
+
+              const nl = Math.max(0, Math.min(eW - wW, rawLeft))
+              const nt = Math.max(0, Math.min(eH - wH, rawTop))
               aw.style.left = nl + 'px'
               aw.style.top = nt + 'px'
               onArtworkMove(art.id, nl / eW, nt / eH)
+              renderSnapGuides([...new Set(snapXLines)], [...new Set(snapYLines)], eW, eH)
             }
             function up() {
               document.removeEventListener('mousemove', mv)
               document.removeEventListener('mouseup', up)
+              const svg = wrap.querySelector('#client-snap-svg') as SVGSVGElement | null
+              if (svg) { svg.innerHTML = ''; svg.style.display = 'none' }
             }
             document.addEventListener('mousemove', mv)
             document.addEventListener('mouseup', up)
@@ -402,8 +508,26 @@ function ClientCanvas({
           }, { passive: true })
         }
 
-        wrap.appendChild(aw)
+        artLayer!.appendChild(aw)
       })
+
+      // Apply perspective transform to artwork layer if skew is defined and active
+      const { skew_tl_x: tlx, skew_tl_y: tly, skew_tr_x: trx, skew_tr_y: try_,
+              skew_br_x: brx, skew_br_y: bry, skew_bl_x: blx, skew_bl_y: bly,
+              skew_active } = optData
+      const dispW = img.naturalWidth * s, dispH = img.naturalHeight * s
+      if (skew_active && tlx != null && tly != null && trx != null && try_ != null &&
+          brx != null && bry != null && blx != null && bly != null) {
+        const matrix = quadToCSSMatrix3d(dispW, dispH, [
+          [tlx * dispW, tly * dispH],
+          [trx * dispW, try_ * dispH],
+          [brx * dispW, bry * dispH],
+          [blx * dispW, bly * dispH],
+        ])
+        artLayer!.style.transform = matrix
+      } else {
+        artLayer!.style.transform = ''
+      }
 
       // Foreground composite SVG
       const masks = Array.isArray(optData.foreground_masks)
@@ -446,6 +570,10 @@ function ClientCanvas({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="client-elev-img" src={optData.imageUrl!} alt="elevation" draggable={false} />
+        <svg
+          id="client-snap-svg"
+          style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', display: 'none', overflow: 'visible' }}
+        />
         <svg id="client-fg-svg" className="fg-svg" style={{ display: 'none' }}>
           <defs><clipPath id="client-fg-clip" /></defs>
           {/* eslint-disable-next-line @next/next/no-img-element */}
