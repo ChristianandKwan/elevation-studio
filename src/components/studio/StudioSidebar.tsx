@@ -504,7 +504,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelet
           onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
         />
         {/* Frame controls */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, opacity: hasScale ? 1 : 0.45 }}>
+        <div style={{ width: '100%', display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, opacity: hasScale ? 1 : 0.45 }}>
           <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>Frame</label>
           <select
             className="dim-input"
