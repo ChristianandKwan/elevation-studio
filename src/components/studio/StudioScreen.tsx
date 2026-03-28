@@ -60,7 +60,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
   const optionId = activeOptData?.id ?? ''
 
-  const studio = useStudio({ projectId: project.id, optionId, onStatus })
+  const studio = useStudio({ projectId: project.id, optionId, onStatus, projectName: project.name, elevationName: activeElev?.name ?? '', optionKey: activeOption })
 
   // When we call loadOption directly in handleSwitch we skip the effect for that one render
   const skipNextLoadRef = useRef(false)

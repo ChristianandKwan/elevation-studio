@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ClientElevation from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
@@ -82,6 +82,11 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
 
   // Debounce timer for notes auto-save
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clear debounce timer on unmount to prevent state updates on an unmounted component
+  useEffect(() => {
+    return () => { if (notesTimer.current) clearTimeout(notesTimer.current) }
+  }, [])
 
   function onStatus(msg: string) {
     setToast(msg)

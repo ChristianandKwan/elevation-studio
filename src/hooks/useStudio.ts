@@ -36,9 +36,12 @@ interface UseStudioOptions {
   projectId: string
   optionId: string
   onStatus: (msg: string) => void
+  projectName?: string
+  elevationName?: string
+  optionKey?: string
 }
 
-export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '' }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -54,6 +57,14 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   // Keep a ref in sync for reading state in non-React event handlers (e.g. mousemove)
   const stateRef = useRef(state)
   stateRef.current = state
+
+  // Keep export metadata in refs so exportPng always uses current values
+  const projectNameRef = useRef(projectName)
+  projectNameRef.current = projectName
+  const elevationNameRef = useRef(elevationName)
+  elevationNameRef.current = elevationName
+  const optionKeyRef = useRef(optionKey)
+  optionKeyRef.current = optionKey
 
   // Refs for imperative canvas DOM (mirrors prototype)
   const elevWrapRef = useRef<HTMLDivElement>(null)
@@ -1078,7 +1089,10 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
     const a = document.createElement('a')
     a.href = c.toDataURL('image/png')
-    a.download = 'elevation-artwork.png'
+    const sanitise = (s: string) => s.replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+    const filename = [projectNameRef.current, elevationNameRef.current, `Option-${optionKeyRef.current}`]
+      .map(sanitise).filter(Boolean).join('_') || 'elevation-artwork'
+    a.download = `${filename}.png`
     a.click()
     onStatus('PNG exported')
   }
