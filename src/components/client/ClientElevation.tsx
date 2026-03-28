@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { formatPrice, priceLabel } from '@/lib/utils'
 
 interface ClientArtwork {
@@ -38,25 +38,44 @@ interface Props {
   projectId: string
   rerenderKey: number
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
+  /** Whether the client has already picked an option for this elevation */
+  isPicked: boolean
+  onPick: (opt: 'A' | 'B') => void
   onArtworkMove: (artId: string, xF: number, yF: number) => void
   onToggleVisibility: (artId: string) => void
   onNotesChange: (notes: string) => void
   onApprove: () => void
-  onUnapprove: () => void
 }
 
 export default function ClientElevation({
   optData, elevationName, activeOpt, rerenderKey,
-  approvalActivity, onArtworkMove, onToggleVisibility, onNotesChange, onApprove, onUnapprove,
+  approvalActivity, isPicked, onPick,
+  onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
+  const [showApproveWarning, setShowApproveWarning] = useState(false)
+
   const visibleArts = optData.artworks.filter(a => a.visible)
   const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
+
+  function handleApproveClick() {
+    setShowApproveWarning(true)
+  }
+
+  function handleApproveConfirm() {
+    setShowApproveWarning(false)
+    onApprove()
+  }
 
   return (
     <div className="client-main">
       {/* Canvas */}
       <div className="client-canvas-area">
-        <ClientCanvas optData={optData} rerenderKey={rerenderKey} onArtworkMove={onArtworkMove} />
+        <ClientCanvas
+          optData={optData}
+          rerenderKey={rerenderKey}
+          locked={optData.approved || !isPicked}
+          onArtworkMove={onArtworkMove}
+        />
       </div>
 
       {/* Sidebar */}
@@ -68,73 +87,117 @@ export default function ClientElevation({
             <div className="client-sidebar-elev-name">{elevationName}</div>
           </div>
 
-          {/* Artwork list with visibility toggles */}
-          <div className="client-sidebar-section">
-            <div className="client-sidebar-kicker">Artworks</div>
-            {optData.artworks.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--mid)' }}>No artworks placed</div>
-            ) : (
-              <div>
-                {optData.artworks.map(art => (
-                  <div key={art.id} className="client-art-row">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {art.imageUrl && <img className="client-art-thumb" src={art.imageUrl} alt={art.name} />}
-                    <div className="client-art-info">
-                      <div className="client-art-name">{art.name}</div>
-                      <div className="client-art-dims">{art.wCm} × {art.hCm} cm</div>
+          {/* Artwork list — only shown after picking */}
+          {isPicked && (
+            <div className="client-sidebar-section">
+              <div className="client-sidebar-kicker">Artworks</div>
+              {optData.artworks.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--mid)' }}>No artworks placed</div>
+              ) : (
+                <div>
+                  {optData.artworks.map(art => (
+                    <div key={art.id} className="client-art-row">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {art.imageUrl && <img className="client-art-thumb" src={art.imageUrl} alt={art.name} />}
+                      <div className="client-art-info">
+                        <div className="client-art-name">{art.name}</div>
+                        <div className="client-art-dims">{art.wCm} × {art.hCm} cm</div>
+                      </div>
+                      <button
+                        className={`client-art-eye${art.visible ? '' : ' hidden-art'}`}
+                        title={art.visible ? 'Hide artwork' : 'Show artwork'}
+                        onClick={() => onToggleVisibility(art.id)}
+                        disabled={optData.approved}
+                      >
+                        {art.visible ? <EyeIcon /> : <EyeOffIcon />}
+                      </button>
                     </div>
-                    <button
-                      className={`client-art-eye${art.visible ? '' : ' hidden-art'}`}
-                      title={art.visible ? 'Hide artwork' : 'Show artwork'}
-                      onClick={() => onToggleVisibility(art.id)}
-                    >
-                      {art.visible ? <EyeIcon /> : <EyeOffIcon />}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Notes */}
-          <div className="client-sidebar-section">
-            <div className="client-sidebar-kicker">Notes for Consultant</div>
-            <textarea
-              className="client-notes-textarea"
-              value={optData.clientNotes ?? ''}
-              onChange={e => onNotesChange(e.target.value)}
-              placeholder="Add any notes, questions or requests here…"
-              disabled={optData.approved}
-            />
-            {optData.approved && (
-              <div className="client-notes-hint">Unapprove to edit notes</div>
-            )}
-          </div>
-        </div>
-
-        {/* Approval — pinned to bottom */}
-        <div className="client-approval-section">
-          {/* Status */}
-          {optData.approved ? (
-            <div className="approval-status-bar approved" style={{ margin: '0 0 12px' }}>
-              <div className="approval-status-icon">✓</div>
-              <div>
-                <div className="approval-status-text" style={{ color: 'var(--green)' }}>Option {activeOpt} approved</div>
-                <div className="approval-status-sub">Approved {optData.approved_at}</div>
-              </div>
-            </div>
-          ) : (
-            <div className="approval-status-bar pending" style={{ margin: '0 0 12px' }}>
-              <div className="approval-status-icon">◌</div>
-              <div>
-                <div className="approval-status-text">Awaiting approval</div>
-                <div className="approval-status-sub">Review placement, then approve</div>
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Cost total */}
-          {totalCost > 0 && (
+          {/* Notes — only shown after picking */}
+          {isPicked && (
+            <div className="client-sidebar-section">
+              <div className="client-sidebar-kicker">Notes for Christian &amp; Kwan</div>
+              <textarea
+                className="client-notes-textarea"
+                value={optData.clientNotes ?? ''}
+                onChange={e => onNotesChange(e.target.value)}
+                placeholder="Add any notes, questions or requests here…"
+                disabled={optData.approved}
+              />
+              {optData.approved && (
+                <div className="client-notes-hint">This elevation is approved and locked</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Approval section — pinned to bottom */}
+        <div className="client-approval-section">
+          {optData.approved ? (
+            /* ── Stage 3: Approved ── */
+            <div className="approval-status-bar approved" style={{ margin: '0 0 12px' }}>
+              <div className="approval-status-icon">✓</div>
+              <div>
+                <div className="approval-status-text" style={{ color: 'var(--green)' }}>
+                  Option {activeOpt} approved
+                </div>
+                <div className="approval-status-sub">Approved {optData.approved_at}</div>
+              </div>
+            </div>
+          ) : !isPicked ? (
+            /* ── Stage 1: Pick ── */
+            <div className="client-pick-panel">
+              <div className="client-pick-title">Choose your option</div>
+              <div className="client-pick-hint">
+                Compare both options using the tabs above, then lock in your choice.
+              </div>
+              <button
+                className="btn btn-primary btn-sm btn-full"
+                onClick={() => onPick(activeOpt)}
+              >
+                Pick Option {activeOpt}
+              </button>
+            </div>
+          ) : (
+            /* ── Stage 2: Picked, awaiting approval ── */
+            <>
+              <div className="approval-status-bar pending" style={{ margin: '0 0 12px' }}>
+                <div className="approval-status-icon">◌</div>
+                <div>
+                  <div className="approval-status-text">Option {activeOpt} selected</div>
+                  <div className="approval-status-sub">Adjust artworks, then approve when ready</div>
+                </div>
+              </div>
+
+              {/* Cost total */}
+              {totalCost > 0 && (
+                <div className="approval-total-section" style={{ marginBottom: 12 }}>
+                  {visibleArts.filter(a => a.price).map(a => (
+                    <div key={a.id} className="approval-total-row">
+                      <span>{a.name}</span>
+                      <span className="amount">{formatPrice(a.price)}</span>
+                    </div>
+                  ))}
+                  <div className="approval-total-row total">
+                    <span>Total</span>
+                    <span className="amount">{formatPrice(totalCost)}</span>
+                  </div>
+                </div>
+              )}
+
+              <button className="btn btn-green btn-sm btn-full" onClick={handleApproveClick}>
+                ✓ Approve Option {activeOpt}
+              </button>
+            </>
+          )}
+
+          {/* Cost total when approved */}
+          {optData.approved && totalCost > 0 && (
             <div className="approval-total-section" style={{ marginBottom: 12 }}>
               {visibleArts.filter(a => a.price).map(a => (
                 <div key={a.id} className="approval-total-row">
@@ -147,15 +210,6 @@ export default function ClientElevation({
                 <span className="amount">{formatPrice(totalCost)}</span>
               </div>
             </div>
-          )}
-
-          {/* Approval button */}
-          {optData.approved ? (
-            <button className="btn btn-ghost btn-sm btn-full" onClick={onUnapprove}>Unapprove</button>
-          ) : (
-            <button className="btn btn-green btn-sm btn-full" onClick={onApprove}>
-              ✓ Approve Option {activeOpt}
-            </button>
           )}
 
           {/* Approval history */}
@@ -178,6 +232,28 @@ export default function ClientElevation({
           )}
         </div>
       </div>
+
+      {/* Approve warning popup */}
+      {showApproveWarning && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setShowApproveWarning(false) }}>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-title">Approve this elevation?</div>
+            <div className="modal-sub" style={{ lineHeight: 1.6, marginBottom: 20 }}>
+              Approving this elevation will lock in your choice of artworks and placement.
+              You&apos;ll still be able to view the elevation but it will be submitted to
+              Christian &amp; Kwan for project signoff. Are you happy to proceed?
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-sm" onClick={() => setShowApproveWarning(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-sm btn-green" onClick={handleApproveConfirm}>
+                Yes, approve
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -186,10 +262,12 @@ export default function ClientElevation({
 function ClientCanvas({
   optData,
   rerenderKey,
+  locked,
   onArtworkMove,
 }: {
   optData: ClientOption
   rerenderKey: number
+  locked: boolean
   onArtworkMove: (artId: string, xF: number, yF: number) => void
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -223,7 +301,7 @@ function ClientCanvas({
       optData.artworks.forEach(art => {
         if (!art.visible || !art.imageUrl) return
         const aw = document.createElement('div')
-        aw.className = 'client-aw-overlay' + (optData.approved ? ' locked' : '')
+        aw.className = 'client-aw-overlay' + (locked ? ' locked' : '')
         aw.dataset.id = art.id
         aw.style.left = art.xF * img.naturalWidth * s + 'px'
         aw.style.top = art.yF * img.naturalHeight * s + 'px'
@@ -240,7 +318,7 @@ function ClientCanvas({
         tag.textContent = art.name + (art.price ? ' · ' + formatPrice(art.price) : '')
         aw.appendChild(tag)
 
-        if (!optData.approved) {
+        if (!locked) {
           aw.style.cursor = 'grab'
           const sx = { val: 0 }, sy = { val: 0 }, sl = { val: 0 }, st = { val: 0 }
 
@@ -300,7 +378,7 @@ function ClientCanvas({
       }
     }
     img.src = optData.imageUrl
-  }, [optData.id, optData.imageUrl, optData.approved, rerenderKey]) // eslint-disable-line
+  }, [optData.id, optData.imageUrl, locked, rerenderKey]) // eslint-disable-line
 
   return (
     <div className="client-canvas-inner" ref={canvasRef}>

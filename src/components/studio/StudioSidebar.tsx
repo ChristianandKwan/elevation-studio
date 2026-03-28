@@ -12,9 +12,15 @@ interface Props {
   projectId: string
   onStatus: (msg: string) => void
   clientNotes?: string
+  approvalStatus?: {
+    pickedOption: string | null
+    approved: boolean
+    approvedAt: string | null
+  }
+  onUnapprove?: () => void
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes, approvalStatus, onUnapprove }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -218,6 +224,42 @@ export default function StudioSidebar({ studio, onStatus, clientNotes }: Props) 
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Client approval status */}
+      {approvalStatus && (approvalStatus.pickedOption || approvalStatus.approved) && (
+        <div className="sidebar-section" style={{ padding: '10px 14px', marginTop: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--mid)', marginBottom: 8 }}>
+            Client Status
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {approvalStatus.pickedOption && (
+              <div className="studio-approval-chip picked">
+                ✓ Client picked Option {approvalStatus.pickedOption}
+              </div>
+            )}
+            {approvalStatus.approved ? (
+              <>
+                <div className="studio-approval-chip approved">
+                  ✓ Approved {approvalStatus.approvedAt ? `· ${approvalStatus.approvedAt}` : ''}
+                </div>
+                {onUnapprove && (
+                  <button
+                    className="btn btn-sm btn-ghost btn-full"
+                    style={{ marginTop: 4 }}
+                    onClick={onUnapprove}
+                  >
+                    Unapprove (reopen for client)
+                  </button>
+                )}
+              </>
+            ) : approvalStatus.pickedOption ? (
+              <div className="studio-approval-chip pending">
+                ◌ Awaiting client approval
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
 
