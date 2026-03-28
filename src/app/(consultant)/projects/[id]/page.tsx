@@ -104,11 +104,20 @@ export default async function ProjectPage({ params }: Props) {
     .limit(1)
     .single()
 
+  // Fetch last 10 activity logs for the project
+  const { data: activityLogs } = await supabase
+    .from('activity_logs')
+    .select('id, type, text, created_at')
+    .eq('project_id', id)
+    .order('created_at', { ascending: false })
+    .limit(10)
+
   return (
     <StudioScreen
       project={{ ...project, consultantName: profile?.name ?? 'Consultant' }}
       elevations={elevationsWithUrls}
       existingToken={tokenRow?.token ?? null}
+      activityLogs={(activityLogs ?? []).map(a => ({ id: a.id, type: a.type, text: a.text, createdAt: a.created_at }))}
     />
   )
 }

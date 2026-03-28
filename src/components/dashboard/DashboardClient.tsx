@@ -59,6 +59,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
   const [view, setView] = useState<'active' | 'archived'>('active')
   const [archivedProjects, setArchivedProjects] = useState<{ id: string; name: string; client_name: string; status: string }[]>([])
   const [loadingArchived, setLoadingArchived] = useState(false)
+  const [archivedLoaded, setArchivedLoaded] = useState(false)
 
   // Close kebab menu when clicking anywhere outside it
   useEffect(() => {
@@ -147,6 +148,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
       .order('created_at', { ascending: false })
     setArchivedProjects(data ?? [])
     setLoadingArchived(false)
+    setArchivedLoaded(true)
   }
 
   async function unarchiveProject(id: string) {
@@ -241,7 +243,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                 className={`dash-view-tab${view === 'archived' ? ' active' : ''}`}
                 onClick={() => {
                   setView('archived')
-                  loadArchivedProjects()
+                  if (!archivedLoaded) loadArchivedProjects()
                 }}
               >Archived</button>
             </div>

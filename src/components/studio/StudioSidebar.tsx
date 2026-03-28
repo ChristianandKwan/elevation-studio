@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
+import type { ActivityLog } from '@/types'
 import { priceLabel, formatPrice } from '@/lib/utils'
 
 type StudioHook = ReturnType<typeof useStudio>
@@ -12,11 +13,13 @@ interface Props {
   projectId: string
   onStatus: (msg: string) => void
   clientNotes?: string
+  activityLogs?: ActivityLog[]
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes, activityLogs = [] }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const hasElev = !!state.elev
   const hasScale = !!state.scale
@@ -250,6 +253,36 @@ export default function StudioSidebar({ studio, onStatus, clientNotes }: Props) 
           {hasMixedPricing && (
             <div style={{ marginTop: 8, padding: '7px 9px', background: '#FFF8F0', border: '1px solid rgba(139,111,71,.3)', fontSize: 10.5, color: 'var(--accent)', lineHeight: 1.5 }}>
               ⚠ Mixed pricing — some artworks include framing &amp; installation, others don't.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* History (collapsible) */}
+      {activityLogs.length > 0 && (
+        <div className="sidebar-section">
+          <button
+            className="s-title"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            onClick={() => setHistoryOpen(o => !o)}
+          >
+            <span>History</span>
+            <span style={{ fontSize: 10, color: 'var(--mid)' }}>{historyOpen ? '▲' : '▼'}</span>
+          </button>
+          {historyOpen && (
+            <div className="activity-log" style={{ marginTop: 8, borderTop: 'none', paddingTop: 0 }}>
+              {activityLogs.map(a => (
+                <div key={a.id} className="activity-entry">
+                  <div className={`activity-dot${a.type === 'approved' ? ' green' : ''}`} />
+                  <div className="activity-text">{a.text}</div>
+                  <div className="activity-time">
+                    {new Date(a.createdAt).toLocaleString('en-GB', {
+                      day: 'numeric', month: 'short',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

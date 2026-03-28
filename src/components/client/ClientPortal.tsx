@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ClientElevation from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
@@ -83,6 +83,11 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   // Debounce timer for notes auto-save
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Clear debounce timer on unmount to prevent state updates on an unmounted component
+  useEffect(() => {
+    return () => { if (notesTimer.current) clearTimeout(notesTimer.current) }
+  }, [])
+
   function onStatus(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
@@ -148,16 +153,26 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   async function handleApprove() {
     if (!optData) return
     const supabase = createClient()
-    const now = new Date().toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
+    const now = new Date().toISOString()
+
     await Promise.all(
       optData.artworks.map(art =>
         supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
       )
     )
     await supabase.from('elevation_options').update({ approved: true, approved_at: now }).eq('id', optData.id)
-    await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
+
+    // Only mark project approved when ALL elevation options are approved
+    const allOptionIds = elevations.flatMap(e => e.elevation_options.map(o => o.id))
+    const { data: allOptions } = await supabase
+      .from('elevation_options')
+      .select('id, approved')
+      .in('id', allOptionIds)
+    const allApproved = (allOptions ?? []).every(o => o.id === optData.id ? true : o.approved)
+    if (allApproved) {
+      await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
+    }
+
     await supabase.from('activity_logs').insert({
       project_id: project.id,
       type: 'approved',
@@ -171,25 +186,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       },
     }))
     onStatus(`Option ${activeOpt} approved!`)
-  }
-
-  async function handleUnapprove() {
-    if (!optData) return
-    const supabase = createClient()
-    await supabase.from('elevation_options').update({ approved: false, approved_at: null }).eq('id', optData.id)
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'unapprove',
-      text: `Client unapproved Option ${activeOpt} of ${activeElev?.name ?? ''}`,
-    })
-    setOptionsState(prev => ({
-      ...prev,
-      [activeElevId]: {
-        ...prev[activeElevId],
-        [activeOpt]: { ...prev[activeElevId][activeOpt], approved: false, approved_at: null },
-      },
-    }))
-    onStatus('Approval removed')
   }
 
   return (
@@ -245,7 +241,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           onToggleVisibility={toggleVisibility}
           onNotesChange={onNotesChange}
           onApprove={handleApprove}
-          onUnapprove={handleUnapprove}
         />
       ) : (
         <div className="client-empty-state">No elevation uploaded for this option</div>

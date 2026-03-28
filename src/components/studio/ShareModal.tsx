@@ -48,8 +48,7 @@ export default function ShareModal({ projectName, onGetToken, onClose, onStatus 
           <strong style={{ color: 'var(--charcoal)' }}>What clients can do:</strong><br />
           ✓ View all elevations &amp; options<br />
           ✓ See artwork details and pricing<br />
-          ✓ Approve (locks artwork positions)<br />
-          ✓ Unapprove if they change their mind
+          ✓ Approve (locks artwork positions)
         </div>
 
         <div className="modal-footer">

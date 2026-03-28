@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
 
@@ -36,9 +36,12 @@ interface UseStudioOptions {
   projectId: string
   optionId: string
   onStatus: (msg: string) => void
+  projectName?: string
+  elevationName?: string
+  optionKey?: string
 }
 
-export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '' }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -54,6 +57,14 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   // Keep a ref in sync for reading state in non-React event handlers (e.g. mousemove)
   const stateRef = useRef(state)
   stateRef.current = state
+
+  // Keep export metadata in refs so exportPng always uses current values
+  const projectNameRef = useRef(projectName)
+  projectNameRef.current = projectName
+  const elevationNameRef = useRef(elevationName)
+  elevationNameRef.current = elevationName
+  const optionKeyRef = useRef(optionKey)
+  optionKeyRef.current = optionKey
 
   // Refs for imperative canvas DOM (mirrors prototype)
   const elevWrapRef = useRef<HTMLDivElement>(null)
@@ -74,6 +85,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
   const [showShareModal, setShowShareModal] = useState(false)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const zoomSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // ─── HELPERS ──────────────────────────────────────────────────────
@@ -266,6 +278,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     const newElev = { ...currentState.elev }
     const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
     setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
+    persistZoom(newZoom)
     requestAnimationFrame(() => {
       if (vp) {
         vp.scrollLeft = vp.scrollWidth * xf - vp.clientWidth / 2
@@ -288,6 +301,7 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     const newElev = { ...currentState.elev }
     const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
     setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
+    persistZoom(newZoom)
     requestAnimationFrame(() => {
       const vp = vpRef.current
       if (vp) {
@@ -998,12 +1012,26 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
     saveTimer.current = setTimeout(() => persistOption(currentState), 1500)
   }
 
+  function persistZoom(zoom: number) {
+    if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
+    zoomSaveTimer.current = setTimeout(async () => {
+      const supabase = createClient()
+      await supabase.from('elevation_options').update({ zoom }).eq('id', optionId)
+    }, 2000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
+    }
+  }, [])
+
   async function persistOption(s: StudioState) {
     const supabase = createClient()
     try {
-      // Update option zoom and foreground masks
+      // Update option foreground masks (zoom saved separately via persistZoom)
       await supabase.from('elevation_options').update({
-        zoom: s.zoom,
         foreground_masks: s.masks.length > 0 ? s.masks : null,
       }).eq('id', optionId)
       // Update each artwork position/dims
@@ -1117,7 +1145,10 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
 
     const a = document.createElement('a')
     a.href = c.toDataURL('image/png')
-    a.download = 'elevation-artwork.png'
+    const sanitise = (s: string) => s.replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+    const filename = [projectNameRef.current, elevationNameRef.current, `Option-${optionKeyRef.current}`]
+      .map(sanitise).filter(Boolean).join('_') || 'elevation-artwork'
+    a.download = `${filename}.png`
     a.click()
     onStatus('PNG exported')
   }
