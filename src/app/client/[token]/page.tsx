@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ClientPortal from '@/components/client/ClientPortal'
-import { timeNow } from '@/lib/utils'
 
 interface Props {
   params: Promise<{ token: string }>
@@ -26,7 +25,7 @@ export default async function ClientPortalPage({ params }: Props) {
   // Fetch project
   const { data: project } = await supabase
     .from('projects')
-    .select('id, name, client_name, status, consultant_id')
+    .select('id, name, client_name, status, consultant_id, created_at')
     .eq('id', projectId)
     .single()
 
@@ -121,7 +120,7 @@ export default async function ClientPortalPage({ params }: Props) {
         status: project.status,
         consultantName: profile?.name ?? 'Your Consultant',
         consultantInitials: profile?.initials ?? 'CK',
-        preparedAt: timeNow(),
+        preparedAt: new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       }}
       elevations={elevationsWithUrls}
       approvalActivity={activity ?? []}

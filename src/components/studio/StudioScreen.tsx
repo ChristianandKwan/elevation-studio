@@ -61,6 +61,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
   const optionId = activeOptData?.id ?? ''
+  const otherOptionKey = activeOption === 'A' ? 'B' : 'A'
+  const otherOptData = activeElev?.elevation_options.find(o => o.option === otherOptionKey)
+  const otherOptionNotes = otherOptData?.clientNotes ?? ''
 
   const studio = useStudio({ projectId: project.id, optionId, onStatus, projectName: project.name, elevationName: activeElev?.name ?? '', optionKey: activeOption })
 
@@ -337,6 +340,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           projectId={project.id}
           onStatus={onStatus}
           clientNotes={activeOptData?.clientNotes ?? ''}
+          otherOptionNotes={otherOptionNotes}
+          otherOptionKey={otherOptionKey}
           activityLogs={activityLogs}
         />
         <StudioCanvas studio={studio} onStatus={onStatus} />

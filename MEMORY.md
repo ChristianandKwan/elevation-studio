@@ -169,6 +169,37 @@ git push
 4. **Client portal copy** — confirm "Notes for Christian & Kwan" label is in place (was "Notes for Consultant")
 5. **"Elevation Studio" centred in client portal header** — white text on dark header (confirm in production)
 
+### Code review backlog (2026-03-28) — implementation plan
+
+Grouped into waves by risk/complexity. Each wave is on its own feature branch off `dev`.
+
+**Wave 1 — `feature/wave-1-trivial` (zero-risk one-liners)**
+- Archived project tab re-fetches every click → add `archivedLoaded` guard in `DashboardClient.tsx`
+- PNG export filename hardcoded → include project + elevation + option name in `useStudio.ts:1081`
+- Dead `/api/share` route → delete `src/app/api/share/route.ts` after confirming no callers
+- Notes debounce timer not cleaned up → add `useEffect` cleanup in `ClientPortal.tsx`
+
+**Wave 2 — `feature/wave-2-data-integrity`**
+- Share link regresses project status from "Approved" → "Sent" → guard `generateShareToken` to skip status update if already approved (`StudioScreen.tsx:244`)
+- Client can unapprove own approval → remove Unapprove button from client portal; add consultant-only Unapprove action in studio sidebar/tab bar with activity log entry
+
+**Wave 3 — `feature/wave-3-editing-display`**
+- Artwork name not editable → add `updateArtworkName` to `useStudio.ts`, inline name input in `StudioSidebar` artwork expanded panel
+- Consultant can't see cross-option client notes → pass other option's notes to `StudioSidebar`; label both blocks "Client Notes — Option A/B"
+- Client portal missing "prepared by" context → render consultantName + project created_at in portal header/sidebar; use `project.created_at` not `timeNow()`
+
+**Wave 4 — `feature/wave-4-deletion-safety`**
+- Artwork deletion has no confirmation → intercept all 3 delete paths (trash, multi-select, keyboard) with a confirm modal in `StudioScreen`
+- No way to delete individual elevation → add delete button to `TabBar` (hidden if only 1 elevation), with storage cleanup in `StudioScreen`
+
+**Wave 5 — `feature/wave-5-upload-touch`**
+- Upload UX → parallel uploads via `Promise.all`, per-file progress status, 20MB size validation in `AddArtworkModal`
+- Touch/iPad drag → add `touchstart/touchmove/touchend` handlers mirroring mouse handlers in `ClientElevation.tsx` and `useStudio.ts`; use `{ passive: false }` on touchmove
+
+**Wave 6 — `feature/wave-6-polish`**
+- Activity log UI → fetch `activity_logs` in `/projects/[id]/page.tsx`, pass to `StudioScreen`, render collapsible History panel in sidebar (reuse existing `.activity-log` CSS classes)
+- "Saving…" flashes on zoom → decouple zoom persistence into its own `persistZoom()` with silent 2s debounce; remove zoom from `persistOption` update object
+
 ### Recently completed (2026-03-28, commit `63a53b7` — live on production)
 - ✅ Client portal redesigned: horizontal tab layout per elevation/option
 - ✅ Client artwork visibility toggle (eye icon per artwork)

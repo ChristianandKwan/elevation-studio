@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 import type { ActivityLog } from '@/types'
 import { priceLabel, formatPrice } from '@/lib/utils'
@@ -13,10 +13,12 @@ interface Props {
   projectId: string
   onStatus: (msg: string) => void
   clientNotes?: string
+  otherOptionNotes?: string
+  otherOptionKey?: string
   activityLogs?: ActivityLog[]
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes, activityLogs = [] }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [] }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -123,6 +125,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
                   onDelete={() => studio.deleteArtwork(art.id)}
                   onDimsChange={(w, h) => studio.updateArtworkDims(art.id, w, h)}
                   onPriceChange={(p) => studio.updateArtworkPrice(art.id, p)}
+                  onNameChange={(n) => studio.updateArtworkName(art.id, n)}
                 />
               ))}
             </div>
@@ -228,9 +231,19 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
       {clientNotes && (
         <div className="sidebar-section" style={{ background: 'var(--amber-light)', border: '1px solid rgba(139,111,71,.2)', padding: '10px 14px', marginTop: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
-            Client Notes
+            {otherOptionNotes
+              ? `Client Notes — Option ${otherOptionKey === 'B' ? 'A' : 'B'}`
+              : 'Client Notes'}
           </div>
           <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--charcoal)', whiteSpace: 'pre-wrap' }}>{clientNotes}</div>
+        </div>
+      )}
+      {otherOptionNotes && (
+        <div className="sidebar-section" style={{ background: 'var(--amber-light)', border: '1px solid rgba(139,111,71,.2)', padding: '10px 14px', marginTop: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
+            Client Notes — Option {otherOptionKey}
+          </div>
+          <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--charcoal)', whiteSpace: 'pre-wrap' }}>{otherOptionNotes}</div>
         </div>
       )}
 
@@ -299,11 +312,15 @@ interface ArtworkItemProps {
   onDelete: () => void
   onDimsChange: (w: number, h: number) => void
   onPriceChange: (p: number) => void
+  onNameChange: (name: string) => void
 }
 
-function ArtworkItem({ art, isSelected, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
+  const [nameValue, setNameValue] = useState(art.name)
+
+  useEffect(() => { setNameValue(art.name) }, [art.name])
 
   function toggleDims() {
     const dr = dimsRef.current
@@ -351,6 +368,17 @@ function ArtworkItem({ art, isSelected, onSelect, onToggleVis, onDelete, onDimsC
       </div>
 
       <div className="aw-dims-row" ref={dimsRef}>
+        <input
+          type="text"
+          className="name-input"
+          value={nameValue}
+          placeholder="Artwork name"
+          onClick={e => e.stopPropagation()}
+          onChange={e => setNameValue(e.target.value)}
+          onBlur={() => onNameChange(nameValue)}
+          onKeyDown={e => { if (e.key === 'Enter') { onNameChange(nameValue); (e.target as HTMLInputElement).blur() } }}
+          style={{ gridColumn: '1 / -1', marginBottom: 6 }}
+        />
         <label>W</label>
         <input
           type="number" className="dim-input" defaultValue={art.wCm} min={1} step={0.5}

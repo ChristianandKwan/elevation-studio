@@ -1100,6 +1100,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  async function updateArtworkName(artId: string, name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const supabase = createClient()
+    await supabase.from('artworks').update({ name: trimmed }).eq('id', artId)
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, name: trimmed } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      return { ...s, artworks: newArts }
+    })
+  }
+
   // ─── SELECT ───────────────────────────────────────────────────────
   function selectArtwork(id: string | null) {
     setState(s => {
@@ -1257,6 +1269,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     toggleVisibility,
     updateArtworkDims,
     updateArtworkPrice,
+    updateArtworkName,
     selectArtwork,
     renderArtworksDOM,
     exportPng,
