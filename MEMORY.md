@@ -102,7 +102,8 @@ Tables: `profiles`, `projects`, `elevations`, `elevation_options`, `artworks`, `
 - Storage buckets: `elevation-images`, `artwork-images`
 - Storage policies in `supabase/migrations/002_storage.sql`
 - `elevation_options` has a `foreground_masks` JSONB column (added in `003_foreground_masks.sql`) — stores an array of polygons, each polygon being an array of `{x, y}` points in 0–1 fractional coordinates
-- `elevation_options` also has a `client_notes text` column (added in `005_client_notes.sql`) — run this in Supabase SQL Editor if not yet applied: `ALTER TABLE elevation_options ADD COLUMN client_notes text;`
+- `elevation_options` has a `client_notes text` column (added in `005_client_notes.sql`)
+- `elevations` has a `client_picked_option text` column; `elevation_options` has client-token RLS update policies (added in `006_client_approval.sql`)
 
 ---
 
@@ -153,68 +154,34 @@ git push
 - [ ] DNS for `studio.christianandkwan.com` — CNAME record needs adding in Hostinger
 - [ ] Re-enable email confirmation in Supabase before real client use
 - [ ] Client portal token expiry — update schema default from 90 days to 42 days
-- [ ] Run DB migration if not yet applied: `ALTER TABLE elevation_options ADD COLUMN client_notes text;`
 
 ### Bugs
-- [ ] **Dashboard kebab menu (3-dot) can't be dismissed by clicking away** — user must click Archive or Delete to exit; clicking elsewhere has no effect. Needs an outside-click handler to close the menu.
+- [ ] **Dashboard kebab menu (3-dot) can't be dismissed by clicking away** — needs an outside-click handler to close the menu.
 
 ### Feature backlog (priority order)
 1. **Rename project / elevation** — inline edit or modal, saves to DB
-2. **Unarchive project** — recall from archive (`archived = false`), needs an archived view on dashboard
-3. **Client option selection flow** — two-stage approval per elevation:
-   - **Stage 1 — "Pick"**: Client selects Option A or B. The unpicked option tab disappears. Client can still move artworks, toggle visibility, and add notes on their picked option. Pick state is persisted — if client closes and reopens the portal, they land back on their picked option.
-   - **Stage 2 — "Approve"**: Client hits Approve. Warning popup appears with text: *"Approving this elevation will lock in your choice of artworks and placement. You'll still be able to view the elevation but it will be submitted to Christian & Kwan for project signoff. Are you happy to proceed?"* On confirm, elevation is locked (read-only).
-   - **Project-level status**: Project only moves to "Approved" status when ALL elevation options are approved.
-4. **Client portal copy** — confirm "Notes for Christian & Kwan" label is in place (was "Notes for Consultant")
-5. **"Elevation Studio" centred in client portal header** — white text on dark header (confirm in production)
+2. **Unarchive project** — recall from archive (`archived = false`), needs an archived view/tab on dashboard
 
-### Code review backlog (2026-03-28) — implementation plan
-
-Grouped into waves by risk/complexity. Each wave is on its own feature branch off `dev`.
-
-**Wave 1 — `feature/wave-1-trivial` (zero-risk one-liners)**
-- Archived project tab re-fetches every click → add `archivedLoaded` guard in `DashboardClient.tsx`
-- PNG export filename hardcoded → include project + elevation + option name in `useStudio.ts:1081`
-- Dead `/api/share` route → delete `src/app/api/share/route.ts` after confirming no callers
-- Notes debounce timer not cleaned up → add `useEffect` cleanup in `ClientPortal.tsx`
-
-**Wave 2 — `feature/wave-2-data-integrity` ✅ Done (on dev)**
-- ✅ Share link regresses project status from "Approved" → "Sent" → guarded in `generateShareToken`
-- ✅ Client unapprove removed; consultant-only Unapprove added to studio header with activity log
-
-**Wave 3 — `feature/wave-3-editing-display`**
-- Artwork name not editable → add `updateArtworkName` to `useStudio.ts`, inline name input in `StudioSidebar` artwork expanded panel
-- Consultant can't see cross-option client notes → pass other option's notes to `StudioSidebar`; label both blocks "Client Notes — Option A/B"
-- Client portal missing "prepared by" context → render consultantName + project created_at in portal header/sidebar; use `project.created_at` not `timeNow()`
-
-**Wave 4 — `feature/wave-4-deletion-safety`**
-- Artwork deletion has no confirmation → intercept all 3 delete paths (trash, multi-select, keyboard) with a confirm modal in `StudioScreen`
-- No way to delete individual elevation → add delete button to `TabBar` (hidden if only 1 elevation), with storage cleanup in `StudioScreen`
-
-**Wave 5 — `feature/wave-5-upload-touch`**
-- Upload UX → parallel uploads via `Promise.all`, per-file progress status, 20MB size validation in `AddArtworkModal`
-- Touch/iPad drag → add `touchstart/touchmove/touchend` handlers mirroring mouse handlers in `ClientElevation.tsx` and `useStudio.ts`; use `{ passive: false }` on touchmove
-
-**Wave 6 — `feature/wave-6-polish`**
-- Activity log UI → fetch `activity_logs` in `/projects/[id]/page.tsx`, pass to `StudioScreen`, render collapsible History panel in sidebar (reuse existing `.activity-log` CSS classes)
-- "Saving…" flashes on zoom → decouple zoom persistence into its own `persistZoom()` with silent 2s debounce; remove zoom from `persistOption` update object
-
-### Recently completed (2026-03-28, branch `feature/wave-2-data-integrity` — on dev, pending production)
-- ✅ **Share link status regression fixed** — `generateShareToken` now only downgrades project status to `'sent'` if it isn't already `'approved'`; `projectStatus` tracked in local state in `StudioScreen`
-- ✅ **Client Unapprove removed** — clients can no longer walk back their own approval. Unapprove button and "Unapprove to edit notes" hint removed from `ClientElevation.tsx`. `handleUnapprove` + dead prop removed from `ClientPortal.tsx`
-- ✅ **Consultant Unapprove added** — when the active elevation option is approved, the studio header shows a `✓ Approved` badge and an **Unapprove** button (consultant-only). On click: clears `approved`/`approved_at` in DB, writes `type: 'unapprove'` activity log, updates local state
-- ✅ **ShareModal copy updated** — removed "Unapprove if they change their mind" bullet from client capabilities list
-
-### Recently completed (2026-03-28, commit `63a53b7` — live on production)
+### What's shipped (as of 2026-03-28, all on `dev`, commit `657261d`)
+- ✅ Archived tab re-fetch guard (`archivedLoaded` flag in `DashboardClient.tsx`)
+- ✅ PNG export filename includes project + elevation + option name
+- ✅ Activity log collapsible History panel in studio sidebar
+- ✅ Silent zoom persistence (no more "Saving…" flash on zoom)
+- ✅ Artwork name inline editing in sidebar
+- ✅ Cross-option client notes visible to consultant in sidebar
+- ✅ "Prepared by" context in client portal header
+- ✅ Artwork deletion confirm modal; elevation delete with storage cleanup
+- ✅ Share link no longer regresses project status from Approved → Sent
+- ✅ Client Unapprove removed; consultant-only Unapprove in studio header + activity log
+- ✅ **Client pick + approve flow** — two-stage per elevation: Pick (locks option choice, hides other tab) → Approve (warning popup, locks elevation read-only). Project status → Approved only when all elevations done. Consultant can unapprove to reopen. DB: `client_picked_option` column + RLS policies in `006_client_approval.sql`
+- ✅ "Notes for Christian & Kwan" label in client portal (was "Notes for Consultant")
+- ✅ "Elevation Studio" centred in client portal header
 - ✅ Client portal redesigned: horizontal tab layout per elevation/option
-- ✅ Client artwork visibility toggle (eye icon per artwork)
-- ✅ Client notes field → feeds back to consultant sidebar
-- ✅ Option B bug fixed: auto-copies elevation image from A on first switch; back-switch preserves artwork positions
-- ✅ Rubber-band drag-to-select on studio canvas
-- ✅ "Elevation Studio" centred in dashboard + studio headers
-- ✅ C&K logos resized and aligned correctly on dashboard and client portal
+- ✅ Client artwork visibility toggle and notes field
+- ✅ Option B auto-copies elevation image from A; back-switch preserves artwork positions
+- ✅ Rubber-band drag-to-select; multi-select (Shift+click); keyboard nudge
 - ✅ Project archive and delete (kebab menu on dashboard cards)
-- ✅ Multi-select artworks (Shift+click + rubber-band)
+- ✅ Foreground masking (polygon regions, SVG compositing, PNG export)
 
 ---
 
