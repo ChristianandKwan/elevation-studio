@@ -87,7 +87,7 @@ src/
 ## Architecture Notes
 
 - **`useStudio` hook** (`src/hooks/useStudio.ts`) — all canvas logic lives here. Uses `stateRef` pattern so event handlers always read current state without stale closures. Artwork positions are mutated imperatively in the DOM; `debounceSave()` persists to Supabase.
-- **`StudioScreen.tsx`** — manages active elevation/option. Uses `skipNextLoadRef` to prevent double-loading when `loadOption` is called directly. Syncs artwork positions back into `elevations` state before each tab switch (prevents stale-position bugs on back-navigation).
+- **`StudioScreen.tsx`** — manages active elevation/option. Uses `skipNextLoadRef` to prevent double-loading when `loadOption` is called directly. Syncs artwork positions back into `elevations` state before each tab switch (prevents stale-position bugs on back-navigation). Tracks `projectStatus` in local state so `generateShareToken` never downgrades an approved project back to `'sent'`. Consultant Unapprove button lives here — shown in header when `activeOptData?.approved` is true.
 - **Client portal** (`src/components/client/`) — `optionsState` keyed `[elevId][optionLetter]` keeps positions/visibility across tab switches. Clients can move artworks and toggle visibility. Notes debounced 800ms to `elevation_options.client_notes`.
 - **Rubber-band select** — `useStudio.onWrapMouseDown`; `boxSelectedRef` + 100ms timeout suppresses the post-mouseup click-to-deselect.
 - **Option B** — auto-copies elevation image from Option A on first switch (via `handleSwitch` in `StudioScreen.tsx`).
@@ -164,8 +164,7 @@ git push
 3. **Client option selection flow** — two-stage approval per elevation:
    - **Stage 1 — "Pick"**: Client selects Option A or B. The unpicked option tab disappears. Client can still move artworks, toggle visibility, and add notes on their picked option. Pick state is persisted — if client closes and reopens the portal, they land back on their picked option.
    - **Stage 2 — "Approve"**: Client hits Approve. Warning popup appears with text: *"Approving this elevation will lock in your choice of artworks and placement. You'll still be able to view the elevation but it will be submitted to Christian & Kwan for project signoff. Are you happy to proceed?"* On confirm, elevation is locked (read-only).
-   - **Project-level status**: Project only moves to "Approved" status when ALL elevations have both a Pick and an Approved state.
-   - **Consultant view**: C&K can see per-elevation approval status in the studio. They also have the ability to unapprove an elevation (resetting it so the client can make changes again).
+   - **Project-level status**: Project only moves to "Approved" status when ALL elevation options are approved.
 4. **Client portal copy** — confirm "Notes for Christian & Kwan" label is in place (was "Notes for Consultant")
 5. **"Elevation Studio" centred in client portal header** — white text on dark header (confirm in production)
 
@@ -179,9 +178,9 @@ Grouped into waves by risk/complexity. Each wave is on its own feature branch of
 - Dead `/api/share` route → delete `src/app/api/share/route.ts` after confirming no callers
 - Notes debounce timer not cleaned up → add `useEffect` cleanup in `ClientPortal.tsx`
 
-**Wave 2 — `feature/wave-2-data-integrity`**
-- Share link regresses project status from "Approved" → "Sent" → guard `generateShareToken` to skip status update if already approved (`StudioScreen.tsx:244`)
-- Client can unapprove own approval → remove Unapprove button from client portal; add consultant-only Unapprove action in studio sidebar/tab bar with activity log entry
+**Wave 2 — `feature/wave-2-data-integrity` ✅ Done (on dev)**
+- ✅ Share link regresses project status from "Approved" → "Sent" → guarded in `generateShareToken`
+- ✅ Client unapprove removed; consultant-only Unapprove added to studio header with activity log
 
 **Wave 3 — `feature/wave-3-editing-display`**
 - Artwork name not editable → add `updateArtworkName` to `useStudio.ts`, inline name input in `StudioSidebar` artwork expanded panel
@@ -199,6 +198,12 @@ Grouped into waves by risk/complexity. Each wave is on its own feature branch of
 **Wave 6 — `feature/wave-6-polish`**
 - Activity log UI → fetch `activity_logs` in `/projects/[id]/page.tsx`, pass to `StudioScreen`, render collapsible History panel in sidebar (reuse existing `.activity-log` CSS classes)
 - "Saving…" flashes on zoom → decouple zoom persistence into its own `persistZoom()` with silent 2s debounce; remove zoom from `persistOption` update object
+
+### Recently completed (2026-03-28, branch `feature/wave-2-data-integrity` — on dev, pending production)
+- ✅ **Share link status regression fixed** — `generateShareToken` now only downgrades project status to `'sent'` if it isn't already `'approved'`; `projectStatus` tracked in local state in `StudioScreen`
+- ✅ **Client Unapprove removed** — clients can no longer walk back their own approval. Unapprove button and "Unapprove to edit notes" hint removed from `ClientElevation.tsx`. `handleUnapprove` + dead prop removed from `ClientPortal.tsx`
+- ✅ **Consultant Unapprove added** — when the active elevation option is approved, the studio header shows a `✓ Approved` badge and an **Unapprove** button (consultant-only). On click: clears `approved`/`approved_at` in DB, writes `type: 'unapprove'` activity log, updates local state
+- ✅ **ShareModal copy updated** — removed "Unapprove if they change their mind" bullet from client capabilities list
 
 ### Recently completed (2026-03-28, commit `63a53b7` — live on production)
 - ✅ Client portal redesigned: horizontal tab layout per elevation/option
