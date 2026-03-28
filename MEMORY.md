@@ -12,7 +12,7 @@ Built with: **Next.js + Supabase**, deployed on **Vercel**. (Note: this is a new
 ## People
 - **Client:** Christian & Kwan art consultancy
 - **Developer contact:** tommggeorge (GitHub)
-- **Claude sessions:** Tommy is non-technical — explain things in plain English, avoid jargon
+- **Claude sessions:** User is non-technical — explain things in plain English, avoid jargon
 
 ---
 
@@ -84,6 +84,16 @@ src/
 
 ---
 
+## Architecture Notes
+
+- **`useStudio` hook** (`src/hooks/useStudio.ts`) — all canvas logic lives here. Uses `stateRef` pattern so event handlers always read current state without stale closures. Artwork positions are mutated imperatively in the DOM; `debounceSave()` persists to Supabase.
+- **`StudioScreen.tsx`** — manages active elevation/option. Uses `skipNextLoadRef` to prevent double-loading when `loadOption` is called directly. Syncs artwork positions back into `elevations` state before each tab switch (prevents stale-position bugs on back-navigation).
+- **Client portal** (`src/components/client/`) — `optionsState` keyed `[elevId][optionLetter]` keeps positions/visibility across tab switches. Clients can move artworks and toggle visibility. Notes debounced 800ms to `elevation_options.client_notes`.
+- **Rubber-band select** — `useStudio.onWrapMouseDown`; `boxSelectedRef` + 100ms timeout suppresses the post-mouseup click-to-deselect.
+- **Option B** — auto-copies elevation image from Option A on first switch (via `handleSwitch` in `StudioScreen.tsx`).
+
+---
+
 ## Database (Supabase)
 Tables: `profiles`, `projects`, `elevations`, `elevation_options`, `artworks`, `activity_logs`, `client_tokens`
 
@@ -92,6 +102,7 @@ Tables: `profiles`, `projects`, `elevations`, `elevation_options`, `artworks`, `
 - Storage buckets: `elevation-images`, `artwork-images`
 - Storage policies in `supabase/migrations/002_storage.sql`
 - `elevation_options` has a `foreground_masks` JSONB column (added in `003_foreground_masks.sql`) — stores an array of polygons, each polygon being an array of `{x, y}` points in 0–1 fractional coordinates
+- `elevation_options` also has a `client_notes text` column (added in `005_client_notes.sql`) — run this in Supabase SQL Editor if not yet applied: `ALTER TABLE elevation_options ADD COLUMN client_notes text;`
 
 ---
 
@@ -113,10 +124,13 @@ git push
 
 # 2. Vercel builds a preview at a dev-specific URL — test there
 
-# 3. When happy, merge dev → main via GitHub Pull Request:
-#    GitHub → Pull requests → New pull request → base: main, compare: dev
-#    Create pull request → Merge pull request → Confirm merge
-#    Vercel auto-deploys main in ~1 minute
+# 3. When happy, either:
+#    a) Promote to production directly in the Vercel dashboard
+#       ("Promote to Production" button on the deployment) — no GitHub steps needed
+#    b) Or merge dev → main via GitHub Pull Request:
+#       GitHub → Pull requests → New pull request → base: main, compare: dev
+#       Create pull request → Merge pull request → Confirm merge
+#       Vercel auto-deploys main in ~1 minute
 ```
 
 ---
@@ -134,12 +148,37 @@ git push
 ---
 
 ## Known Issues & Pending Work
+
+### Infrastructure
 - [ ] DNS for `studio.christianandkwan.com` — CNAME record needs adding in Hostinger
-- [ ] Client portal token expiry — update schema default from 90 days to 42 days
 - [ ] Re-enable email confirmation in Supabase before real client use
-- [ ] Full UI/UX audit against the original prototype (20 questions checklist)
-- [ ] Custom error pages
-- [ ] Favicon + page title
+- [ ] Client portal token expiry — update schema default from 90 days to 42 days
+- [ ] Run DB migration if not yet applied: `ALTER TABLE elevation_options ADD COLUMN client_notes text;`
+
+### Bugs
+- [ ] **Dashboard kebab menu (3-dot) can't be dismissed by clicking away** — user must click Archive or Delete to exit; clicking elsewhere has no effect. Needs an outside-click handler to close the menu.
+
+### Feature backlog (priority order)
+1. **Rename project / elevation** — inline edit or modal, saves to DB
+2. **Unarchive project** — recall from archive (`archived = false`), needs an archived view on dashboard
+3. **Client option selection flow** — two-stage approval per elevation:
+   - **Stage 1 — "Pick"**: Client selects Option A or B. The unpicked option tab disappears. Client can still move artworks, toggle visibility, and add notes on their picked option. Pick state is persisted — if client closes and reopens the portal, they land back on their picked option.
+   - **Stage 2 — "Approve"**: Client hits Approve. Warning popup appears with text: *"Approving this elevation will lock in your choice of artworks and placement. You'll still be able to view the elevation but it will be submitted to Christian & Kwan for project signoff. Are you happy to proceed?"* On confirm, elevation is locked (read-only).
+   - **Project-level status**: Project only moves to "Approved" status when ALL elevations have both a Pick and an Approved state.
+   - **Consultant view**: C&K can see per-elevation approval status in the studio. They also have the ability to unapprove an elevation (resetting it so the client can make changes again).
+4. **Client portal copy** — confirm "Notes for Christian & Kwan" label is in place (was "Notes for Consultant")
+5. **"Elevation Studio" centred in client portal header** — white text on dark header (confirm in production)
+
+### Recently completed (2026-03-28, commit `63a53b7` — live on production)
+- ✅ Client portal redesigned: horizontal tab layout per elevation/option
+- ✅ Client artwork visibility toggle (eye icon per artwork)
+- ✅ Client notes field → feeds back to consultant sidebar
+- ✅ Option B bug fixed: auto-copies elevation image from A on first switch; back-switch preserves artwork positions
+- ✅ Rubber-band drag-to-select on studio canvas
+- ✅ "Elevation Studio" centred in dashboard + studio headers
+- ✅ C&K logos resized and aligned correctly on dashboard and client portal
+- ✅ Project archive and delete (kebab menu on dashboard cards)
+- ✅ Multi-select artworks (Shift+click + rubber-band)
 
 ---
 
@@ -164,8 +203,4 @@ Consultants can define which parts of an elevation photo should appear **in fron
 ---
 
 ## How To Start A Session
-Tell Claude:
-> "See the attached file — read it so you know what we're doing" and attach this MEMORY.md file.
-> Then describe what you want to work on.
-
-Claude will be fully up to speed without needing re-explanation.
+Claude Code and Dispatch read this file automatically when you open the project — no need to attach it manually. Just describe what you want to work on and the session will have full context.
