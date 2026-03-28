@@ -13,15 +13,6 @@ interface DashProfile {
   role: string
 }
 
-interface DashArtwork {
-  id: string
-  imageUrl: string | null
-  xF: number
-  yF: number
-  wCm: number
-  hCm: number
-}
-
 interface DashProject {
   id: string
   name: string
@@ -30,10 +21,12 @@ interface DashProject {
   thumbnailUrl: string | null
   elevCount: number
   artCount: number
-  artworks: DashArtwork[]
+  artworks: unknown[]
   origW: number
   origH: number
   scalePxPerCm: number | null
+  pickedCount: number
+  approvedCount: number
 }
 
 interface Props {
@@ -52,6 +45,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
   const [showModal, setShowModal] = useState(false)
   const [newName, setNewName] = useState('')
   const [newClient, setNewClient] = useState('')
+  const [newBudget, setNewBudget] = useState('')
   const [newElevName, setNewElevName] = useState('')
   const [creating, setCreating] = useState(false)
   const [toast, setToast] = useState('')
@@ -97,9 +91,10 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     if (!user) return
 
     // Create project
+    const budgetVal = parseFloat(newBudget)
     const { data: project, error: pErr } = await supabase
       .from('projects')
-      .insert({ name, client_name: newClient.trim() || 'Unnamed client', consultant_id: user.id })
+      .insert({ name, client_name: newClient.trim() || 'Unnamed client', consultant_id: user.id, budget: !isNaN(budgetVal) && budgetVal > 0 ? budgetVal : null })
       .select()
       .single()
 
@@ -127,7 +122,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
       text: `Project created by ${profile.name}`,
     })
 
-    setNewName(''); setNewClient(''); setNewElevName(''); setShowModal(false); setCreating(false)
+    setNewName(''); setNewClient(''); setNewBudget(''); setNewElevName(''); setShowModal(false); setCreating(false)
     showStatus(`Project "${name}" created`)
     router.push(`/projects/${project.id}`)
   }
@@ -217,7 +212,21 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     showStatus('Project renamed')
   }
 
-  const statusLabels: Record<string, string> = { draft: 'Draft', sent: 'Sent to client', approved: 'Approved' }
+  function projectStatusLabel(p: DashProject): string {
+    if (p.elevCount > 0 && p.approvedCount >= p.elevCount) return 'Client Final'
+    if (p.approvedCount > 0) return `${p.approvedCount}/${p.elevCount} approved`
+    if (p.pickedCount > 0) return `${p.pickedCount}/${p.elevCount} picked`
+    if (p.status === 'sent') return 'Sent to Client'
+    return 'Draft'
+  }
+
+  function projectStatusClass(p: DashProject): string {
+    if (p.elevCount > 0 && p.approvedCount >= p.elevCount) return 'badge-approved'
+    if (p.approvedCount > 0) return 'badge-sent'
+    if (p.pickedCount > 0) return 'badge-sent'
+    if (p.status === 'sent') return 'badge-sent'
+    return 'badge-draft'
+  }
 
   return (
     <>
@@ -269,8 +278,8 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                     <div className="project-card-name">{p.name}</div>
                     <div className="project-card-client">{p.client_name}</div>
                     <div className="project-card-meta">
-                      <span className={`project-card-badge badge-${p.status}`}>
-                        {statusLabels[p.status] ?? p.status}
+                      <span className="project-card-badge badge-draft">
+                        {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
                       </span>
                       <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>Archived</span>
                     </div>
@@ -301,34 +310,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                 className="project-card"
                 onClick={() => router.push(`/projects/${p.id}`)}
               >
-                <div className="project-card-thumb" style={{ position: 'relative' }}>
+                <div className="project-card-thumb">
                   {p.thumbnailUrl
-                    ? <>
-                        <img src={p.thumbnailUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                        {/* Artwork overlays */}
-                        {p.artworks.map(art => {
-                          if (!art.imageUrl || !p.origW || !p.origH || !p.scalePxPerCm) return null
-                          // artwork display width as fraction of elevation orig width
-                          const wFrac = (art.wCm * p.scalePxPerCm) / p.origW
-                          const hFrac = (art.hCm * p.scalePxPerCm) / p.origH
-                          return (
-                            <img
-                              key={art.id}
-                              src={art.imageUrl}
-                              alt=""
-                              style={{
-                                position: 'absolute',
-                                left: `${art.xF * 100}%`,
-                                top: `${art.yF * 100}%`,
-                                width: `${wFrac * 100}%`,
-                                height: `${hFrac * 100}%`,
-                                objectFit: 'contain',
-                                pointerEvents: 'none',
-                              }}
-                            />
-                          )
-                        })}
-                      </>
+                    ? <img src={p.thumbnailUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                     : <div className="project-card-thumb-empty">⬜</div>
                   }
                 </div>
@@ -336,8 +320,8 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                   <div className="project-card-name">{p.name}</div>
                   <div className="project-card-client">{p.client_name}</div>
                   <div className="project-card-meta">
-                    <span className={`project-card-badge badge-${p.status}`}>
-                      {statusLabels[p.status] ?? p.status}
+                    <span className={`project-card-badge ${projectStatusClass(p)}`}>
+                      {projectStatusLabel(p)}
                     </span>
                     <span>{p.elevCount} elevation{p.elevCount !== 1 ? 's' : ''}</span>
                   </div>
@@ -399,6 +383,19 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               />
             </div>
             <div className="field">
+              <label className="field-label">Budget (£, optional)</label>
+              <input
+                type="number"
+                className="field-input"
+                value={newBudget}
+                onChange={e => setNewBudget(e.target.value)}
+                placeholder="e.g. 25000"
+                min={0}
+                step={500}
+                onKeyDown={e => e.key === 'Enter' && createProject()}
+              />
+            </div>
+            <div className="field">
               <label className="field-label">First Elevation Name <span style={{ color: 'var(--red)' }}>*</span></label>
               <input
                 className="field-input"
@@ -409,7 +406,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               />
             </div>
             <div className="modal-footer">
-              <button className="btn" onClick={() => { setShowModal(false); setNewName(''); setNewClient(''); setNewElevName('') }}>Cancel</button>
+              <button className="btn" onClick={() => { setShowModal(false); setNewName(''); setNewClient(''); setNewBudget(''); setNewElevName('') }}>Cancel</button>
               <button className="btn btn-primary" onClick={createProject} disabled={creating || !newName.trim() || !newElevName.trim()}>
                 {creating ? 'Creating…' : 'Create Project'}
               </button>

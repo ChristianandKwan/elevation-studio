@@ -1,5 +1,68 @@
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from '@/components/dashboard/DashboardClient'
+import sharp from 'sharp'
+
+const THUMB_W = 600 // max thumbnail width in pixels
+
+async function fetchBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    return Buffer.from(await res.arrayBuffer())
+  } catch {
+    return null
+  }
+}
+
+async function buildThumbnail(
+  elevUrl: string,
+  artworks: Array<{ url: string; xF: number; yF: number; wCm: number; hCm: number }>,
+  origW: number,
+  origH: number,
+  scalePxPerCm: number | null
+): Promise<string | null> {
+  const elevBuf = await fetchBuffer(elevUrl)
+  if (!elevBuf) return null
+
+  const scale = THUMB_W / origW
+  const thumbH = Math.round(origH * scale)
+
+  let img = sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' })
+
+  // If no scale, just return the plain elevation thumbnail
+  if (!scalePxPerCm || artworks.length === 0) {
+    try {
+      const buf = await img.png().toBuffer()
+      return `data:image/png;base64,${buf.toString('base64')}`
+    } catch { return null }
+  }
+
+  // Build composite overlays
+  const compositeInputs: sharp.OverlayOptions[] = []
+  for (const art of artworks) {
+    const artBuf = await fetchBuffer(art.url)
+    if (!artBuf) continue
+    // Artwork pixel dimensions in original image space
+    const artOrigW = Math.round(art.wCm * scalePxPerCm)
+    const artOrigH = Math.round(art.hCm * scalePxPerCm)
+    // Scale down to thumbnail space
+    const artThumbW = Math.max(1, Math.round(artOrigW * scale))
+    const artThumbH = Math.max(1, Math.round(artOrigH * scale))
+    // Position in thumbnail space
+    const left = Math.round(art.xF * THUMB_W)
+    const top = Math.round(art.yF * thumbH)
+    try {
+      const resized = await sharp(artBuf).resize(artThumbW, artThumbH, { fit: 'fill' }).png().toBuffer()
+      compositeInputs.push({ input: resized, left, top, blend: 'over' })
+    } catch { /* skip failed artwork */ }
+  }
+
+  try {
+    const elevResized = await img.png().toBuffer()
+    const buf = await sharp(elevResized).composite(compositeInputs).png().toBuffer()
+    return `data:image/png;base64,${buf.toString('base64')}`
+  } catch { return null }
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -13,15 +76,15 @@ export default async function DashboardPage() {
     .eq('id', user!.id)
     .single()
 
-  // Fetch projects with elevations count + first thumbnail path + artworks for preview
+  // Fetch projects with elevations count + first thumbnail path + artworks for preview + approval status
   const { data: projects } = await supabase
     .from('projects')
     .select(`
       id, name, client_name, status, created_at,
       elevations(
-        id,
+        id, client_picked_option,
         elevation_options(
-          id, option, image_path, orig_w, orig_h, scale_px_per_cm,
+          id, option, image_path, orig_w, orig_h, scale_px_per_cm, approved,
           artworks(id, image_path, x_fraction, y_fraction, w_cm, h_cm, visible)
         )
       )
@@ -30,46 +93,65 @@ export default async function DashboardPage() {
     .eq('archived', false)
     .order('created_at', { ascending: false })
 
-  // Generate signed URLs for thumbnails and artwork images
   const projectsWithThumbs = await Promise.all(
     (projects ?? []).map(async (p) => {
       const firstOption = p.elevations?.[0]?.elevation_options?.find(
         (o: { option: string }) => o.option === 'A'
-      )
-      let thumbnailUrl: string | null = null
-      if (firstOption?.image_path) {
-        const { data } = await supabase.storage
-          .from('elevation-images')
-          .createSignedUrl(firstOption.image_path, 3600)
-        thumbnailUrl = data?.signedUrl ?? null
-      }
-
-      // Generate signed URLs for artworks in first option A
-      const artworks = await Promise.all(
-        (firstOption?.artworks ?? [])
-          .filter((a: { visible: boolean }) => a.visible)
-          .map(async (a: { id: string; image_path: string; x_fraction: number; y_fraction: number; w_cm: number; h_cm: number; visible: boolean }) => {
-            const { data: signed } = await supabase.storage
-              .from('artwork-images')
-              .createSignedUrl(a.image_path, 3600)
-            return {
-              id: a.id,
-              imageUrl: signed?.signedUrl ?? null,
-              xF: a.x_fraction,
-              yF: a.y_fraction,
-              wCm: a.w_cm,
-              hCm: a.h_cm,
-            }
-          })
       )
 
       const origW = firstOption?.orig_w ?? 0
       const origH = firstOption?.orig_h ?? 0
       const scalePxPerCm = firstOption?.scale_px_per_cm ?? null
 
+      let thumbnailUrl: string | null = null
+
+      if (firstOption?.image_path) {
+        const { data: elevSigned } = await supabase.storage
+          .from('elevation-images')
+          .createSignedUrl(firstOption.image_path, 3600)
+
+        if (elevSigned?.signedUrl && origW > 0 && origH > 0) {
+          // Build signed URLs for visible artworks
+          const visibleArts = (firstOption.artworks ?? []).filter((a: { visible: boolean }) => a.visible)
+          const artworkEntries = await Promise.all(
+            visibleArts.map(async (a: { image_path: string; x_fraction: number; y_fraction: number; w_cm: number; h_cm: number }) => {
+              const { data: artSigned } = await supabase.storage
+                .from('artwork-images')
+                .createSignedUrl(a.image_path, 3600)
+              return {
+                url: artSigned?.signedUrl ?? '',
+                xF: a.x_fraction,
+                yF: a.y_fraction,
+                wCm: a.w_cm,
+                hCm: a.h_cm,
+              }
+            })
+          )
+          const validArts = artworkEntries.filter(a => a.url)
+          thumbnailUrl = await buildThumbnail(elevSigned.signedUrl, validArts, origW, origH, scalePxPerCm)
+          // Fall back to plain elevation URL if compositing failed
+          if (!thumbnailUrl) thumbnailUrl = elevSigned.signedUrl
+        }
+      }
+
       const elevCount = p.elevations?.length ?? 0
-      const artCount = 0
-      return { ...p, thumbnailUrl, elevCount, artCount, artworks, origW, origH, scalePxPerCm }
+      const pickedCount = (p.elevations ?? []).filter((e: { client_picked_option: string | null }) => e.client_picked_option != null).length
+      const approvedCount = (p.elevations ?? []).filter((e: { elevation_options: Array<{ approved: boolean }> }) =>
+        e.elevation_options?.some(o => o.approved)
+      ).length
+
+      return {
+        ...p,
+        thumbnailUrl,
+        elevCount,
+        artCount: 0,
+        artworks: [],   // no longer needed — composited into thumbnail
+        origW,
+        origH,
+        scalePxPerCm,
+        pickedCount,
+        approvedCount,
+      }
     })
   )
 

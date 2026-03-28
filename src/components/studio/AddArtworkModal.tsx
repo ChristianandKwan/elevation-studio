@@ -10,6 +10,15 @@ export interface ArtMeta {
   priceIncludes: 'artwork' | 'all'
 }
 
+// Internal row type uses strings for dimension inputs to allow free editing
+interface RowMeta {
+  name: string
+  wStr: string
+  hStr: string
+  price: number
+  priceIncludes: 'artwork' | 'all'
+}
+
 interface Props {
   onConfirm: (files: File[], metas: ArtMeta[]) => void
   onCancel: () => void
@@ -29,7 +38,7 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
   const [price, setPrice] = useState('')
   const [priceIncludes, setPriceIncludes] = useState<'artwork' | 'all'>('artwork')
   // Multi-file per-row metas
-  const [rowMetas, setRowMetas] = useState<ArtMeta[]>([])
+  const [rowMetas, setRowMetas] = useState<RowMeta[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   function pickImages() {
@@ -55,8 +64,8 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
     // Build per-row defaults for multi-file
     setRowMetas(selected.map(f => ({
       name: f.name.replace(/\.[^.]+$/, ''),
-      wCm: DEFAULT_W,
-      hCm: DEFAULT_H,
+      wStr: String(DEFAULT_W),
+      hStr: String(DEFAULT_H),
       price: 0,
       priceIncludes: 'artwork',
     })))
@@ -69,7 +78,7 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
     e.target.value = ''
   }
 
-  function updateRow(i: number, patch: Partial<ArtMeta>) {
+  function updateRow(i: number, patch: Partial<RowMeta>) {
     setRowMetas(prev => prev.map((m, idx) => idx === i ? { ...m, ...patch } : m))
   }
 
@@ -84,7 +93,13 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
         priceIncludes,
       }])
     } else {
-      onConfirm(files, rowMetas)
+      onConfirm(files, rowMetas.map(m => ({
+        name: m.name,
+        wCm: parseFloat(m.wStr) || DEFAULT_W,
+        hCm: parseFloat(m.hStr) || DEFAULT_H,
+        price: m.price,
+        priceIncludes: m.priceIncludes,
+      })))
     }
   }
 
@@ -181,12 +196,12 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
                 {/* W */}
                 <div>
                   <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>W (cm)</div>
-                  <input type="number" className="field-input" value={meta.wCm} onChange={e => updateRow(i, { wCm: parseFloat(e.target.value) || DEFAULT_W })} min={1} step={0.5} style={{ fontSize: 12 }} />
+                  <input type="text" inputMode="decimal" className="field-input" value={meta.wStr} onChange={e => updateRow(i, { wStr: e.target.value })} style={{ fontSize: 12 }} />
                 </div>
                 {/* H */}
                 <div>
                   <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>H (cm)</div>
-                  <input type="number" className="field-input" value={meta.hCm} onChange={e => updateRow(i, { hCm: parseFloat(e.target.value) || DEFAULT_H })} min={1} step={0.5} style={{ fontSize: 12 }} />
+                  <input type="text" inputMode="decimal" className="field-input" value={meta.hStr} onChange={e => updateRow(i, { hStr: e.target.value })} style={{ fontSize: 12 }} />
                 </div>
                 {/* Price */}
                 <div>

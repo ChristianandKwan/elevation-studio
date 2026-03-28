@@ -211,7 +211,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         requestDeleteArtworks(new Set(s.selIds))
         return
       }
+      if (e.key === 'Enter' && s.skewAdjustMode) {
+        e.preventDefault()
+        studio.finaliseSkewAdjust()
+        return
+      }
       if (e.key === 'Escape') {
+        if (s.skewAdjustMode) { studio.cancelSkewAdjust(); return }
         if (s.maskDraw.active) {
           if (s.maskDraw.currentPoints.length > 0) { studio.clearCurrentPoints(); return }
           studio.cancelMaskDraw(); return
@@ -398,19 +404,44 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (!elev) return
     const usedKeys = new Set(elev.elevation_options.map(o => o.option))
     const nextKey = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(l => !usedKeys.has(l)) ?? 'X'
+    // Inherit image + foreground from the currently active option (same room = same base photo)
+    const srcOpt = elev.elevation_options.find(o => o.option === activeOption) ?? elev.elevation_options[0] ?? null
+    const inheritedImagePath = srcOpt?.imagePath ?? null
+    const inheritedMasks = (srcOpt?.foreground_masks as any[] | null) ?? null
+    const inheritedOrigW = srcOpt?.orig_w ?? 0
+    const inheritedOrigH = srcOpt?.orig_h ?? 0
+    const inheritedScale = srcOpt?.scale_px_per_cm ?? null
+    const inheritedZoom = srcOpt?.zoom ?? 1
     const supabase = createClient()
-    const { data: optRow } = await supabase.from('elevation_options')
-      .insert({ elevation_id: elevId, option: nextKey })
+    const insertPayload: Record<string, unknown> = { elevation_id: elevId, option: nextKey }
+    if (inheritedImagePath) {
+      insertPayload.image_path = inheritedImagePath
+      insertPayload.orig_w = inheritedOrigW
+      insertPayload.orig_h = inheritedOrigH
+      insertPayload.scale_px_per_cm = inheritedScale
+      insertPayload.zoom = inheritedZoom
+    }
+    if (inheritedMasks && inheritedMasks.length > 0) {
+      insertPayload.foreground_masks = inheritedMasks
+    }
+    const { data: optRow, error: insertError } = await supabase.from('elevation_options')
+      .insert(insertPayload)
       .select().single()
+    if (insertError) { console.error('addOption insert failed:', insertError); onStatus('Failed to add option'); return }
     if (!optRow) return
     setElevations(prev => prev.map(e => {
       if (e.id !== elevId) return e
       return {
         ...e,
         elevation_options: [...e.elevation_options, {
-          id: optRow.id, option: nextKey, imageUrl: null, imagePath: null,
-          orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1,
-          approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [],
+          id: optRow.id, option: nextKey,
+          imageUrl: srcOpt?.imageUrl ?? null,
+          imagePath: inheritedImagePath,
+          orig_w: inheritedOrigW, orig_h: inheritedOrigH,
+          scale_px_per_cm: inheritedScale, zoom: inheritedZoom,
+          approved: false, approved_at: null,
+          foreground_masks: inheritedMasks,
+          clientNotes: '', artworks: [],
         }],
       }
     }))

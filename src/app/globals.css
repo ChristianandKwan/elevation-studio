@@ -409,10 +409,10 @@ body {
 .elev-img { display: block; }
 .calib-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 .calib-svg.active { pointer-events: all; cursor: crosshair; }
-.calib-ruler-bg { stroke: rgba(255,255,255,.6); stroke-width: 4; }
-.calib-ruler { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 3; }
-.calib-tick { stroke: var(--accent); stroke-width: 2; }
-.calib-cap { fill: var(--accent); }
+.calib-ruler-bg { display: none; }
+.calib-ruler { stroke: #000; stroke-width: 2; stroke-dasharray: 6 3; }
+.calib-tick { stroke: #000; stroke-width: 2; }
+.calib-cap { fill: #000; }
 .aw-overlay {
   position: absolute; cursor: grab; border: 1.5px solid transparent; transition: border-color .1s, box-shadow .1s;
 }
@@ -432,9 +432,10 @@ body {
 }
 .aw-overlay.selected .aw-resize-hint { opacity: 1; }
 .calib-hint {
-  position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-  background: var(--accent); color: white; padding: 9px 20px; font-size: 12px;
+  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+  background: #000; color: #fff; padding: 9px 20px; font-size: 12px;
   pointer-events: none; white-space: nowrap; opacity: 0; transition: opacity .25s; z-index: 200;
+  border-radius: 4px;
 }
 .calib-hint.show { opacity: 1; }
 

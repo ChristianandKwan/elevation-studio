@@ -15,9 +15,11 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
 
   // Deselect on canvas background click (skip if a box-select drag just finished)
   function onWrapClick(e: React.MouseEvent) {
+    if (state.skewAdjustMode) return // handled by onWrapMouseDown
     if (studio.boxSelectedRef.current) return
     const target = e.target as HTMLElement
-    if (target.id === 'elev-img' || target === elevWrapRef.current) {
+    const isBackground = target.id === 'elev-img' || target.id === 'artwork-layer' || target === elevWrapRef.current
+    if (isBackground) {
       studio.selectArtwork(null)
     }
   }
@@ -46,6 +48,7 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
               ref={elevWrapRef}
               onMouseDown={studio.onWrapMouseDown}
               onClick={onWrapClick}
+              style={(state.skewDefMode || state.skewAdjustMode) ? { cursor: 'crosshair' } : undefined}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -113,7 +116,7 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
                 onMouseMove={studio.onCalibMouseMove}
                 onMouseUp={studio.onCalibMouseUp}
               >
-                <line id="rl-bg" className="calib-ruler-bg" display="none" />
+                <line id="rl-bg" style={{ display: 'none' }} />
                 <line id="rl"    className="calib-ruler"    display="none" />
                 <line id="rc1"   className="calib-tick"     display="none" />
                 <line id="rc2"   className="calib-tick"     display="none" />

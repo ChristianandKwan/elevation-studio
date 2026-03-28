@@ -61,7 +61,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
   })()
 
   return (
-    <div className="studio-sidebar">
+    <div className="studio-sidebar" onClick={e => { if (e.target === e.currentTarget) studio.selectArtwork(null) }}>
       {/* Step 1: Elevation */}
       <div className="sidebar-section">
         <div className="s-title">
@@ -133,6 +133,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   isSelected={state.selIds.has(art.id)}
                   hasScale={hasScale}
                   onSelect={() => studio.selectArtwork(art.id)}
+                  onDeselect={() => studio.selectArtwork(null)}
                   onToggleVis={() => studio.toggleVisibility(art.id)}
                   onDelete={() => onRequestDeleteArtworks(new Set([art.id]))}
                   onDimsChange={(w, h) => studio.updateArtworkDims(art.id, w, h)}
@@ -249,7 +250,17 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
             <span className={`step-badge${state.skewCorners ? ' done' : ''}`}>5</span>
             Perspective
           </div>
-          {state.skewDefMode ? (
+          {state.skewAdjustMode ? (
+            <div className="mask-draw-panel">
+              <div className="mask-draw-status">
+                Drag corners to adjust · Enter or click to confirm
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button className="btn btn-sm btn-full" onClick={studio.finaliseSkewAdjust}>Confirm</button>
+                <button className="btn btn-sm" onClick={studio.cancelSkewAdjust}>Cancel</button>
+              </div>
+            </div>
+          ) : state.skewDefMode ? (
             <div className="mask-draw-panel">
               <div className="mask-draw-status">
                 Click 4 corners: TL → TR → BR → BL
@@ -468,6 +479,7 @@ interface ArtworkItemProps {
   isSelected: boolean
   hasScale: boolean
   onSelect: () => void
+  onDeselect: () => void
   onToggleVis: () => void
   onDelete: () => void
   onDimsChange: (w: number, h: number) => void
@@ -478,7 +490,7 @@ interface ArtworkItemProps {
   onBrightnessApplyAll: (b: number) => void
 }
 
-function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -496,7 +508,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelet
   }
 
   return (
-    <div className={`aw-item${isSelected ? ' selected' : ''}`}>
+    <div className={`aw-item${isSelected ? ' selected' : ''}`} onClick={e => e.stopPropagation()}>
       <div className="aw-item-top" onClick={onSelect}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="aw-thumb" src={art.imageUrl ?? ''} alt={art.name} />
@@ -578,7 +590,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelet
             onClick={e => e.stopPropagation()}
             onChange={e => {
               const ft = e.target.value || null
-              onFrameChange(ft, ft ? (art.frameWidthMm ?? 40) : null)
+              onFrameChange(ft, ft ? (art.frameWidthMm ?? 20) : null)
             }}
           >
             <option value="">None</option>
@@ -591,11 +603,11 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelet
               <input
                 type="number" className="dim-input" style={{ width: 46, fontSize: 11 }}
                 disabled={!hasScale}
-                defaultValue={art.frameWidthMm ?? 40} min={5} max={200} step={5}
+                defaultValue={art.frameWidthMm ?? 20} min={5} max={200} step={5}
                 title="Frame width (mm)"
                 onClick={e => e.stopPropagation()}
                 onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFrameChange(art.frameType!, v) }}
-                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) onFrameChange(art.frameType!, v) } }}
+                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { onFrameChange(art.frameType!, v); onDeselect() } } }}
               />
               <label style={{ fontSize: 10, color: 'var(--mid)' }}>mm</label>
             </>

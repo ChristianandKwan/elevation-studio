@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import ClientPortal from '@/components/client/ClientPortal'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
 export default async function ClientPortalPage({ params }: Props) {
   const { token } = await params
   const supabase = await createClient()
+  const supabaseService = await createServiceClient()
 
   // Verify token
   const { data: tokenRow } = await supabase
@@ -39,7 +40,8 @@ export default async function ClientPortalPage({ params }: Props) {
     .single()
 
   // Fetch elevations with options and artworks
-  const { data: elevations } = await supabase
+  // Try full query (requires migrations 009 + 010). On failure, fall back to base query.
+  let { data: elevations, error: elevError } = await supabase
     .from('elevations')
     .select(`
       id, name, display_order, client_picked_option,
@@ -53,6 +55,24 @@ export default async function ClientPortalPage({ params }: Props) {
     `)
     .eq('project_id', projectId)
     .order('display_order', { ascending: true })
+
+  // If query failed (e.g. brightness / skew columns not yet migrated), fall back without them
+  if (elevError || !elevations) {
+    const { data: fallback } = await supabase
+      .from('elevations')
+      .select(`
+        id, name, display_order, client_picked_option,
+        elevation_options(
+          id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
+          artworks(
+            id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm
+          )
+        )
+      `)
+      .eq('project_id', projectId)
+      .order('display_order', { ascending: true })
+    elevations = fallback as typeof elevations
+  }
 
   // Generate signed URLs for all images
   const elevationsWithUrls = await Promise.all(
@@ -76,7 +96,7 @@ export default async function ClientPortalPage({ params }: Props) {
         }) => {
           let imageUrl: string | null = null
           if (opt.image_path) {
-            const { data } = await supabase.storage
+            const { data } = await supabaseService.storage
               .from('elevation-images')
               .createSignedUrl(opt.image_path, 259200) // 72hrs
             imageUrl = data?.signedUrl ?? null
@@ -86,7 +106,7 @@ export default async function ClientPortalPage({ params }: Props) {
             (opt.artworks ?? [])
               .sort((a, b) => a.display_order - b.display_order)
               .map(async (art) => {
-                const { data } = await supabase.storage
+                const { data } = await supabaseService.storage
                   .from('artwork-images')
                   .createSignedUrl(art.image_path, 259200) // 72hrs
                 return {
