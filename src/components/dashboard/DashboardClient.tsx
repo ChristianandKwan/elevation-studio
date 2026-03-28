@@ -44,6 +44,11 @@ interface Props {
 export default function DashboardClient({ profile, projects: initialProjects }: Props) {
   const router = useRouter()
   const [projects, setProjects] = useState(initialProjects)
+
+  // Sync active projects when server re-renders (e.g. after router.refresh())
+  useEffect(() => {
+    setProjects(initialProjects)
+  }, [initialProjects])
   const [showModal, setShowModal] = useState(false)
   const [newName, setNewName] = useState('')
   const [newClient, setNewClient] = useState('')
@@ -156,7 +161,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     await supabase.from('projects').update({ archived: false }).eq('id', id)
     setArchivedProjects(prev => prev.filter(p => p.id !== id))
     setMenuOpenId(null)
+    setView('active')
     showStatus('Project restored')
+    router.refresh()
   }
 
   async function deleteProject(id: string) {

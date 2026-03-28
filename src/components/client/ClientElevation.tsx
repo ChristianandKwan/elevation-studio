@@ -14,6 +14,8 @@ interface ClientArtwork {
   visible: boolean
   price: number
   priceIncludes: string
+  frameType?: string | null
+  frameWidthMm?: number | null
 }
 
 interface ClientOption {
@@ -34,13 +36,13 @@ interface ClientOption {
 interface Props {
   optData: ClientOption
   elevationName: string
-  activeOpt: 'A' | 'B'
+  activeOpt: string
   projectId: string
   rerenderKey: number
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
   /** Whether the client has already picked an option for this elevation */
   isPicked: boolean
-  onPick: (opt: 'A' | 'B') => void
+  onPick: (opt: string) => void
   onArtworkMove: (artId: string, xF: number, yF: number) => void
   onToggleVisibility: (artId: string) => void
   onNotesChange: (notes: string) => void
@@ -53,6 +55,7 @@ export default function ClientElevation({
   onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
   const [showApproveWarning, setShowApproveWarning] = useState(false)
+  const [zoom, setZoom] = useState(1.0)
 
   const visibleArts = optData.artworks.filter(a => a.visible)
   const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
@@ -69,13 +72,28 @@ export default function ClientElevation({
   return (
     <div className="client-main">
       {/* Canvas */}
-      <div className="client-canvas-area">
+      <div className="client-canvas-area" style={{ position: 'relative' }}>
         <ClientCanvas
           optData={optData}
           rerenderKey={rerenderKey}
           locked={optData.approved || !isPicked}
           onArtworkMove={onArtworkMove}
+          zoom={zoom}
         />
+        {/* Zoom controls */}
+        <div className="client-zoom-controls">
+          <button
+            className="client-zoom-btn"
+            onClick={() => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}
+            title="Zoom out"
+          >−</button>
+          <span className="client-zoom-label">{Math.round(zoom * 100)}%</span>
+          <button
+            className="client-zoom-btn"
+            onClick={() => setZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
+            title="Zoom in"
+          >+</button>
+        </div>
       </div>
 
       {/* Sidebar */}
@@ -265,11 +283,13 @@ function ClientCanvas({
   rerenderKey,
   locked,
   onArtworkMove,
+  zoom,
 }: {
   optData: ClientOption
   rerenderKey: number
   locked: boolean
   onArtworkMove: (artId: string, xF: number, yF: number) => void
+  zoom: number
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const elevWrapRef = useRef<HTMLDivElement>(null)
@@ -296,8 +316,8 @@ function ClientCanvas({
         wrap.style.height = img.naturalHeight * s + 'px'
       }
 
-      if (!optData.scale_px_per_cm) return
-      const sc = optData.scale_px_per_cm * s
+      // sc is px-per-cm at display scale; if not calibrated, fall back to a default
+      const sc = optData.scale_px_per_cm ? optData.scale_px_per_cm * s : null
 
       optData.artworks.forEach(art => {
         if (!art.visible || !art.imageUrl) return
@@ -306,8 +326,19 @@ function ClientCanvas({
         aw.dataset.id = art.id
         aw.style.left = art.xF * img.naturalWidth * s + 'px'
         aw.style.top = art.yF * img.naturalHeight * s + 'px'
-        aw.style.width = art.wCm * sc + 'px'
-        aw.style.height = art.hCm * sc + 'px'
+        aw.style.width = (sc ? art.wCm * sc : 80) + 'px'
+        aw.style.height = (sc ? art.hCm * sc : 60) + 'px'
+
+        // Frame border
+        if (art.frameType && art.frameWidthMm && sc) {
+          const framePx = Math.round((art.frameWidthMm / 10) * sc)
+          const frameColor: Record<string, string> = {
+            black: '#1a1a1a', white: '#f0ede8',
+            'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
+          }
+          aw.style.border = `${framePx}px solid ${frameColor[art.frameType] ?? '#1a1a1a'}`
+          aw.style.boxSizing = 'content-box'
+        }
 
         const ai = document.createElement('img')
         ai.src = art.imageUrl!
@@ -408,7 +439,11 @@ function ClientCanvas({
 
   return (
     <div className="client-canvas-inner" ref={canvasRef}>
-      <div className="client-elev-wrap" ref={elevWrapRef}>
+      <div
+        className="client-elev-wrap"
+        ref={elevWrapRef}
+        style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.15s ease' }}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="client-elev-img" src={optData.imageUrl!} alt="elevation" draggable={false} />
         <svg id="client-fg-svg" className="fg-svg" style={{ display: 'none' }}>

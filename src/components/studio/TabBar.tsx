@@ -2,27 +2,41 @@
 
 import { useState } from 'react'
 
-interface Elevation {
+interface ElevationTab {
   id: string
   name: string
+  options: Array<{ key: string; hasArtworks: boolean }>
 }
 
 interface Props {
-  elevations: Elevation[]
+  elevations: ElevationTab[]
   activeElevId: string
   activeOption: string
   onSwitch: (elevId: string, option: string) => void
   onAddElevation: (name: string) => void
   onRenameElevation: (elevId: string, newName: string) => void
   onDeleteElevation: (elevId: string) => void
+  onAddOption: (elevId: string) => void
+  onDeleteOption: (elevId: string, optKey: string) => void
 }
 
-export default function TabBar({ elevations, activeElevId, activeOption, onSwitch, onAddElevation, onRenameElevation, onDeleteElevation }: Props) {
+function optionTagClass(key: string) {
+  if (key === 'A') return 'tag tag-option-a'
+  if (key === 'B') return 'tag tag-option-b'
+  return 'tag tag-option-other'
+}
+
+export default function TabBar({
+  elevations, activeElevId, activeOption, onSwitch,
+  onAddElevation, onRenameElevation, onDeleteElevation,
+  onAddOption, onDeleteOption,
+}: Props) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [newName, setNewName] = useState('')
   const [renameElevId, setRenameElevId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const [confirmDeleteElevId, setConfirmDeleteElevId] = useState<string | null>(null)
+  const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; hasArtworks: boolean } | null>(null)
 
   function handleAdd() {
     const name = newName.trim() || 'New Elevation'
@@ -31,7 +45,7 @@ export default function TabBar({ elevations, activeElevId, activeOption, onSwitc
     setShowAddModal(false)
   }
 
-  function openRename(elev: Elevation) {
+  function openRename(elev: ElevationTab) {
     setRenameElevId(elev.id)
     setRenameName(elev.name)
   }
@@ -45,41 +59,75 @@ export default function TabBar({ elevations, activeElevId, activeOption, onSwitc
   return (
     <>
       <div className="studio-tab-bar">
-        {elevations.map((elev, i) => (
-          <div key={elev.id} className="studio-tab-group">
-            {i > 0 && <div className="studio-tab-divider" />}
-            <button
-              className={`studio-tab${activeElevId === elev.id && activeOption === 'A' ? ' active' : ''}`}
-              onClick={() => onSwitch(elev.id, 'A')}
-            >
-              <span className="tag tag-option-a" style={{ marginRight: 5 }}>A</span>
-              {elev.name}
-            </button>
-            <button
-              className={`studio-tab${activeElevId === elev.id && activeOption === 'B' ? ' active' : ''}`}
-              onClick={() => onSwitch(elev.id, 'B')}
-            >
-              <span className="tag tag-option-b" style={{ marginRight: 5 }}>B</span>
-              {elev.name}
-            </button>
-            <button
-              className="studio-tab-rename-btn"
-              title="Rename elevation"
-              onClick={() => openRename(elev)}
-            >
-              <PencilIcon />
-            </button>
-            {elevations.length > 1 && (
+        {elevations.map((elev, i) => {
+          const multiOption = elev.options.length > 1
+          return (
+            <div key={elev.id} className="studio-tab-group">
+              {i > 0 && <div className="studio-tab-divider" />}
+
+              {multiOption ? (
+                // Multiple options: render a tab per option
+                elev.options.map(opt => (
+                  <button
+                    key={opt.key}
+                    className={`studio-tab${activeElevId === elev.id && activeOption === opt.key ? ' active' : ''}`}
+                    onClick={() => onSwitch(elev.id, opt.key)}
+                  >
+                    <span className={optionTagClass(opt.key)} style={{ marginRight: 5 }}>{opt.key}</span>
+                    {elev.name}
+                    {elev.options.length > 1 && (
+                      <span
+                        className="studio-tab-del-opt"
+                        title={`Remove option ${opt.key}`}
+                        onClick={e => {
+                          e.stopPropagation()
+                          setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, hasArtworks: opt.hasArtworks })
+                        }}
+                      >
+                        ×
+                      </span>
+                    )}
+                  </button>
+                ))
+              ) : (
+                // Single option: just elevation name, no letter badge
+                <button
+                  className={`studio-tab${activeElevId === elev.id ? ' active' : ''}`}
+                  onClick={() => onSwitch(elev.id, elev.options[0]?.key ?? 'A')}
+                >
+                  {elev.name}
+                </button>
+              )}
+
+              {/* Add option button */}
+              <button
+                className="studio-tab-add-option"
+                title="Add option"
+                onClick={() => onAddOption(elev.id)}
+              >
+                +
+              </button>
+
+              {/* Rename / delete elevation controls */}
               <button
                 className="studio-tab-rename-btn"
-                title="Delete elevation"
-                onClick={() => setConfirmDeleteElevId(elev.id)}
+                title="Rename elevation"
+                onClick={() => openRename(elev)}
               >
-                <TrashIcon />
+                <PencilIcon />
               </button>
-            )}
-          </div>
-        ))}
+              {elevations.length > 1 && (
+                <button
+                  className="studio-tab-rename-btn"
+                  title="Delete elevation"
+                  onClick={() => setConfirmDeleteElevId(elev.id)}
+                >
+                  <TrashIcon />
+                </button>
+              )}
+            </div>
+          )
+        })}
         <button className="studio-tab-add" onClick={() => setShowAddModal(true)}>
           + Add Elevation
         </button>
@@ -127,13 +175,7 @@ export default function TabBar({ elevations, activeElevId, activeOption, onSwitc
             </div>
             <div className="modal-footer">
               <button className="btn" onClick={() => setRenameElevId(null)}>Cancel</button>
-              <button
-                className="btn btn-primary"
-                onClick={handleRename}
-                disabled={!renameName.trim()}
-              >
-                Save
-              </button>
+              <button className="btn btn-primary" onClick={handleRename} disabled={!renameName.trim()}>Save</button>
             </div>
           </div>
         </div>
@@ -149,11 +191,32 @@ export default function TabBar({ elevations, activeElevId, activeOption, onSwitc
             </div>
             <div className="modal-footer">
               <button className="btn" onClick={() => setConfirmDeleteElevId(null)}>Cancel</button>
-              <button
-                className="btn btn-danger"
-                onClick={() => { onDeleteElevation(confirmDeleteElevId); setConfirmDeleteElevId(null) }}
-              >
+              <button className="btn btn-danger" onClick={() => { onDeleteElevation(confirmDeleteElevId); setConfirmDeleteElevId(null) }}>
                 Delete Elevation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Option confirmation modal */}
+      {confirmDeleteOpt && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteOpt(null) }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Remove Option {confirmDeleteOpt.optKey}?</div>
+            <div className="modal-sub" style={{ color: 'var(--red)' }}>
+              {confirmDeleteOpt.hasArtworks
+                ? 'This option has artworks. Removing it will permanently delete them and their images.'
+                : 'This will permanently remove this option.'}
+              {' '}This cannot be undone.
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setConfirmDeleteOpt(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => {
+                onDeleteOption(confirmDeleteOpt.elevId, confirmDeleteOpt.optKey)
+                setConfirmDeleteOpt(null)
+              }}>
+                Remove Option
               </button>
             </div>
           </div>

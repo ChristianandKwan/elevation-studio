@@ -22,6 +22,9 @@ export interface Artwork {
   visible: boolean
   price: number
   priceIncludes: PriceIncludes
+  /** Optional frame: type and width in mm (requires scale to be set) */
+  frameType?: string | null
+  frameWidthMm?: number | null
   /** Loaded Image element for canvas rendering */
   img?: HTMLImageElement | null
 }

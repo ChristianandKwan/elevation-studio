@@ -37,23 +37,25 @@ interface DbElevation {
 }
 
 interface Props {
-  project: { id: string; name: string; client_name: string; status: string; consultantName: string }
+  project: { id: string; name: string; client_name: string; status: string; consultantName: string; budget: number | null }
   elevations: DbElevation[]
   existingToken: string | null
   activityLogs: ActivityLog[]
 }
-
-type OptionKey = 'A' | 'B'
 
 export default function StudioScreen({ project, elevations: initialElevations, existingToken, activityLogs }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
   const [activeElevId, setActiveElevId] = useState(initialElevations[0]?.id ?? '')
-  const [activeOption, setActiveOption] = useState<OptionKey>('A')
+  const [activeOption, setActiveOption] = useState<string>(() => {
+    const firstElev = initialElevations[0]
+    return firstElev?.elevation_options[0]?.option ?? 'A'
+  })
   const [shareToken, setShareToken] = useState(existingToken)
   const [projectStatus, setProjectStatus] = useState(project.status)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
+  const [budget, setBudget] = useState<number | null>(project.budget)
 
   function onStatus(msg: string) {
     setToast(msg)
@@ -63,11 +65,97 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
   const optionId = activeOptData?.id ?? ''
-  const otherOptionKey = activeOption === 'A' ? 'B' : 'A'
-  const otherOptData = activeElev?.elevation_options.find(o => o.option === otherOptionKey)
+  // "other option" = first option that isn't the active one (for client notes display)
+  const otherOptData = activeElev?.elevation_options.find(o => o.option !== activeOption)
+  const otherOptionKey = otherOptData?.option ?? ''
   const otherOptionNotes = otherOptData?.clientNotes ?? ''
 
-  const studio = useStudio({ projectId: project.id, optionId, onStatus, projectName: project.name, elevationName: activeElev?.name ?? '', optionKey: activeOption })
+  const studio = useStudio({
+    projectId: project.id,
+    optionId,
+    onStatus,
+    projectName: project.name,
+    elevationName: activeElev?.name ?? '',
+    optionKey: activeOption,
+    onElevationUploaded: ({ imagePath, imageUrl, origW, origH, zoom }) => {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== activeOption) return o
+            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH, zoom }
+          }),
+        }
+      }))
+    },
+    onScaleSet: (scalePxPerCm) => {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== activeOption) return o
+            return { ...o, scale_px_per_cm: scalePxPerCm }
+          }),
+        }
+      }))
+    },
+    onArtworksAdded: (newArtworks) => {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== activeOption) return o
+            return { ...o, artworks: [...o.artworks, ...newArtworks] }
+          }),
+        }
+      }))
+    },
+    onArtworkDeleted: (id) => {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== activeOption) return o
+            return { ...o, artworks: o.artworks.filter(a => a.id !== id) }
+          }),
+        }
+      }))
+    },
+    onForegroundSaved: (masks) => {
+      // If sibling options share the same elevation image, mirror the foreground masks to them
+      setElevations(prev => {
+        const elev = prev.find(e => e.id === activeElevId)
+        if (!elev) return prev
+        const currentOpt = elev.elevation_options.find(o => o.option === activeOption)
+        if (!currentOpt?.imagePath) return prev
+        const siblingIds = elev.elevation_options
+          .filter(o => o.option !== activeOption && o.imagePath === currentOpt.imagePath)
+          .map(o => o.id)
+        if (siblingIds.length === 0) return prev
+        // Persist to DB
+        const supabase = createClient()
+        supabase.from('elevation_options')
+          .update({ foreground_masks: masks.length > 0 ? masks : null })
+          .in('id', siblingIds)
+          .then(() => {})
+        // Update local state
+        return prev.map(e => {
+          if (e.id !== activeElevId) return e
+          return {
+            ...e,
+            elevation_options: e.elevation_options.map(o => {
+              if (!siblingIds.includes(o.id)) return o
+              return { ...o, foreground_masks: masks.length > 0 ? masks : null }
+            }),
+          }
+        })
+      })
+    },
+  })
 
   // When we call loadOption directly in handleSwitch we skip the effect for that one render
   const skipNextLoadRef = useRef(false)
@@ -130,8 +218,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [studio])
 
   async function handleSwitch(elevId: string, opt: string) {
-    // Before switching: sync current artwork positions from studio state back into elevations,
-    // so if the user returns to this option the positions are up to date.
+    // Before switching: sync current artwork positions from studio state back into elevations
     const currentArts = studio.state.artworks
     if (currentArts.length > 0 && activeElevId && activeOption) {
       setElevations(prev => prev.map(e => {
@@ -152,50 +239,46 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       }))
     }
 
-    // If switching to Option B and B has no image but A does, copy A's image data
-    if (opt === 'B') {
-      const elev = elevations.find(e => e.id === elevId)
-      const optA = elev?.elevation_options.find(o => o.option === 'A')
-      const optB = elev?.elevation_options.find(o => o.option === 'B')
-      if (optA?.imagePath && !optB?.imagePath && optB?.id) {
-        const supabase = createClient()
-        await supabase.from('elevation_options').update({
-          image_path: optA.imagePath,
-          orig_w: optA.orig_w,
-          orig_h: optA.orig_h,
-          scale_px_per_cm: optA.scale_px_per_cm,
-          zoom: optA.zoom,
-        }).eq('id', optB.id)
-        // Update local state
-        setElevations(prev => prev.map(e => {
-          if (e.id !== elevId) return e
-          return {
-            ...e,
-            elevation_options: e.elevation_options.map(o => {
-              if (o.option !== 'B') return o
-              return { ...o, imagePath: optA.imagePath, imageUrl: optA.imageUrl, orig_w: optA.orig_w, orig_h: optA.orig_h, scale_px_per_cm: optA.scale_px_per_cm, zoom: optA.zoom }
-            }),
-          }
-        }))
-        // Load directly — don't rely on the effect, which may fire before setElevations has taken effect
-        skipNextLoadRef.current = true
-        studio.loadOption({
-          imageUrl: optA.imageUrl,
-          imagePath: optA.imagePath,
-          origW: optA.orig_w,
-          origH: optA.orig_h,
-          scalePxPerCm: optA.scale_px_per_cm,
-          zoom: optA.zoom,
-          artworks: optB.artworks ?? [],
-          foregroundMasks: (optB.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
-        })
-        setActiveElevId(elevId)
-        setActiveOption(opt as OptionKey)
-        return
-      }
+    // If target option has no image but another option does, copy from the first with an image
+    const elev = elevations.find(e => e.id === elevId)
+    const targetOpt = elev?.elevation_options.find(o => o.option === opt)
+    const sourceOpt = elev?.elevation_options.find(o => o.option !== opt && o.imagePath)
+    if (targetOpt && !targetOpt.imagePath && sourceOpt) {
+      const supabase = createClient()
+      await supabase.from('elevation_options').update({
+        image_path: sourceOpt.imagePath,
+        orig_w: sourceOpt.orig_w,
+        orig_h: sourceOpt.orig_h,
+        scale_px_per_cm: sourceOpt.scale_px_per_cm,
+        zoom: sourceOpt.zoom,
+      }).eq('id', targetOpt.id)
+      setElevations(prev => prev.map(e => {
+        if (e.id !== elevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== opt) return o
+            return { ...o, imagePath: sourceOpt.imagePath, imageUrl: sourceOpt.imageUrl, orig_w: sourceOpt.orig_w, orig_h: sourceOpt.orig_h, scale_px_per_cm: sourceOpt.scale_px_per_cm, zoom: sourceOpt.zoom }
+          }),
+        }
+      }))
+      skipNextLoadRef.current = true
+      studio.loadOption({
+        imageUrl: sourceOpt.imageUrl,
+        imagePath: sourceOpt.imagePath,
+        origW: sourceOpt.orig_w,
+        origH: sourceOpt.orig_h,
+        scalePxPerCm: sourceOpt.scale_px_per_cm,
+        zoom: sourceOpt.zoom,
+        artworks: targetOpt.artworks ?? [],
+        foregroundMasks: (targetOpt.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
+      })
+      setActiveElevId(elevId)
+      setActiveOption(opt)
+      return
     }
     setActiveElevId(elevId)
-    setActiveOption(opt as OptionKey)
+    setActiveOption(opt)
   }
 
   function requestDeleteArtworks(ids: Set<string>) {
@@ -246,7 +329,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       const remaining = prev.filter(e => e.id !== elevId)
       if (activeElevId === elevId && remaining.length > 0) {
         setActiveElevId(remaining[0].id)
-        setActiveOption('A')
+        setActiveOption(remaining[0].elevation_options[0]?.option ?? 'A')
       }
       return remaining
     })
@@ -269,30 +352,69 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     }).select().single()
     if (!elev) return
 
-    await supabase.from('elevation_options').insert([
-      { elevation_id: elev.id, option: 'A' },
-      { elevation_id: elev.id, option: 'B' },
-    ])
-
-    // Fetch real option IDs immediately so artwork uploads work right away
-    const { data: opts } = await supabase
-      .from('elevation_options')
-      .select('id, option')
-      .eq('elevation_id', elev.id)
-
-    const optA = opts?.find(o => o.option === 'A')
-    const optB = opts?.find(o => o.option === 'B')
+    const { data: optRow } = await supabase.from('elevation_options')
+      .insert({ elevation_id: elev.id, option: 'A' })
+      .select().single()
 
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null,
       elevation_options: [
-        { id: optA?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
-        { id: optB?.id ?? '', option: 'B', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
+        { id: optRow?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
     setActiveElevId(elev.id)
     setActiveOption('A')
+  }
+
+  async function addOption(elevId: string) {
+    const elev = elevations.find(e => e.id === elevId)
+    if (!elev) return
+    const usedKeys = new Set(elev.elevation_options.map(o => o.option))
+    const nextKey = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(l => !usedKeys.has(l)) ?? 'X'
+    const supabase = createClient()
+    const { data: optRow } = await supabase.from('elevation_options')
+      .insert({ elevation_id: elevId, option: nextKey })
+      .select().single()
+    if (!optRow) return
+    setElevations(prev => prev.map(e => {
+      if (e.id !== elevId) return e
+      return {
+        ...e,
+        elevation_options: [...e.elevation_options, {
+          id: optRow.id, option: nextKey, imageUrl: null, imagePath: null,
+          orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1,
+          approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [],
+        }],
+      }
+    }))
+    setActiveElevId(elevId)
+    setActiveOption(nextKey)
+    onStatus(`Option ${nextKey} added`)
+  }
+
+  async function deleteOption(elevId: string, optKey: string) {
+    const elev = elevations.find(e => e.id === elevId)
+    const opt = elev?.elevation_options.find(o => o.option === optKey)
+    if (!opt || !elev) return
+    const supabase = createClient()
+    // Delete artwork images
+    const artPaths = opt.artworks.map(a => (a as any).imagePath).filter(Boolean) as string[]
+    if (artPaths.length) await supabase.storage.from('artwork-images').remove(artPaths)
+    // Delete elevation image
+    if (opt.imagePath) await supabase.storage.from('elevation-images').remove([opt.imagePath])
+    // Delete option row (DB cascades to artworks)
+    await supabase.from('elevation_options').delete().eq('id', opt.id)
+    const remaining = elev.elevation_options.filter(o => o.option !== optKey)
+    setElevations(prev => prev.map(e => {
+      if (e.id !== elevId) return e
+      return { ...e, elevation_options: remaining }
+    }))
+    // Switch away if deleting the active option
+    if (activeElevId === elevId && activeOption === optKey && remaining.length > 0) {
+      setActiveOption(remaining[0].option)
+    }
+    onStatus(`Option ${optKey} removed`)
   }
 
   async function handleUnapprove() {
@@ -333,6 +455,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     }
 
     return token
+  }
+
+  async function updateBudget(newBudget: number | null) {
+    const supabase = createClient()
+    await supabase.from('projects').update({ budget: newBudget }).eq('id', project.id)
+    setBudget(newBudget)
+    onStatus(newBudget ? 'Budget saved' : 'Budget cleared')
   }
 
   async function handleConsultantUnapprove() {
@@ -406,13 +535,19 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
       {/* Tab bar */}
       <TabBar
-        elevations={elevations}
+        elevations={elevations.map(e => ({
+          id: e.id,
+          name: e.name,
+          options: e.elevation_options.map(o => ({ key: o.option, hasArtworks: o.artworks.length > 0 })),
+        }))}
         activeElevId={activeElevId}
         activeOption={activeOption}
         onSwitch={handleSwitch}
         onAddElevation={addElevation}
         onRenameElevation={renameElevation}
         onDeleteElevation={deleteElevation}
+        onAddOption={addOption}
+        onDeleteOption={deleteOption}
       />
 
       {/* Main */}
@@ -433,6 +568,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             approvedAt: activeOptData?.approved_at ?? null,
           }}
           onUnapprove={handleConsultantUnapprove}
+          budget={budget}
+          onBudgetChange={updateBudget}
         />
         <StudioCanvas studio={studio} onStatus={onStatus} />
       </div>

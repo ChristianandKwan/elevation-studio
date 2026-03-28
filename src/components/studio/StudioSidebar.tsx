@@ -23,12 +23,16 @@ interface Props {
     approvedAt: string | null
   }
   onUnapprove?: () => void
+  budget?: number | null
+  onBudgetChange?: (budget: number | null) => void
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [editingBudget, setEditingBudget] = useState(false)
+  const [budgetInput, setBudgetInput] = useState(budget != null ? String(budget) : '')
 
   const hasElev = !!state.elev
   const hasScale = !!state.scale
@@ -127,12 +131,14 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   key={art.id}
                   art={art}
                   isSelected={state.selIds.has(art.id)}
+                  hasScale={hasScale}
                   onSelect={() => studio.selectArtwork(art.id)}
                   onToggleVis={() => studio.toggleVisibility(art.id)}
                   onDelete={() => onRequestDeleteArtworks(new Set([art.id]))}
                   onDimsChange={(w, h) => studio.updateArtworkDims(art.id, w, h)}
                   onPriceChange={(p) => studio.updateArtworkPrice(art.id, p)}
                   onNameChange={(n) => studio.updateArtworkName(art.id, n)}
+                  onFrameChange={(ft, fw) => studio.updateArtworkFrame(art.id, ft, fw)}
                 />
               ))}
             </div>
@@ -306,6 +312,51 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
             <span>Elevation Total</span>
             <span className="cost-row-value">{formatPrice(elevationTotal)}</span>
           </div>
+          {/* Budget line */}
+          {budget != null && elevationTotal > 0 && (
+            <div className="cost-row" style={{ marginTop: 4, opacity: 0.75 }}>
+              <span>% of Budget</span>
+              <span className="cost-row-value">{Math.round((elevationTotal / budget) * 100)}%</span>
+            </div>
+          )}
+          {/* Budget edit */}
+          {onBudgetChange && (
+            editingBudget ? (
+              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                <input
+                  className="field-input"
+                  style={{ flex: 1, fontSize: 11, padding: '4px 7px', height: 26 }}
+                  type="number"
+                  min="0"
+                  placeholder="Budget (£)"
+                  value={budgetInput}
+                  onChange={e => setBudgetInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const v = parseFloat(budgetInput)
+                      onBudgetChange(isNaN(v) || v <= 0 ? null : v)
+                      setEditingBudget(false)
+                    }
+                    if (e.key === 'Escape') setEditingBudget(false)
+                  }}
+                  autoFocus
+                />
+                <button className="btn btn-sm btn-primary" style={{ fontSize: 11, padding: '0 8px', height: 26 }} onClick={() => {
+                  const v = parseFloat(budgetInput)
+                  onBudgetChange(isNaN(v) || v <= 0 ? null : v)
+                  setEditingBudget(false)
+                }}>Save</button>
+              </div>
+            ) : (
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ marginTop: 6, fontSize: 10.5, padding: '2px 6px' }}
+                onClick={() => { setBudgetInput(budget != null ? String(budget) : ''); setEditingBudget(true) }}
+              >
+                {budget != null ? `Budget: ${formatPrice(budget)} · Edit` : '+ Set Project Budget'}
+              </button>
+            )
+          )}
           {hasMixedPricing && (
             <div style={{ marginTop: 8, padding: '7px 9px', background: '#FFF8F0', border: '1px solid rgba(139,111,71,.3)', fontSize: 10.5, color: 'var(--accent)', lineHeight: 1.5 }}>
               ⚠ Mixed pricing — some artworks include framing &amp; installation, others don't.
@@ -347,18 +398,25 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
   )
 }
 
+const FRAME_COLORS: Record<string, string> = {
+  black: '#1a1a1a', white: '#f0ede8',
+  'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
+}
+
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null }
   isSelected: boolean
+  hasScale: boolean
   onSelect: () => void
   onToggleVis: () => void
   onDelete: () => void
   onDimsChange: (w: number, h: number) => void
   onPriceChange: (p: number) => void
   onNameChange: (name: string) => void
+  onFrameChange: (frameType: string | null, frameWidthMm: number | null) => void
 }
 
-function ArtworkItem({ art, isSelected, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, hasScale, onSelect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -445,6 +503,40 @@ function ArtworkItem({ art, isSelected, onSelect, onToggleVis, onDelete, onDimsC
           onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
           onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
         />
+        {/* Frame controls */}
+        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, opacity: hasScale ? 1 : 0.45 }}>
+          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>Frame</label>
+          <select
+            className="dim-input"
+            style={{ flex: 1, height: 24, fontSize: 11 }}
+            disabled={!hasScale}
+            value={art.frameType ?? ''}
+            onClick={e => e.stopPropagation()}
+            onChange={e => {
+              const ft = e.target.value || null
+              onFrameChange(ft, ft ? (art.frameWidthMm ?? 40) : null)
+            }}
+          >
+            <option value="">None</option>
+            {Object.keys(FRAME_COLORS).map(k => (
+              <option key={k} value={k}>{k.replace('-', ' ')}</option>
+            ))}
+          </select>
+          {art.frameType && (
+            <>
+              <input
+                type="number" className="dim-input" style={{ width: 46, fontSize: 11 }}
+                disabled={!hasScale}
+                defaultValue={art.frameWidthMm ?? 40} min={5} max={200} step={5}
+                title="Frame width (mm)"
+                onClick={e => e.stopPropagation()}
+                onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFrameChange(art.frameType!, v) }}
+                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) onFrameChange(art.frameType!, v) } }}
+              />
+              <label style={{ fontSize: 10, color: 'var(--mid)' }}>mm</label>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

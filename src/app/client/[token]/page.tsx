@@ -46,7 +46,7 @@ export default async function ClientPortalPage({ params }: Props) {
       elevation_options(
         id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
         artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order
+          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm
         )
       )
     `)
@@ -91,6 +91,8 @@ export default async function ClientPortalPage({ params }: Props) {
                   wCm: art.w_cm,
                   hCm: art.h_cm,
                   priceIncludes: art.price_includes,
+                  frameType: (art as any).frame_type ?? null,
+                  frameWidthMm: (art as any).frame_width_mm ?? null,
                 }
               })
           )

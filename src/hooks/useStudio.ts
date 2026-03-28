@@ -39,9 +39,19 @@ interface UseStudioOptions {
   projectName?: string
   elevationName?: string
   optionKey?: string
+  /** Called when an elevation image is successfully uploaded for the current option */
+  onElevationUploaded?: (data: { imagePath: string; imageUrl: string; origW: number; origH: number; zoom: number }) => void
+  /** Called when the scale calibration is confirmed for the current option */
+  onScaleSet?: (scalePxPerCm: number) => void
+  /** Called when artworks are successfully added to the current option */
+  onArtworksAdded?: (artworks: Array<Artwork & { imageUrl: string | null }>) => void
+  /** Called when an artwork is deleted from the current option */
+  onArtworkDeleted?: (id: string) => void
+  /** Called after foreground masks are persisted, so sibling options with the same elevation image can be synced */
+  onForegroundSaved?: (masks: ForegroundMasks) => void
 }
 
-export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '' }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -65,6 +75,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   elevationNameRef.current = elevationName
   const optionKeyRef = useRef(optionKey)
   optionKeyRef.current = optionKey
+
+  // Keep callbacks in refs so async handlers always call the latest version
+  const onElevationUploadedRef = useRef(onElevationUploaded)
+  onElevationUploadedRef.current = onElevationUploaded
+  const onScaleSetRef = useRef(onScaleSet)
+  onScaleSetRef.current = onScaleSet
+  const onArtworksAddedRef = useRef(onArtworksAdded)
+  onArtworksAddedRef.current = onArtworksAdded
+  const onArtworkDeletedRef = useRef(onArtworkDeleted)
+  onArtworkDeletedRef.current = onArtworkDeleted
+  const onForegroundSavedRef = useRef(onForegroundSaved)
+  onForegroundSavedRef.current = onForegroundSaved
 
   // Refs for imperative canvas DOM (mirrors prototype)
   const elevWrapRef = useRef<HTMLDivElement>(null)
@@ -342,6 +364,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const rh = document.createElement('div')
       rh.className = 'aw-resize-hint'
       rh.title = 'Drag to resize'
+
+      // Frame border
+      if (art.frameType && art.frameWidthMm && sc) {
+        const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
+        const frameColor: Record<string, string> = {
+          black: '#1a1a1a', white: '#f0ede8',
+          'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
+        }
+        div.style.border = `${framePx}px solid ${frameColor[art.frameType] ?? '#1a1a1a'}`
+        div.style.boxSizing = 'content-box'
+      }
 
       div.appendChild(img)
       div.appendChild(tag)
@@ -674,6 +707,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         setZoomFit({ elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW })
       })
 
+      onElevationUploadedRef.current?.({ imagePath: path, imageUrl: url, origW: img.naturalWidth, origH: img.naturalHeight, zoom: 1 })
       onStatus('Elevation loaded — draw a scale line to continue')
     }
     img.src = url
@@ -713,6 +747,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     setShowScaleModal(false)
     onStatus(`Scale set — 1 cm = ${origPxPerCm.toFixed(2)} px`)
     hideCalibLine()
+    onScaleSetRef.current?.(origPxPerCm)
 
     // Persist
     const supabase = createClient()
@@ -985,6 +1020,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         visible: true,
         price: meta.price,
         priceIncludes: meta.priceIncludes,
+        frameType: null,
+        frameWidthMm: null,
         img,
       }
 
@@ -1000,6 +1037,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       return { ...s, artworks: newArts }
     })
+    onArtworksAddedRef.current?.(placed)
 
     setShowArtModal(false)
     onStatus(placed.length === 1 ? `Artwork placed — drag to position` : `${placed.length} artworks placed`)
@@ -1031,9 +1069,11 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const supabase = createClient()
     try {
       // Update option foreground masks (zoom saved separately via persistZoom)
+      const masksValue = s.masks.length > 0 ? s.masks : null
       await supabase.from('elevation_options').update({
-        foreground_masks: s.masks.length > 0 ? s.masks : null,
+        foreground_masks: masksValue,
       }).eq('id', optionId)
+      onForegroundSavedRef.current?.(s.masks)
       // Update each artwork position/dims
       await Promise.all(
         s.artworks.map(art =>
@@ -1068,6 +1108,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       renderArtworksDOM(newArts, s.elev, s.scale, newSelIds)
       return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
     })
+    onArtworkDeletedRef.current?.(artId)
   }
 
   // ─── TOGGLE VISIBILITY ────────────────────────────────────────────
@@ -1096,6 +1137,16 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, price } : a)
       debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  function updateArtworkFrame(artId: string, frameType: string | null, frameWidthMm: number | null) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, frameType, frameWidthMm } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      const supabase = createClient()
+      supabase.from('artworks').update({ frame_type: frameType, frame_width_mm: frameWidthMm }).eq('id', artId).then(() => {})
       return { ...s, artworks: newArts }
     })
   }
@@ -1270,6 +1321,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkDims,
     updateArtworkPrice,
     updateArtworkName,
+    updateArtworkFrame,
     selectArtwork,
     renderArtworksDOM,
     exportPng,

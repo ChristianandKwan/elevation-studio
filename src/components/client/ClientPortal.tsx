@@ -59,27 +59,21 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   const [toast, setToast] = useState('')
 
   // Track which option the client has picked per elevation (persisted to DB)
-  const [pickedOptions, setPickedOptions] = useState<Record<string, 'A' | 'B' | null>>(() => {
-    const s: Record<string, 'A' | 'B' | null> = {}
-    elevations.forEach(e => { s[e.id] = (e.clientPickedOption as 'A' | 'B' | null) ?? null })
+  const [pickedOptions, setPickedOptions] = useState<Record<string, string | null>>(() => {
+    const s: Record<string, string | null> = {}
+    elevations.forEach(e => { s[e.id] = e.clientPickedOption ?? null })
     return s
   })
 
-  // Whether an elevation needs explicit picking (both A and B have images)
+  // Whether an elevation needs explicit picking (>1 option has an image)
   function needsPick(elev: ClientElevationData): boolean {
-    const hasA = elev.elevation_options.some(o => o.option === 'A' && o.imageUrl)
-    const hasB = elev.elevation_options.some(o => o.option === 'B' && o.imageUrl)
-    return hasA && hasB
+    return elev.elevation_options.filter(o => o.imageUrl).length > 1
   }
 
   // Resolve the active option for an elevation (respecting pick state)
-  function resolveOpt(elev: ClientElevationData): 'A' | 'B' | null {
+  function resolveOpt(elev: ClientElevationData): string | null {
     if (pickedOptions[elev.id]) return pickedOptions[elev.id]!
-    const hasA = elev.elevation_options.some(o => o.option === 'A' && o.imageUrl)
-    const hasB = elev.elevation_options.some(o => o.option === 'B' && o.imageUrl)
-    if (hasA) return 'A'
-    if (hasB) return 'B'
-    return null
+    return elev.elevation_options.find(o => o.imageUrl)?.option ?? null
   }
 
   // Initial active tab: prefer picked, then first with image
@@ -92,7 +86,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   })()
 
   const [activeElevId, setActiveElevId] = useState(firstTab?.elevId ?? elevations[0]?.id ?? '')
-  const [activeOpt, setActiveOpt] = useState<'A' | 'B'>(firstTab?.opt ?? 'A')
+  const [activeOpt, setActiveOpt] = useState<string>(firstTab?.opt ?? 'A')
 
   // Central state: artwork positions/visibility persist across tab switches
   const [optionsState, setOptionsState] = useState<Record<string, Record<string, ClientOption>>>(() => {
@@ -175,7 +169,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     }, 800)
   }
 
-  async function handlePick(elevId: string, opt: 'A' | 'B') {
+  async function handlePick(elevId: string, opt: string) {
     const supabase = createClient()
     await supabase.from('elevations').update({ client_picked_option: opt }).eq('id', elevId)
     setPickedOptions(prev => ({ ...prev, [elevId]: opt }))
@@ -253,36 +247,39 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       {/* Tab bar */}
       <div className="client-tab-bar">
         {elevations.map((elev, i) => {
-          const hasA = elev.elevation_options.some(o => o.option === 'A' && o.imageUrl)
-          const hasB = elev.elevation_options.some(o => o.option === 'B' && o.imageUrl)
-          const bothExist = hasA && hasB
+          const optsWithImages = elev.elevation_options.filter(o => o.imageUrl)
+          const multiOption = optsWithImages.length > 1
           const picked = pickedOptions[elev.id]
 
           // Once picked: only show the chosen option's tab
-          const showA = hasA && (!bothExist || !picked || picked === 'A')
-          const showB = hasB && (!bothExist || !picked || picked === 'B')
+          const visibleOpts = multiOption && picked
+            ? optsWithImages.filter(o => o.option === picked)
+            : optsWithImages
 
           return (
             <div key={elev.id} style={{ display: 'flex', alignItems: 'center' }}>
               {i > 0 && <div className="client-tab-divider" />}
-              {showA && (
-                <button
-                  className={`client-tab-btn${activeElevId === elev.id && activeOpt === 'A' ? ' active' : ''}`}
-                  onClick={() => { setActiveElevId(elev.id); setActiveOpt('A') }}
-                >
-                  <span className="tag tag-option-a" style={{ marginRight: 5 }}>A</span>
-                  {elev.name}
-                </button>
-              )}
-              {showB && (
-                <button
-                  className={`client-tab-btn${activeElevId === elev.id && activeOpt === 'B' ? ' active' : ''}`}
-                  onClick={() => { setActiveElevId(elev.id); setActiveOpt('B') }}
-                >
-                  <span className="tag tag-option-b" style={{ marginRight: 5 }}>B</span>
-                  {elev.name}
-                </button>
-              )}
+              {visibleOpts.map(opt => {
+                const tagClass = opt.option === 'A' ? 'tag tag-option-a' : opt.option === 'B' ? 'tag tag-option-b' : 'tag tag-option-other'
+                return multiOption ? (
+                  <button
+                    key={opt.option}
+                    className={`client-tab-btn${activeElevId === elev.id && activeOpt === opt.option ? ' active' : ''}`}
+                    onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
+                  >
+                    <span className={tagClass} style={{ marginRight: 5 }}>{opt.option}</span>
+                    {elev.name}
+                  </button>
+                ) : (
+                  <button
+                    key={opt.option}
+                    className={`client-tab-btn${activeElevId === elev.id ? ' active' : ''}`}
+                    onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
+                  >
+                    {elev.name}
+                  </button>
+                )
+              })}
             </div>
           )
         })}

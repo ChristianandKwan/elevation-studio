@@ -14,7 +14,7 @@ export default async function ProjectPage({ params }: Props) {
   // Fetch project
   const { data: project } = await supabase
     .from('projects')
-    .select('id, name, client_name, status, consultant_id')
+    .select('id, name, client_name, status, consultant_id, budget')
     .eq('id', id)
     .eq('consultant_id', user!.id)
     .single()
@@ -36,7 +36,7 @@ export default async function ProjectPage({ params }: Props) {
       elevation_options(
         id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
         artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order
+          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm
         )
       )
     `)
@@ -83,6 +83,8 @@ export default async function ProjectPage({ params }: Props) {
                   wCm: art.w_cm,
                   hCm: art.h_cm,
                   priceIncludes: art.price_includes as 'artwork' | 'all',
+                  frameType: (art as any).frame_type ?? null,
+                  frameWidthMm: (art as any).frame_width_mm ?? null,
                 }
               })
           )
@@ -114,7 +116,7 @@ export default async function ProjectPage({ params }: Props) {
 
   return (
     <StudioScreen
-      project={{ ...project, consultantName: profile?.name ?? 'Consultant' }}
+      project={{ ...project, consultantName: profile?.name ?? 'Consultant', budget: (project as any).budget ?? null }}
       elevations={elevationsWithUrls}
       existingToken={tokenRow?.token ?? null}
       activityLogs={(activityLogs ?? []).map(a => ({ id: a.id, type: a.type, text: a.text, createdAt: a.created_at }))}
