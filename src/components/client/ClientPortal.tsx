@@ -188,25 +188,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     onStatus(`Option ${activeOpt} approved!`)
   }
 
-  async function handleUnapprove() {
-    if (!optData) return
-    const supabase = createClient()
-    await supabase.from('elevation_options').update({ approved: false, approved_at: null }).eq('id', optData.id)
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'unapprove',
-      text: `Client unapproved Option ${activeOpt} of ${activeElev?.name ?? ''}`,
-    })
-    setOptionsState(prev => ({
-      ...prev,
-      [activeElevId]: {
-        ...prev[activeElevId],
-        [activeOpt]: { ...prev[activeElevId][activeOpt], approved: false, approved_at: null },
-      },
-    }))
-    onStatus('Approval removed')
-  }
-
   return (
     <div className="client-layout">
       {/* Header */}
@@ -260,7 +241,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           onToggleVisibility={toggleVisibility}
           onNotesChange={onNotesChange}
           onApprove={handleApprove}
-          onUnapprove={handleUnapprove}
         />
       ) : (
         <div className="client-empty-state">No elevation uploaded for this option</div>

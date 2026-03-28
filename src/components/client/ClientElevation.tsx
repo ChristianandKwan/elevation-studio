@@ -42,12 +42,11 @@ interface Props {
   onToggleVisibility: (artId: string) => void
   onNotesChange: (notes: string) => void
   onApprove: () => void
-  onUnapprove: () => void
 }
 
 export default function ClientElevation({
   optData, elevationName, activeOpt, rerenderKey,
-  approvalActivity, onArtworkMove, onToggleVisibility, onNotesChange, onApprove, onUnapprove,
+  approvalActivity, onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
   const visibleArts = optData.artworks.filter(a => a.visible)
   const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
@@ -106,9 +105,6 @@ export default function ClientElevation({
               placeholder="Add any notes, questions or requests here…"
               disabled={optData.approved}
             />
-            {optData.approved && (
-              <div className="client-notes-hint">Unapprove to edit notes</div>
-            )}
           </div>
         </div>
 
@@ -150,9 +146,7 @@ export default function ClientElevation({
           )}
 
           {/* Approval button */}
-          {optData.approved ? (
-            <button className="btn btn-ghost btn-sm btn-full" onClick={onUnapprove}>Unapprove</button>
-          ) : (
+          {!optData.approved && (
             <button className="btn btn-green btn-sm btn-full" onClick={onApprove}>
               ✓ Approve Option {activeOpt}
             </button>
