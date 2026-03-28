@@ -453,6 +453,7 @@ body {
   position: relative; display: flex; align-items: center; justify-content: flex-end;
   padding: 0 40px; height: 64px; background: var(--charcoal); flex-shrink: 0;
 }
+.client-logo { height: 44px; width: auto; position: absolute; left: 40px; }
 .client-header-brand {
   position: absolute; left: 50%; transform: translateX(-50%);
   font-size: 15px; font-weight: 600; color: #fff; font-family: 'Karla'; letter-spacing: .5px;

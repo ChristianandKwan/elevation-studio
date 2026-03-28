@@ -196,6 +196,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     <div className="client-layout">
       {/* Header */}
       <div className="client-header">
+        <img src="/ck-wordmark-white.png" alt="Christian & Kwan" className="client-logo" />
         <div className="client-header-brand">Elevation Studio</div>
         <div className="client-project-label">{project.name}</div>
       </div>
