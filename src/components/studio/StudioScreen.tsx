@@ -12,7 +12,7 @@ import AddArtworkModal from './AddArtworkModal'
 import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
 import { timeNow } from '@/lib/utils'
-import type { Artwork } from '@/types'
+import type { Artwork, ActivityLog } from '@/types'
 
 interface DbElevation {
   id: string
@@ -39,11 +39,12 @@ interface Props {
   project: { id: string; name: string; client_name: string; status: string; consultantName: string }
   elevations: DbElevation[]
   existingToken: string | null
+  activityLogs: ActivityLog[]
 }
 
 type OptionKey = 'A' | 'B'
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, activityLogs }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -336,6 +337,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           projectId={project.id}
           onStatus={onStatus}
           clientNotes={activeOptData?.clientNotes ?? ''}
+          activityLogs={activityLogs}
         />
         <StudioCanvas studio={studio} onStatus={onStatus} />
       </div>

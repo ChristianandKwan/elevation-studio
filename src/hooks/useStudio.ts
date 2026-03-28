@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
 
@@ -85,6 +85,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   const [showShareModal, setShowShareModal] = useState(false)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const zoomSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // ─── HELPERS ──────────────────────────────────────────────────────
@@ -277,6 +278,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const newElev = { ...currentState.elev }
     const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
     setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
+    persistZoom(newZoom)
     requestAnimationFrame(() => {
       if (vp) {
         vp.scrollLeft = vp.scrollWidth * xf - vp.clientWidth / 2
@@ -299,6 +301,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const newElev = { ...currentState.elev }
     const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
     setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
+    persistZoom(newZoom)
     requestAnimationFrame(() => {
       const vp = vpRef.current
       if (vp) {
@@ -970,12 +973,26 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     saveTimer.current = setTimeout(() => persistOption(currentState), 1500)
   }
 
+  function persistZoom(zoom: number) {
+    if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
+    zoomSaveTimer.current = setTimeout(async () => {
+      const supabase = createClient()
+      await supabase.from('elevation_options').update({ zoom }).eq('id', optionId)
+    }, 2000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
+    }
+  }, [])
+
   async function persistOption(s: StudioState) {
     const supabase = createClient()
     try {
-      // Update option zoom and foreground masks
+      // Update option foreground masks (zoom saved separately via persistZoom)
       await supabase.from('elevation_options').update({
-        zoom: s.zoom,
         foreground_masks: s.masks.length > 0 ? s.masks : null,
       }).eq('id', optionId)
       // Update each artwork position/dims
