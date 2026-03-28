@@ -98,7 +98,7 @@ export default function ClientElevation({
 
           {/* Notes */}
           <div className="client-sidebar-section">
-            <div className="client-sidebar-kicker">Notes for Consultant</div>
+            <div className="client-sidebar-kicker">Notes for Christian & Kwan</div>
             <textarea
               className="client-notes-textarea"
               value={optData.clientNotes ?? ''}
