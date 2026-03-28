@@ -191,6 +191,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     setActiveOption(opt as OptionKey)
   }
 
+  async function renameElevation(elevId: string, newName: string) {
+    const supabase = createClient()
+    await supabase.from('elevations').update({ name: newName }).eq('id', elevId)
+    setElevations(prev => prev.map(e => e.id === elevId ? { ...e, name: newName } : e))
+    onStatus('Elevation renamed')
+  }
+
   async function addElevation(name: string) {
     const supabase = createClient()
     const { data: elev } = await supabase.from('elevations').insert({
@@ -284,6 +291,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         activeOption={activeOption}
         onSwitch={handleSwitch}
         onAddElevation={addElevation}
+        onRenameElevation={renameElevation}
       />
 
       {/* Main */}

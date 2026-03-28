@@ -240,6 +240,15 @@ body {
   transition: all .15s; margin-left: 4px; flex-shrink: 0; white-space: nowrap;
 }
 .studio-tab-add:hover { border-color: var(--accent); color: var(--accent); }
+.studio-tab-group { display: flex; align-items: center; position: relative; }
+.studio-tab-group:hover .studio-tab-rename-btn { opacity: 1; }
+.studio-tab-rename-btn {
+  opacity: 0; transition: opacity .15s;
+  padding: 3px 4px; background: none; border: none; cursor: pointer;
+  color: var(--mid); display: flex; align-items: center;
+  flex-shrink: 0;
+}
+.studio-tab-rename-btn:hover { color: var(--accent); }
 
 .tag { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 9px; font-weight: 700; }
 .tag-option-a { background: var(--charcoal); color: white; }

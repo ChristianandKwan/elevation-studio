@@ -53,6 +53,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [renameProjectId, setRenameProjectId] = useState<string | null>(null)
+  const [renameName, setRenameName] = useState('')
+  const [renaming, setRenaming] = useState(false)
 
   function showStatus(msg: string) {
     setToast(msg)
@@ -158,6 +161,18 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     showStatus('Project deleted')
   }
 
+  async function renameProject(id: string, name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setRenaming(true)
+    const supabase = createClient()
+    await supabase.from('projects').update({ name: trimmed }).eq('id', id)
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, name: trimmed } : p))
+    setRenameProjectId(null)
+    setRenaming(false)
+    showStatus('Project renamed')
+  }
+
   const statusLabels: Record<string, string> = { draft: 'Draft', sent: 'Sent to client', approved: 'Approved' }
 
   return (
@@ -241,6 +256,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                   >⋯</button>
                   {menuOpenId === p.id && (
                     <div className="project-card-dropdown">
+                      <button onClick={() => { setRenameProjectId(p.id); setRenameName(p.name); setMenuOpenId(null) }}>Rename</button>
                       <button onClick={() => archiveProject(p.id)}>Archive</button>
                       <button className="danger" onClick={() => { setConfirmDeleteId(p.id); setMenuOpenId(null) }}>Delete</button>
                     </div>
@@ -299,6 +315,35 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               <button className="btn" onClick={() => { setShowModal(false); setNewName(''); setNewClient(''); setNewElevName('') }}>Cancel</button>
               <button className="btn btn-primary" onClick={createProject} disabled={creating || !newName.trim() || !newElevName.trim()}>
                 {creating ? 'Creating…' : 'Create Project'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename project modal */}
+      {renameProjectId && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget && !renaming) setRenameProjectId(null) }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Rename Project</div>
+            <div className="field">
+              <label className="field-label">Project Name</label>
+              <input
+                className="field-input"
+                value={renameName}
+                onChange={e => setRenameName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && renameProject(renameProjectId, renameName)}
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setRenameProjectId(null)} disabled={renaming}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => renameProject(renameProjectId, renameName)}
+                disabled={renaming || !renameName.trim()}
+              >
+                {renaming ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
