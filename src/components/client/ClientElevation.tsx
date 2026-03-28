@@ -265,6 +265,31 @@ function ClientCanvas({
             document.addEventListener('mousemove', mv)
             document.addEventListener('mouseup', up)
           })
+
+          aw.addEventListener('touchstart', e => {
+            e.stopPropagation()
+            const t0 = e.touches[0]
+            sx.val = t0.clientX; sy.val = t0.clientY
+            sl.val = parseFloat(aw.style.left); st.val = parseFloat(aw.style.top)
+            const eW = img.naturalWidth * s, eH = img.naturalHeight * s
+            const wW = parseFloat(aw.style.width), wH = parseFloat(aw.style.height)
+
+            function mv(ev: TouchEvent) {
+              ev.preventDefault()
+              const t = ev.touches[0]
+              const nl = Math.max(0, Math.min(eW - wW, sl.val + (t.clientX - sx.val)))
+              const nt = Math.max(0, Math.min(eH - wH, st.val + (t.clientY - sy.val)))
+              aw.style.left = nl + 'px'
+              aw.style.top = nt + 'px'
+              onArtworkMove(art.id, nl / eW, nt / eH)
+            }
+            function up() {
+              document.removeEventListener('touchmove', mv)
+              document.removeEventListener('touchend', up)
+            }
+            document.addEventListener('touchmove', mv, { passive: false })
+            document.addEventListener('touchend', up)
+          }, { passive: true })
         }
 
         wrap.appendChild(aw)

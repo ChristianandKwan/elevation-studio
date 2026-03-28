@@ -21,6 +21,7 @@ const DEFAULT_H = 60
 export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
+  const [sizeErrors, setSizeErrors] = useState<string[]>([])
   // Single-file fields
   const [name, setName] = useState('')
   const [wCm, setWCm] = useState('')
@@ -38,6 +39,15 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
   function onFilesChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(e.target.files ?? []).slice(0, 5)
     if (!selected.length) return
+
+    const MAX = 20 * 1024 * 1024
+    const tooBig = selected.filter(f => f.size > MAX)
+    if (tooBig.length > 0) {
+      setSizeErrors(tooBig.map(f => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`))
+      e.target.value = ''
+      return
+    }
+    setSizeErrors([])
     setFiles(selected)
     if (selected.length === 1 && !name) {
       setName(selected[0].name.replace(/\.[^.]+$/, ''))
@@ -98,6 +108,14 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
             {files.length > 1 && `${files.length} artworks selected`}
           </div>
           <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilesChange} />
+          {sizeErrors.length > 0 && (
+            <div style={{ marginTop: 6, fontSize: 12, color: '#c0392b' }}>
+              The following files exceed the 20 MB limit and were not added:
+              <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                {sizeErrors.map((err, i) => <li key={i}>{err}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Single file: original layout */}
