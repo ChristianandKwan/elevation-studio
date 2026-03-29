@@ -112,8 +112,16 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
 
   const [rerenderKey, setRerenderKey] = useState(0)
 
-  // Zoom persisted per elevation-option tab
-  const [zoomMap, setZoomMap] = useState<Record<string, number>>({})
+  // Zoom persisted per elevation-option tab, seeded from DB zoom value
+  const [zoomMap, setZoomMap] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {}
+    elevations.forEach(elev => {
+      elev.elevation_options.forEach(opt => {
+        initial[`${elev.id}/${opt.option}`] = opt.zoom ?? 1.0
+      })
+    })
+    return initial
+  })
   const zoomKey = `${activeElevId}/${activeOpt}`
   const zoom = zoomMap[zoomKey] ?? 1.0
   function setZoom(val: number | ((prev: number) => number)) {
