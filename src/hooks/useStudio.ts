@@ -46,6 +46,8 @@ interface UseStudioOptions {
   projectName?: string
   elevationName?: string
   optionKey?: string
+  /** When true, artwork drag is blocked (client has picked or approved this option) */
+  artworkDragLocked?: boolean
   /** Called when an elevation image is successfully uploaded for the current option */
   onElevationUploaded?: (data: { imagePath: string; imageUrl: string; origW: number; origH: number; zoom: number }) => void
   /** Called when the scale calibration is confirmed for the current option */
@@ -58,7 +60,7 @@ interface UseStudioOptions {
   onForegroundSaved?: (masks: ForegroundMasks) => void
 }
 
-export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -110,6 +112,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
   // Box-select: flag to suppress click-deselect after a successful drag
   const boxSelectedRef = useRef(false)
+
+  // Ref to block artwork dragging when client has picked/approved (read inside imperative event listeners)
+  const dragLockedRef = useRef(artworkDragLocked)
+  useEffect(() => { dragLockedRef.current = artworkDragLocked }, [artworkDragLocked])
 
   // Skew definition: accumulates corners during corner-placement session
   const skewDefCornersRef = useRef<Array<[number, number]>>([])
@@ -727,8 +733,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             })
           }
 
-          document.addEventListener('mousemove', move)
-          document.addEventListener('mouseup', up)
+          if (!dragLockedRef.current) {
+            document.addEventListener('mousemove', move)
+            document.addEventListener('mouseup', up)
+          }
           return { ...s, selId: art.id, selIds: newSelIds }
         })
       })
@@ -738,7 +746,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         if ((e.target as HTMLElement).classList.contains('aw-resize-hint')) return
         e.stopPropagation()
         const s = stateRef.current
-        if (s.calib.active || s.maskDraw.active) return
+        if (s.calib.active || s.maskDraw.active || dragLockedRef.current) return
 
         const t0 = e.touches[0]
         const rect = wrap.getBoundingClientRect()

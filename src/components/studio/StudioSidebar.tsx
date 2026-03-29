@@ -37,6 +37,8 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
   const hasElev = !!state.elev
   const hasScale = !!state.scale
   const hasArts = state.artworks.length > 0
+  // Lock all editing once client has picked or approved this option
+  const isLocked = !!(approvalStatus?.pickedOption || approvalStatus?.approved)
   const hasMasks = state.masks.length > 0
   const maskDrawActive = state.maskDraw.active
   const pointsPlaced = state.maskDraw.currentPoints.length
@@ -110,7 +112,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
         </div>
         <button
           className="btn btn-sm btn-primary btn-full"
-          disabled={!hasScale}
+          disabled={!hasScale || isLocked}
           onClick={() => setShowArtModal(true)}
         >
           + Add Artwork
@@ -121,7 +123,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
             {state.selIds.size > 1 && (
               <div className="multi-select-bar">
                 <span>{state.selIds.size} selected</span>
-                <button onClick={() => onRequestDeleteArtworks(new Set(state.selIds))}>Delete all</button>
+                <button disabled={isLocked} onClick={() => onRequestDeleteArtworks(new Set(state.selIds))}>Delete all</button>
                 <button onClick={() => studio.selectArtwork(null)}>Deselect</button>
               </div>
             )}
@@ -132,6 +134,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   art={art}
                   isSelected={state.selIds.has(art.id)}
                   hasScale={hasScale}
+                  isLocked={isLocked}
                   onSelect={() => studio.selectArtwork(art.id)}
                   onDeselect={() => studio.selectArtwork(null)}
                   onToggleVis={() => studio.toggleVisibility(art.id)}
@@ -478,6 +481,7 @@ interface ArtworkItemProps {
   art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null }
   isSelected: boolean
   hasScale: boolean
+  isLocked: boolean
   onSelect: () => void
   onDeselect: () => void
   onToggleVis: () => void
@@ -490,7 +494,7 @@ interface ArtworkItemProps {
   onBrightnessApplyAll: (b: number) => void
 }
 
-function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -523,6 +527,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
             ref={editBtnRef}
             className="icon-btn"
             title="Edit dimensions & price"
+            disabled={isLocked}
             onClick={e => { e.stopPropagation(); toggleDims() }}
           >
             <EditIcon />
@@ -530,6 +535,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
           <button
             className={`icon-btn${art.visible ? '' : ' hidden-art'}`}
             title={art.visible ? 'Hide' : 'Show'}
+            disabled={isLocked}
             onClick={e => { e.stopPropagation(); onToggleVis() }}
           >
             {art.visible ? <EyeIcon /> : <EyeOffIcon />}
@@ -537,6 +543,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
           <button
             className="icon-btn del"
             title="Remove"
+            disabled={isLocked}
             onClick={e => { e.stopPropagation(); onDelete() }}
           >
             <TrashIcon />
@@ -550,6 +557,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
           className="name-input"
           value={nameValue}
           placeholder="Artwork name"
+          disabled={isLocked}
           onClick={e => e.stopPropagation()}
           onChange={e => setNameValue(e.target.value)}
           onBlur={() => onNameChange(nameValue)}
@@ -559,6 +567,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
         <label>W</label>
         <input
           type="number" className="dim-input" defaultValue={art.wCm} min={1} step={0.5}
+          disabled={isLocked}
           onClick={e => e.stopPropagation()}
           onBlur={e => { const w = parseFloat(e.target.value); if (w > 0) onDimsChange(w, art.hCm) }}
           onKeyDown={e => { if (e.key === 'Enter') { const w = parseFloat((e.target as HTMLInputElement).value); if (w > 0) onDimsChange(w, art.hCm) } }}
@@ -567,6 +576,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
         <label>H</label>
         <input
           type="number" className="dim-input" defaultValue={art.hCm} min={1} step={0.5}
+          disabled={isLocked}
           onClick={e => e.stopPropagation()}
           onBlur={e => { const h = parseFloat(e.target.value); if (h > 0) onDimsChange(art.wCm, h) }}
           onKeyDown={e => { if (e.key === 'Enter') { const h = parseFloat((e.target as HTMLInputElement).value); if (h > 0) onDimsChange(art.wCm, h) } }}
@@ -575,6 +585,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
         <label style={{ marginLeft: 6 }}>£</label>
         <input
           type="number" className="price-input" defaultValue={art.price || ''} placeholder="Price"
+          disabled={isLocked}
           onClick={e => e.stopPropagation()}
           onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
           onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
@@ -585,7 +596,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
           <select
             className="dim-input"
             style={{ flex: 1, height: 24, fontSize: 11 }}
-            disabled={!hasScale}
+            disabled={!hasScale || isLocked}
             value={art.frameType ?? ''}
             onClick={e => e.stopPropagation()}
             onChange={e => {
@@ -602,7 +613,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
             <>
               <input
                 type="number" className="dim-input" style={{ width: 46, fontSize: 11 }}
-                disabled={!hasScale}
+                disabled={!hasScale || isLocked}
                 defaultValue={art.frameWidthMm ?? 20} min={5} max={200} step={5}
                 title="Frame width (mm)"
                 onClick={e => e.stopPropagation()}
@@ -619,6 +630,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
           <input
             type="range" min={0.5} max={1.5} step={0.05}
             value={brightnessVal}
+            disabled={isLocked}
             style={{ flex: 1 }}
             onClick={e => e.stopPropagation()}
             onChange={e => {
@@ -634,6 +646,7 @@ function ArtworkItem({ art, isSelected, hasScale, onSelect, onDeselect, onToggle
             className="btn btn-ghost btn-sm"
             style={{ fontSize: 10, padding: '1px 5px', height: 20 }}
             title="Apply brightness to all artworks"
+            disabled={isLocked}
             onClick={e => { e.stopPropagation(); onBrightnessApplyAll(brightnessVal) }}
           >
             All

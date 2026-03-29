@@ -98,6 +98,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     projectName: project.name,
     elevationName: activeElev?.name ?? '',
     optionKey: activeOption,
+    artworkDragLocked: !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption) || (activeOptData?.approved ?? false),
     onElevationUploaded: ({ imagePath, imageUrl, origW, origH, zoom }) => {
       setElevations(prev => prev.map(e => {
         if (e.id !== activeElevId) return e
