@@ -1278,16 +1278,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
   // ─── SAVE (debounced) ─────────────────────────────────────────────
   function debounceSave(currentState: StudioState) {
+    if (!optionId) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setSaveStatus('saving')
     saveTimer.current = setTimeout(() => persistOption(currentState), 1500)
   }
 
   function persistZoom(zoom: number) {
+    if (!optionId) return
     if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
     zoomSaveTimer.current = setTimeout(async () => {
       const supabase = createClient()
-      await supabase.from('elevation_options').update({ zoom }).eq('id', optionId)
+      const { error } = await supabase.from('elevation_options').update({ zoom }).eq('id', optionId)
+      if (error) { setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 5000) }
     }, 2000)
   }
 
@@ -1303,12 +1306,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     try {
       // Update option foreground masks (zoom saved separately via persistZoom)
       const masksValue = s.masks.length > 0 ? s.masks : null
-      await supabase.from('elevation_options').update({
+      const { error: maskErr } = await supabase.from('elevation_options').update({
         foreground_masks: masksValue,
       }).eq('id', optionId)
+      if (maskErr) throw maskErr
       onForegroundSavedRef.current?.(s.masks)
       // Update each artwork position/dims
-      await Promise.all(
+      const results = await Promise.all(
         s.artworks.map(art =>
           supabase.from('artworks').update({
             x_fraction: art.xF,
@@ -1319,9 +1323,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             price: art.price,
             price_includes: art.priceIncludes,
             brightness: art.brightness ?? 1,
+            name: art.name,
+            frame_type: art.frameType ?? null,
+            frame_width_mm: art.frameWidthMm ?? null,
           }).eq('id', art.id)
         )
       )
+      const artErr = results.find(r => r.error)?.error
+      if (artErr) throw artErr
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
     } catch {
@@ -1379,8 +1388,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, frameType, frameWidthMm } : a)
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
-      const supabase = createClient()
-      supabase.from('artworks').update({ frame_type: frameType, frame_width_mm: frameWidthMm }).eq('id', artId).then(() => {})
+      debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
     })
   }
@@ -1389,8 +1397,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, brightness } : a)
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
-      const supabase = createClient()
-      supabase.from('artworks').update({ brightness }).eq('id', artId).then(() => {})
+      debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
     })
   }
@@ -1399,20 +1406,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     setState(s => {
       const newArts = s.artworks.map(a => ({ ...a, brightness }))
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
-      const supabase = createClient()
-      Promise.all(newArts.map(art => supabase.from('artworks').update({ brightness }).eq('id', art.id)))
+      debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
     })
   }
 
-  async function updateArtworkName(artId: string, name: string) {
+  function updateArtworkName(artId: string, name: string) {
     const trimmed = name.trim()
     if (!trimmed) return
-    const supabase = createClient()
-    await supabase.from('artworks').update({ name: trimmed }).eq('id', artId)
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, name: trimmed } : a)
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
     })
   }

@@ -248,9 +248,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [studio])
 
   async function handleSwitch(elevId: string, opt: string) {
-    // Before switching: sync current artwork positions from studio state back into elevations
+    // Before switching: sync current artwork positions and zoom from studio state back into elevations
     const currentArts = studio.state.artworks
-    if (currentArts.length > 0 && activeElevId && activeOption) {
+    const currentZoom = studio.state.zoom
+    if (activeElevId && activeOption) {
       setElevations(prev => prev.map(e => {
         if (e.id !== activeElevId) return e
         return {
@@ -259,9 +260,20 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             if (o.option !== activeOption) return o
             return {
               ...o,
+              zoom: currentZoom,
               artworks: o.artworks.map(a => {
                 const cur = currentArts.find(ca => ca.id === a.id)
-                return cur ? { ...a, xF: cur.xF, yF: cur.yF } : a
+                if (!cur) return a
+                return {
+                  ...a,
+                  xF: cur.xF, yF: cur.yF,
+                  name: cur.name,
+                  wCm: cur.wCm, hCm: cur.hCm,
+                  price: cur.price, priceIncludes: cur.priceIncludes,
+                  frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
+                  brightness: cur.brightness,
+                  visible: cur.visible,
+                }
               }),
             }
           }),
