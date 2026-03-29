@@ -76,7 +76,7 @@ export default async function DashboardPage() {
     .select(`
       id, name, client_name, status, created_at,
       elevations(
-        id, client_picked_option,
+        id, client_picked_option, display_order,
         elevation_options(
           id, option, image_path, orig_w, orig_h, scale_px_per_cm, approved,
           artworks(id, image_path, x_fraction, y_fraction, w_cm, h_cm, visible)
