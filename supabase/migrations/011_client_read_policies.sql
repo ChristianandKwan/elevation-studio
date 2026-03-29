@@ -1,43 +1,18 @@
 -- ══════════════════════════════════════════════════════════
---  011_client_read_policies.sql
---  Add SELECT policies so unauthenticated client portal
---  users can read the data they need via valid tokens.
+--  011_client_read_policies.sql  (v2 — fixed infinite recursion)
 --
---  Without these, the server-side anon client returns empty
---  for elevations/projects/profiles, causing the client
---  portal page to 404 for real (unauthenticated) clients.
+--  The original version of this migration created policies on
+--  `projects` and `profiles` that queried `client_tokens`.
+--  `client_tokens` has a policy that queries `projects`.
+--  This caused infinite recursion, crashing ALL queries to
+--  `projects` across the entire app.
+--
+--  Fix: drop those three policies. The client portal page now
+--  uses the service-role client (bypasses RLS) after manually
+--  verifying the token, so no extra SELECT policies are needed.
 -- ══════════════════════════════════════════════════════════
 
--- ── ELEVATIONS: client tokens can read ───────────────────
-CREATE POLICY "Client token read elevations"
-  ON elevations FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM client_tokens ct
-      WHERE ct.project_id = elevations.project_id
-        AND ct.expires_at > now()
-    )
-  );
-
--- ── PROJECTS: client tokens can read ─────────────────────
-CREATE POLICY "Client token read project"
-  ON projects FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM client_tokens ct
-      WHERE ct.project_id = projects.id
-        AND ct.expires_at > now()
-    )
-  );
-
--- ── PROFILES: client tokens can read consultant profile ──
-CREATE POLICY "Client token read profile"
-  ON profiles FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM client_tokens ct
-      JOIN projects p ON p.id = ct.project_id
-      WHERE p.consultant_id = profiles.id
-        AND ct.expires_at > now()
-    )
-  );
+-- Drop the recursive policies if they were already applied
+DROP POLICY IF EXISTS "Client token read elevations" ON elevations;
+DROP POLICY IF EXISTS "Client token read project"    ON projects;
+DROP POLICY IF EXISTS "Client token read profile"    ON profiles;
