@@ -319,7 +319,6 @@ function ClientCanvas({
   useEffect(() => {
     if (!optData.imageUrl || !canvasRef.current) return
     const img = new Image()
-    img.crossOrigin = 'anonymous'
     img.onload = () => {
       const maxW = Math.min((canvasRef.current?.clientWidth ?? 900) - 64, img.naturalWidth)
       const s = maxW / img.naturalWidth
