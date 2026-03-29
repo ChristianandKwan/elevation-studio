@@ -200,6 +200,15 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
 
   async function handlePick(elevId: string, opt: string) {
     const supabase = createClient()
+    // Save client's artwork positions before locking them in
+    const artworks = optionsState[elevId]?.[opt]?.artworks ?? []
+    if (artworks.length) {
+      await Promise.all(
+        artworks.map(art =>
+          supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
+        )
+      )
+    }
     await supabase.from('elevations').update({ client_picked_option: opt }).eq('id', elevId)
     setPickedOptions(prev => ({ ...prev, [elevId]: opt }))
     setActiveElevId(elevId)
@@ -336,6 +345,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           rerenderKey={rerenderKey}
           approvalActivity={approvalActivity}
           isPicked={!activeElev ? true : !needsPick(activeElev) || pickedOptions[activeElevId] != null}
+          artworksLocked={optData.approved || (!!activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null)}
           onPick={(opt) => handlePick(activeElevId, opt)}
           onClearPick={
             activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null && !optData?.approved

@@ -8,9 +8,11 @@ type StudioHook = ReturnType<typeof useStudio>
 interface Props {
   studio: StudioHook
   onStatus: (msg: string) => void
+  clientPickedOption?: string | null
+  activeOption?: string
 }
 
-export default function StudioCanvas({ studio, onStatus }: Props) {
+export default function StudioCanvas({ studio, onStatus, clientPickedOption, activeOption }: Props) {
   const { state, elevWrapRef, calibSvgRef, fgDrawSvgRef, vpRef, changeZoom, setZoomFit } = studio
 
   // Deselect on canvas background click (skip if a box-select drag just finished)
@@ -141,6 +143,20 @@ export default function StudioCanvas({ studio, onStatus }: Props) {
                 id="skew-handles-svg"
                 style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', display: 'none', overflow: 'visible' }}
               />
+
+              {/* Client pick stamp */}
+              {clientPickedOption && activeOption && clientPickedOption === activeOption && (
+                <div style={{
+                  position: 'absolute', top: 12, right: 12,
+                  background: 'var(--charcoal)', color: 'white',
+                  fontSize: 11, fontFamily: 'Karla', fontWeight: 600,
+                  padding: '4px 10px', letterSpacing: '0.04em',
+                  pointerEvents: 'none', zIndex: 20,
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}>
+                  <span style={{ color: 'var(--accent)' }}>✓</span> Client&apos;s pick
+                </div>
+              )}
             </div>
           </div>
         </div>

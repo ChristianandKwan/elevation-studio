@@ -640,7 +640,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           budget={budget}
           onBudgetChange={updateBudget}
         />
-        <StudioCanvas studio={studio} onStatus={onStatus} />
+        <StudioCanvas
+          studio={studio}
+          onStatus={onStatus}
+          clientPickedOption={activeElev?.clientPickedOption ?? null}
+          activeOption={activeOption}
+        />
       </div>
 
       {/* Modals */}

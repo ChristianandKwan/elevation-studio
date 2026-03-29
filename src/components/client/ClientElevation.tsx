@@ -53,6 +53,8 @@ interface Props {
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
   /** Whether the client has already picked an option for this elevation */
   isPicked: boolean
+  /** Whether artwork dragging should be locked (approved, or already picked on a multi-option elevation) */
+  artworksLocked: boolean
   onPick: (opt: string) => void
   /** When defined, a "Change selection" button is shown in Stage 2 */
   onClearPick?: () => void
@@ -66,7 +68,7 @@ interface Props {
 
 export default function ClientElevation({
   optData, elevationName, activeOpt, rerenderKey,
-  approvalActivity, isPicked, onPick, onClearPick,
+  approvalActivity, isPicked, artworksLocked, onPick, onClearPick,
   zoom, onZoom,
   onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
@@ -91,7 +93,7 @@ export default function ClientElevation({
         <ClientCanvas
           optData={optData}
           rerenderKey={rerenderKey}
-          locked={optData.approved || !isPicked}
+          locked={artworksLocked}
           onArtworkMove={onArtworkMove}
           zoom={zoom}
         />
@@ -150,22 +152,20 @@ export default function ClientElevation({
 
           </div>
 
-          {/* Notes — only shown after picking */}
-          {isPicked && (
-            <div className="client-sidebar-section">
-              <div className="client-sidebar-kicker">Notes for Christian &amp; Kwan</div>
-              <textarea
-                className="client-notes-textarea"
-                value={optData.clientNotes ?? ''}
-                onChange={e => onNotesChange(e.target.value)}
-                placeholder="Add any notes, questions or requests here…"
-                disabled={optData.approved}
-              />
-              {optData.approved && (
-                <div className="client-notes-hint">This elevation is approved and locked</div>
-              )}
-            </div>
-          )}
+          {/* Notes */}
+          <div className="client-sidebar-section">
+            <div className="client-sidebar-kicker">Notes for Christian &amp; Kwan</div>
+            <textarea
+              className="client-notes-textarea"
+              value={optData.clientNotes ?? ''}
+              onChange={e => onNotesChange(e.target.value)}
+              placeholder="Add any notes, questions or requests here…"
+              disabled={optData.approved}
+            />
+            {optData.approved && (
+              <div className="client-notes-hint">This elevation is approved and locked</div>
+            )}
+          </div>
         </div>
 
         {/* Approval section — pinned to bottom */}
