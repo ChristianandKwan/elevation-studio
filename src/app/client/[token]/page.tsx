@@ -23,8 +23,8 @@ export default async function ClientPortalPage({ params }: Props) {
 
   const projectId = tokenRow.project_id
 
-  // Fetch project (service client — token already verified above, bypass RLS)
-  const { data: project } = await supabaseService
+  // Fetch project
+  const { data: project } = await supabase
     .from('projects')
     .select('id, name, client_name, status, consultant_id, created_at')
     .eq('id', projectId)
@@ -33,7 +33,7 @@ export default async function ClientPortalPage({ params }: Props) {
   if (!project) notFound()
 
   // Fetch consultant name
-  const { data: profile } = await supabaseService
+  const { data: profile } = await supabase
     .from('profiles')
     .select('name, initials')
     .eq('id', project.consultant_id)
@@ -41,7 +41,7 @@ export default async function ClientPortalPage({ params }: Props) {
 
   // Fetch elevations with options and artworks
   // Try full query (requires migrations 009 + 010). On failure, fall back to base query.
-  let { data: elevations, error: elevError } = await supabaseService
+  let { data: elevations, error: elevError } = await supabase
     .from('elevations')
     .select(`
       id, name, display_order, client_picked_option,
@@ -58,7 +58,7 @@ export default async function ClientPortalPage({ params }: Props) {
 
   // If query failed (e.g. brightness / skew columns not yet migrated), fall back without them
   if (elevError || !elevations) {
-    const { data: fallback } = await supabaseService
+    const { data: fallback } = await supabase
       .from('elevations')
       .select(`
         id, name, display_order, client_picked_option,
@@ -132,7 +132,7 @@ export default async function ClientPortalPage({ params }: Props) {
   )
 
   // Fetch approval activity
-  const { data: activity } = await supabaseService
+  const { data: activity } = await supabase
     .from('activity_logs')
     .select('id, type, text, created_at')
     .eq('project_id', projectId)
