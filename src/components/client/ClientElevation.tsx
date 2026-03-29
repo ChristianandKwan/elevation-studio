@@ -590,7 +590,7 @@ function ClientCanvas({
         <svg id="client-fg-svg" className="fg-svg" style={{ display: 'none' }}>
           <defs><clipPath id="client-fg-clip" /></defs>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <image id="client-fg-image" href="" x="0" y="0" preserveAspectRatio="none" style={{ pointerEvents: 'none' }} />
+          <image id="client-fg-image" href="" x="0" y="0" preserveAspectRatio="none" clipPath="url(#client-fg-clip)" style={{ pointerEvents: 'none' }} />
         </svg>
       </div>
     </div>
