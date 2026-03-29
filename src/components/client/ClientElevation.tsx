@@ -120,9 +120,8 @@ export default function ClientElevation({
             <div className="client-sidebar-elev-name">{elevationName}</div>
           </div>
 
-          {/* Artwork list — only shown after picking */}
-          {isPicked && (
-            <div className="client-sidebar-section">
+          {/* Artwork list */}
+          <div className="client-sidebar-section">
               <div className="client-sidebar-kicker">Artworks</div>
               {optData.artworks.length === 0 ? (
                 <div style={{ fontSize: 12, color: 'var(--mid)' }}>No artworks placed</div>
@@ -149,8 +148,7 @@ export default function ClientElevation({
                 </div>
               )}
 
-            </div>
-          )}
+          </div>
 
           {/* Notes — only shown after picking */}
           {isPicked && (
@@ -190,6 +188,20 @@ export default function ClientElevation({
               <div className="client-pick-hint">
                 Compare both options using the tabs above, then lock in your choice.
               </div>
+              {totalCost > 0 && (
+                <div className="approval-total-section" style={{ marginBottom: 12 }}>
+                  {visibleArts.filter(a => a.price).map(a => (
+                    <div key={a.id} className="approval-total-row">
+                      <span>{a.name}</span>
+                      <span className="amount">{formatPrice(a.price)}</span>
+                    </div>
+                  ))}
+                  <div className="approval-total-row total">
+                    <span>Total</span>
+                    <span className="amount">{formatPrice(totalCost)}</span>
+                  </div>
+                </div>
+              )}
               <button
                 className="btn btn-primary btn-sm btn-full"
                 onClick={() => onPick(activeOpt)}

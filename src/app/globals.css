@@ -423,6 +423,7 @@ body {
 .aw-tag {
   position: absolute; bottom: calc(100% + 5px); left: 0; font-size: 10px;
   background: var(--charcoal); color: white; padding: 3px 7px; white-space: nowrap;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis;
   opacity: 0; transition: opacity .15s; font-family: 'Karla'; pointer-events: none;
 }
 .aw-overlay:hover .aw-tag, .aw-overlay.selected .aw-tag { opacity: 1; }
@@ -585,7 +586,8 @@ body {
 .client-aw-overlay.locked { cursor: default; }
 .client-aw-tag {
   position: absolute; bottom: calc(100% + 4px); left: 0; background: var(--charcoal); color: white;
-  font-size: 10px; padding: 2px 7px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s;
+  font-size: 10px; padding: 2px 7px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; pointer-events: none; transition: opacity .15s;
 }
 .client-aw-overlay:hover .client-aw-tag { opacity: 1; }
 
