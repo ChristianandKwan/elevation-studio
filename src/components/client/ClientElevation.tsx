@@ -56,6 +56,8 @@ interface Props {
   onPick: (opt: string) => void
   /** When defined, a "Change selection" button is shown in Stage 2 */
   onClearPick?: () => void
+  zoom: number
+  onZoom: (val: number | ((prev: number) => number)) => void
   onArtworkMove: (artId: string, xF: number, yF: number) => void
   onToggleVisibility: (artId: string) => void
   onNotesChange: (notes: string) => void
@@ -65,10 +67,10 @@ interface Props {
 export default function ClientElevation({
   optData, elevationName, activeOpt, rerenderKey,
   approvalActivity, isPicked, onPick, onClearPick,
+  zoom, onZoom,
   onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
   const [showApproveWarning, setShowApproveWarning] = useState(false)
-  const [zoom, setZoom] = useState(1.0)
 
   const visibleArts = optData.artworks.filter(a => a.visible)
   const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
@@ -97,13 +99,13 @@ export default function ClientElevation({
         <div className="client-zoom-controls">
           <button
             className="client-zoom-btn"
-            onClick={() => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}
+            onClick={() => onZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}
             title="Zoom out"
           >−</button>
           <span className="client-zoom-label">{Math.round(zoom * 100)}%</span>
           <button
             className="client-zoom-btn"
-            onClick={() => setZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
+            onClick={() => onZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
             title="Zoom in"
           >+</button>
         </div>

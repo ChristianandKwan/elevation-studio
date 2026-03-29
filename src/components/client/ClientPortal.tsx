@@ -111,6 +111,17 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   })
 
   const [rerenderKey, setRerenderKey] = useState(0)
+
+  // Zoom persisted per elevation-option tab
+  const [zoomMap, setZoomMap] = useState<Record<string, number>>({})
+  const zoomKey = `${activeElevId}/${activeOpt}`
+  const zoom = zoomMap[zoomKey] ?? 1.0
+  function setZoom(val: number | ((prev: number) => number)) {
+    setZoomMap(prev => ({
+      ...prev,
+      [zoomKey]: typeof val === 'function' ? val(prev[zoomKey] ?? 1.0) : val,
+    }))
+  }
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clear debounce timer on unmount to prevent state updates on an unmounted component
@@ -323,6 +334,8 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
               ? () => handleClearPick(activeElevId)
               : undefined
           }
+          zoom={zoom}
+          onZoom={setZoom}
           onArtworkMove={onArtworkMove}
           onToggleVisibility={toggleVisibility}
           onNotesChange={onNotesChange}
