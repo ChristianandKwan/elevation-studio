@@ -48,9 +48,9 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
               className="elev-wrap"
               id="elev-wrap"
               ref={elevWrapRef}
-              onMouseDown={studio.onWrapMouseDown}
+              onMouseDown={clientPickedOption && activeOption && clientPickedOption === activeOption ? undefined : studio.onWrapMouseDown}
               onClick={onWrapClick}
-              style={(state.skewDefMode || state.skewAdjustMode) ? { cursor: 'crosshair' } : undefined}
+              style={(state.skewDefMode || state.skewAdjustMode) ? { cursor: 'crosshair' } : { cursor: clientPickedOption && activeOption && clientPickedOption === activeOption ? 'default' : undefined }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

@@ -89,7 +89,8 @@ export default async function DashboardPage() {
 
   const projectsWithThumbs = await Promise.all(
     (projects ?? []).map(async (p) => { try {
-      const firstOption = p.elevations?.[0]?.elevation_options?.find(
+      const sortedElevations = [...(p.elevations ?? [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+      const firstOption = sortedElevations[0]?.elevation_options?.find(
         (o: { option: string }) => o.option === 'A'
       )
 

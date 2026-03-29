@@ -181,6 +181,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   // When we call loadOption directly in handleSwitch we skip the effect for that one render
   const skipNextLoadRef = useRef(false)
 
+  // Ref to track whether the active option is client-picked (used in keydown handler to avoid stale closure)
+  const artworkMoveLocked = useRef(false)
+  useEffect(() => {
+    artworkMoveLocked.current = !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption)
+  }, [activeElev?.clientPickedOption, activeOption])
+
   // Load option into studio when tab changes
   useEffect(() => {
     if (!activeOptData) return
@@ -228,6 +234,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       }
       if (s.selIds.size > 0 && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
         if (!s.elev) return
+        if (artworkMoveLocked.current) return
         const step = e.shiftKey ? 10 : 1
         s.artworks.forEach(art => {
           if (!s.selIds.has(art.id) || !s.elev) return
