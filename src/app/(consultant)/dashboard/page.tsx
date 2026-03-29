@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import DashboardClient from '@/components/dashboard/DashboardClient'
 import sharp from 'sharp'
 
@@ -21,44 +21,37 @@ async function buildThumbnail(
   origH: number,
   scalePxPerCm: number | null
 ): Promise<string | null> {
-  const elevBuf = await fetchBuffer(elevUrl)
-  if (!elevBuf) return null
-
-  const scale = THUMB_W / origW
-  const thumbH = Math.round(origH * scale)
-
-  let img = sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' })
-
-  // If no scale, just return the plain elevation thumbnail
-  if (!scalePxPerCm || artworks.length === 0) {
-    try {
-      const buf = await img.png().toBuffer()
-      return `data:image/png;base64,${buf.toString('base64')}`
-    } catch { return null }
-  }
-
-  // Build composite overlays
-  const compositeInputs: sharp.OverlayOptions[] = []
-  for (const art of artworks) {
-    const artBuf = await fetchBuffer(art.url)
-    if (!artBuf) continue
-    // Artwork pixel dimensions in original image space
-    const artOrigW = Math.round(art.wCm * scalePxPerCm)
-    const artOrigH = Math.round(art.hCm * scalePxPerCm)
-    // Scale down to thumbnail space
-    const artThumbW = Math.max(1, Math.round(artOrigW * scale))
-    const artThumbH = Math.max(1, Math.round(artOrigH * scale))
-    // Position in thumbnail space
-    const left = Math.round(art.xF * THUMB_W)
-    const top = Math.round(art.yF * thumbH)
-    try {
-      const resized = await sharp(artBuf).resize(artThumbW, artThumbH, { fit: 'fill' }).png().toBuffer()
-      compositeInputs.push({ input: resized, left, top, blend: 'over' })
-    } catch { /* skip failed artwork */ }
-  }
-
   try {
-    const elevResized = await img.png().toBuffer()
+    const elevBuf = await fetchBuffer(elevUrl)
+    if (!elevBuf) return null
+
+    const scale = THUMB_W / origW
+    const thumbH = Math.round(origH * scale)
+
+    // If no scale, just return the plain elevation thumbnail
+    if (!scalePxPerCm || artworks.length === 0) {
+      const buf = await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
+      return `data:image/png;base64,${buf.toString('base64')}`
+    }
+
+    // Build composite overlays
+    const compositeInputs: sharp.OverlayOptions[] = []
+    for (const art of artworks) {
+      try {
+        const artBuf = await fetchBuffer(art.url)
+        if (!artBuf) continue
+        const artOrigW = Math.round(art.wCm * scalePxPerCm)
+        const artOrigH = Math.round(art.hCm * scalePxPerCm)
+        const artThumbW = Math.max(1, Math.round(artOrigW * scale))
+        const artThumbH = Math.max(1, Math.round(artOrigH * scale))
+        const left = Math.round(art.xF * THUMB_W)
+        const top = Math.round(art.yF * thumbH)
+        const resized = await sharp(artBuf).resize(artThumbW, artThumbH, { fit: 'fill' }).png().toBuffer()
+        compositeInputs.push({ input: resized, left, top, blend: 'over' })
+      } catch { /* skip failed artwork */ }
+    }
+
+    const elevResized = await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
     const buf = await sharp(elevResized).composite(compositeInputs).png().toBuffer()
     return `data:image/png;base64,${buf.toString('base64')}`
   } catch { return null }
@@ -66,6 +59,7 @@ async function buildThumbnail(
 
 export default async function DashboardPage() {
   const supabase = await createClient()
+  const supabaseService = await createServiceClient()
 
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -94,7 +88,7 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
 
   const projectsWithThumbs = await Promise.all(
-    (projects ?? []).map(async (p) => {
+    (projects ?? []).map(async (p) => { try {
       const firstOption = p.elevations?.[0]?.elevation_options?.find(
         (o: { option: string }) => o.option === 'A'
       )
@@ -106,7 +100,7 @@ export default async function DashboardPage() {
       let thumbnailUrl: string | null = null
 
       if (firstOption?.image_path) {
-        const { data: elevSigned } = await supabase.storage
+        const { data: elevSigned } = await supabaseService.storage
           .from('elevation-images')
           .createSignedUrl(firstOption.image_path, 3600)
 
@@ -115,7 +109,7 @@ export default async function DashboardPage() {
           const visibleArts = (firstOption.artworks ?? []).filter((a: { visible: boolean }) => a.visible)
           const artworkEntries = await Promise.all(
             visibleArts.map(async (a: { image_path: string; x_fraction: number; y_fraction: number; w_cm: number; h_cm: number }) => {
-              const { data: artSigned } = await supabase.storage
+              const { data: artSigned } = await supabaseService.storage
                 .from('artwork-images')
                 .createSignedUrl(a.image_path, 3600)
               return {
@@ -152,6 +146,7 @@ export default async function DashboardPage() {
         pickedCount,
         approvedCount,
       }
+    } catch { return { ...p, thumbnailUrl: null, elevCount: p.elevations?.length ?? 0, artCount: 0, artworks: [], origW: 0, origH: 0, scalePxPerCm: null, pickedCount: 0, approvedCount: 0 } }
     })
   )
 
