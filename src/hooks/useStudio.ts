@@ -577,6 +577,15 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         img.style.filter = `brightness(${art.brightness})`
       }
 
+      // Drop shadow (filter on the overlay div; independent of box-shadow used for selection)
+      if (art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
+        const rad = ((art.shadowAngle ?? 225) * Math.PI) / 180
+        const dist = art.shadowBlur * 0.55
+        const oX = (-Math.sin(rad) * dist).toFixed(1)
+        const oY = (Math.cos(rad) * dist).toFixed(1)
+        div.style.filter = `drop-shadow(${oX}px ${oY}px ${art.shadowBlur.toFixed(1)}px rgba(0,0,0,${art.shadowOpacity.toFixed(2)}))`
+      }
+
       const tag = document.createElement('div')
       tag.className = 'aw-tag'
       tag.textContent = art.name + ' · ' + art.wCm + ' × ' + art.hCm + ' cm' + (art.price ? ' · £' + art.price.toLocaleString() : '')
@@ -1334,6 +1343,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             name: art.name,
             frame_type: art.frameType ?? null,
             frame_width_mm: art.frameWidthMm ?? null,
+            shadow_angle: art.shadowAngle ?? null,
+            shadow_blur: art.shadowBlur ?? null,
+            shadow_opacity: art.shadowOpacity ?? null,
           }).eq('id', art.id)
         )
       )
@@ -1404,6 +1416,15 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function updateArtworkBrightness(artId: string, brightness: number) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, brightness } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  function updateArtworkShadow(artId: string, shadowAngle: number | null, shadowBlur: number | null, shadowOpacity: number | null) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, shadowAngle, shadowBlur, shadowOpacity } : a)
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
@@ -1634,6 +1655,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkFrame,
     updateArtworkBrightness,
     updateAllArtworksBrightness,
+    updateArtworkShadow,
     selectArtwork,
     renderArtworksDOM,
     exportPng,

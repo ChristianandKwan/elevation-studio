@@ -49,14 +49,14 @@ export default async function ClientPortalPage({ params }: Props) {
         id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm, brightness
+          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm, brightness, shadow_angle, shadow_blur, shadow_opacity
         )
       )
     `)
     .eq('project_id', projectId)
     .order('display_order', { ascending: true })
 
-  // If query failed (e.g. brightness / skew columns not yet migrated), fall back without them
+  // If query failed (e.g. brightness / skew / shadow columns not yet migrated), fall back without them
   if (elevError || !elevations) {
     const { data: fallback } = await supabase
       .from('elevations')
@@ -120,6 +120,9 @@ export default async function ClientPortalPage({ params }: Props) {
                   frameType: (art as any).frame_type ?? null,
                   frameWidthMm: (art as any).frame_width_mm ?? null,
                   brightness: (art as any).brightness ?? 1,
+                  shadowAngle: (art as any).shadow_angle ?? null,
+                  shadowBlur: (art as any).shadow_blur ?? null,
+                  shadowOpacity: (art as any).shadow_opacity ?? null,
                 }
               })
           )

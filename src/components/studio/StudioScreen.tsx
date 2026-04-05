@@ -280,6 +280,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   price: cur.price, priceIncludes: cur.priceIncludes,
                   frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
                   brightness: cur.brightness,
+                  shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
                   visible: cur.visible,
                 }
               }),

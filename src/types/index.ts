@@ -27,6 +27,10 @@ export interface Artwork {
   frameWidthMm?: number | null
   /** Per-artwork brightness effect via CSS filter (1.0 = unchanged) */
   brightness?: number | null
+  /** Drop shadow: angle in degrees (0 = sun at top, clockwise), blur radius in px, opacity 0–1 */
+  shadowAngle?: number | null
+  shadowBlur?: number | null
+  shadowOpacity?: number | null
   /** Loaded Image element for canvas rendering */
   img?: HTMLImageElement | null
 }

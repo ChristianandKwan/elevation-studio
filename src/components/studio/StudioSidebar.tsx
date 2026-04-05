@@ -145,6 +145,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   onFrameChange={(ft, fw) => studio.updateArtworkFrame(art.id, ft, fw)}
                   onBrightnessChange={(b) => studio.updateArtworkBrightness(art.id, b)}
                   onBrightnessApplyAll={(b) => studio.updateAllArtworksBrightness(b)}
+                  onShadowChange={(a, bl, op) => studio.updateArtworkShadow(art.id, a, bl, op)}
                 />
               ))}
             </div>
@@ -478,7 +479,7 @@ const FRAME_COLORS: Record<string, string> = {
 }
 
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null }
   isSelected: boolean
   hasScale: boolean
   isLocked: boolean
@@ -492,16 +493,36 @@ interface ArtworkItemProps {
   onFrameChange: (frameType: string | null, frameWidthMm: number | null) => void
   onBrightnessChange: (b: number) => void
   onBrightnessApplyAll: (b: number) => void
+  onShadowChange: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
   const [brightnessVal, setBrightnessVal] = useState(art.brightness ?? 1)
+  const [shadowAngle, setShadowAngle] = useState(art.shadowAngle ?? 225)
+  const [shadowBlur, setShadowBlur] = useState(art.shadowBlur ?? 0)
+  const [shadowOpacity, setShadowOpacity] = useState(art.shadowOpacity ?? 0)
 
   useEffect(() => { setNameValue(art.name) }, [art.name])
   useEffect(() => { setBrightnessVal(art.brightness ?? 1) }, [art.brightness])
+  useEffect(() => { setShadowAngle(art.shadowAngle ?? 225) }, [art.shadowAngle])
+  useEffect(() => { setShadowBlur(art.shadowBlur ?? 0) }, [art.shadowBlur])
+  useEffect(() => { setShadowOpacity(art.shadowOpacity ?? 0) }, [art.shadowOpacity])
+
+  function handleShadowAngle(a: number) {
+    setShadowAngle(a)
+    onShadowChange(a, shadowBlur > 0 ? shadowBlur : null, shadowOpacity > 0 ? shadowOpacity : null)
+  }
+  function handleShadowBlur(b: number) {
+    setShadowBlur(b)
+    onShadowChange(shadowAngle, b > 0 ? b : null, shadowOpacity > 0 ? shadowOpacity : null)
+  }
+  function handleShadowOpacity(o: number) {
+    setShadowOpacity(o)
+    onShadowChange(shadowAngle, shadowBlur > 0 ? shadowBlur : null, o > 0 ? o : null)
+  }
 
   function toggleDims() {
     const dr = dimsRef.current
@@ -652,8 +673,113 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
             All
           </button>
         </div>
+        {/* Shadow */}
+        <div style={{ width: '100%', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>
+          <label style={{ fontSize: 10, color: 'var(--mid)', display: 'block', marginBottom: 6 }}>Shadow</label>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <SunAnglePicker angle={shadowAngle} onChange={handleShadowAngle} disabled={isLocked} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42 }}>Spread</label>
+                <input
+                  type="range" min={0} max={60} step={1}
+                  value={shadowBlur}
+                  disabled={isLocked}
+                  style={{ flex: 1 }}
+                  onChange={e => handleShadowBlur(parseFloat(e.target.value))}
+                />
+                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 24, textAlign: 'right' }}>
+                  {shadowBlur}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42 }}>Opacity</label>
+                <input
+                  type="range" min={0} max={0.8} step={0.05}
+                  value={shadowOpacity}
+                  disabled={isLocked}
+                  style={{ flex: 1 }}
+                  onChange={e => handleShadowOpacity(parseFloat(e.target.value))}
+                />
+                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 24, textAlign: 'right' }}>
+                  {shadowOpacity.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+  )
+}
+
+// ─── SUN ANGLE PICKER ───────────────────────────────────────────────────────
+function SunAnglePicker({ angle, onChange, disabled }: { angle: number; onChange: (a: number) => void; disabled?: boolean }) {
+  const cx = 36, cy = 36, r = 24
+  const rad = (angle * Math.PI) / 180
+  const sunX = cx + r * Math.sin(rad)
+  const sunY = cy - r * Math.cos(rad)
+  // Shadow direction: opposite of sun, short indicator line from centre
+  const sdX = cx - r * 0.45 * Math.sin(rad)
+  const sdY = cy + r * 0.45 * Math.cos(rad)
+
+  function handleMouseDown(e: React.MouseEvent<SVGCircleElement>) {
+    if (disabled) return
+    e.preventDefault()
+    e.stopPropagation()
+    const svg = e.currentTarget.closest('svg') as SVGSVGElement | null
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+
+    function move(ev: MouseEvent) {
+      const x = ev.clientX - rect.left - cx
+      const y = ev.clientY - rect.top - cy
+      const deg = Math.atan2(x, -y) * (180 / Math.PI)
+      onChange(((deg % 360) + 360) % 360)
+    }
+    function up() {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  const rays = [0, 45, 90, 135, 180, 225, 270, 315]
+
+  return (
+    <svg
+      width={72} height={72}
+      style={{ flexShrink: 0, cursor: 'default', userSelect: 'none' }}
+    >
+      <title>Drag sun to set shadow direction</title>
+      {/* Track circle */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth={1.5} />
+      {/* Centre dot */}
+      <circle cx={cx} cy={cy} r={2} fill="var(--mid)" />
+      {/* Shadow direction indicator */}
+      <line x1={cx} y1={cy} x2={sdX} y2={sdY} stroke="var(--mid)" strokeWidth={2} strokeLinecap="round" opacity={0.5} />
+      {/* Sun rays */}
+      {rays.map(rayDeg => {
+        const rr = (rayDeg * Math.PI) / 180
+        return (
+          <line
+            key={rayDeg}
+            x1={sunX + Math.cos(rr) * 8} y1={sunY + Math.sin(rr) * 8}
+            x2={sunX + Math.cos(rr) * 11} y2={sunY + Math.sin(rr) * 11}
+            stroke="#E8A800" strokeWidth={1.5}
+          />
+        )
+      })}
+      {/* Sun body (draggable) */}
+      <circle
+        cx={sunX} cy={sunY} r={7}
+        fill={disabled ? 'var(--border)' : '#F5C518'}
+        stroke="white" strokeWidth={1.5}
+        style={{ cursor: disabled ? 'default' : 'grab' }}
+        onMouseDown={handleMouseDown}
+      />
+    </svg>
   )
 }
 
