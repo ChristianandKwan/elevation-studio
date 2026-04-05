@@ -146,6 +146,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   onBrightnessChange={(b) => studio.updateArtworkBrightness(art.id, b)}
                   onBrightnessApplyAll={(b) => studio.updateAllArtworksBrightness(b)}
                   onShadowChange={(a, bl, op) => studio.updateArtworkShadow(art.id, a, bl, op)}
+                  onShadowApplyAll={(a, bl, op) => studio.updateAllArtworksShadow(a, bl, op)}
                 />
               ))}
             </div>
@@ -494,9 +495,10 @@ interface ArtworkItemProps {
   onBrightnessChange: (b: number) => void
   onBrightnessApplyAll: (b: number) => void
   onShadowChange: (angle: number | null, blur: number | null, opacity: number | null) => void
+  onShadowApplyAll: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -675,33 +677,44 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
         </div>
         {/* Shadow */}
         <div style={{ width: '100%', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>
-          <label style={{ fontSize: 10, color: 'var(--mid)', display: 'block', marginBottom: 6 }}>Shadow</label>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+            <label style={{ fontSize: 10, color: 'var(--mid)', flex: 1 }}>Shadow</label>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: 10, padding: '1px 5px', height: 20 }}
+              title="Apply shadow to all artworks"
+              disabled={isLocked}
+              onClick={e => { e.stopPropagation(); onShadowApplyAll(shadowAngle, shadowBlur > 0 ? shadowBlur : null, shadowOpacity > 0 ? shadowOpacity : null) }}
+            >
+              All
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <SunAnglePicker angle={shadowAngle} onChange={handleShadowAngle} disabled={isLocked} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42 }}>Spread</label>
+                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42, flexShrink: 0 }}>Spread</label>
                 <input
-                  type="range" min={0} max={60} step={1}
+                  type="range" min={0} max={20} step={1}
                   value={shadowBlur}
                   disabled={isLocked}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minWidth: 0 }}
                   onChange={e => handleShadowBlur(parseFloat(e.target.value))}
                 />
-                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 24, textAlign: 'right' }}>
+                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 20, textAlign: 'right', flexShrink: 0 }}>
                   {shadowBlur}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42 }}>Opacity</label>
+                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42, flexShrink: 0 }}>Opacity</label>
                 <input
                   type="range" min={0} max={0.8} step={0.05}
                   value={shadowOpacity}
                   disabled={isLocked}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minWidth: 0 }}
                   onChange={e => handleShadowOpacity(parseFloat(e.target.value))}
                 />
-                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 24, textAlign: 'right' }}>
+                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 20, textAlign: 'right', flexShrink: 0 }}>
                   {shadowOpacity.toFixed(2)}
                 </span>
               </div>

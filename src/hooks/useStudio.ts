@@ -1431,6 +1431,15 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  function updateAllArtworksShadow(shadowAngle: number | null, shadowBlur: number | null, shadowOpacity: number | null) {
+    setState(s => {
+      const newArts = s.artworks.map(a => ({ ...a, shadowAngle, shadowBlur, shadowOpacity }))
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
   function updateAllArtworksBrightness(brightness: number) {
     setState(s => {
       const newArts = s.artworks.map(a => ({ ...a, brightness }))
@@ -1656,6 +1665,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkBrightness,
     updateAllArtworksBrightness,
     updateArtworkShadow,
+    updateAllArtworksShadow,
     selectArtwork,
     renderArtworksDOM,
     exportPng,
