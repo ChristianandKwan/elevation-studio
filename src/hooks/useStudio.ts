@@ -573,18 +573,20 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const img = document.createElement('img')
       img.src = art.imageUrl ?? ''
       img.draggable = false
-      if (art.brightness != null && art.brightness !== 1) {
-        img.style.filter = `brightness(${art.brightness})`
-      }
 
-      // Drop shadow (filter on the overlay div; independent of box-shadow used for selection)
+      // Build div-level CSS filter: brightness (covers image + frame) + drop-shadow
+      const divFilters: string[] = []
+      if (art.brightness != null && art.brightness !== 1) {
+        divFilters.push(`brightness(${art.brightness})`)
+      }
       if (art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
         const rad = ((art.shadowAngle ?? 225) * Math.PI) / 180
         const dist = art.shadowBlur * 0.55
         const oX = (-Math.sin(rad) * dist).toFixed(1)
         const oY = (Math.cos(rad) * dist).toFixed(1)
-        div.style.filter = `drop-shadow(${oX}px ${oY}px ${art.shadowBlur.toFixed(1)}px rgba(0,0,0,${art.shadowOpacity.toFixed(2)}))`
+        divFilters.push(`drop-shadow(${oX}px ${oY}px ${art.shadowBlur.toFixed(1)}px rgba(0,0,0,${art.shadowOpacity.toFixed(2)}))`)
       }
+      if (divFilters.length > 0) div.style.filter = divFilters.join(' ')
 
       const tag = document.createElement('div')
       tag.className = 'aw-tag'

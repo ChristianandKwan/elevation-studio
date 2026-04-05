@@ -654,7 +654,7 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
             type="range" min={0.5} max={1.5} step={0.05}
             value={brightnessVal}
             disabled={isLocked}
-            style={{ flex: 1 }}
+            style={{ flex: 1, minWidth: 0 }}
             onClick={e => e.stopPropagation()}
             onChange={e => {
               const v = parseFloat(e.target.value)
@@ -662,18 +662,9 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
               onBrightnessChange(v)
             }}
           />
-          <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 28, textAlign: 'right' }}>
+          <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 28, textAlign: 'right', flexShrink: 0 }}>
             {brightnessVal.toFixed(2)}
           </span>
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ fontSize: 10, padding: '1px 5px', height: 20 }}
-            title="Apply brightness to all artworks"
-            disabled={isLocked}
-            onClick={e => { e.stopPropagation(); onBrightnessApplyAll(brightnessVal) }}
-          >
-            All
-          </button>
         </div>
         {/* Shadow */}
         <div style={{ width: '100%', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>

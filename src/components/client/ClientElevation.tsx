@@ -390,19 +390,21 @@ function ClientCanvas({
         const ai = document.createElement('img')
         ai.src = art.imageUrl!
         ai.draggable = false
-        if (art.brightness != null && art.brightness !== 1) {
-          ai.style.filter = `brightness(${art.brightness})`
-        }
 
-        // Drop shadow
+        // Build div-level CSS filter: brightness (covers image + frame) + drop-shadow
+        const awFilters: string[] = []
+        if (art.brightness != null && art.brightness !== 1) {
+          awFilters.push(`brightness(${art.brightness})`)
+        }
         if ((art as any).shadowBlur != null && (art as any).shadowBlur > 0 &&
             (art as any).shadowOpacity != null && (art as any).shadowOpacity > 0) {
           const rad = (((art as any).shadowAngle ?? 225) * Math.PI) / 180
           const dist = (art as any).shadowBlur * 0.55
           const oX = (-Math.sin(rad) * dist).toFixed(1)
           const oY = (Math.cos(rad) * dist).toFixed(1)
-          aw.style.filter = `drop-shadow(${oX}px ${oY}px ${(art as any).shadowBlur.toFixed(1)}px rgba(0,0,0,${(art as any).shadowOpacity.toFixed(2)}))`
+          awFilters.push(`drop-shadow(${oX}px ${oY}px ${(art as any).shadowBlur.toFixed(1)}px rgba(0,0,0,${(art as any).shadowOpacity.toFixed(2)}))`)
         }
+        if (awFilters.length > 0) aw.style.filter = awFilters.join(' ')
 
         aw.appendChild(ai)
 
