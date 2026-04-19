@@ -987,7 +987,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
   function confirmScale(cm: number) {
     const dispPxPerCm = pendingCalibPx.current / cm
-    const origPxPerCm = dispPxPerCm / (state.zoom || 1)
+    // Use stateRef for the freshest zoom value — avoids stale-closure issues
+    const currentZoom = stateRef.current.zoom || 1
+    const origPxPerCm = dispPxPerCm / currentZoom
     const scale: Scale = { origPxPerCm, dispPxPerCm }
     setState(s => {
       const newState = { ...s, scale }
@@ -1000,9 +1002,16 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     hideCalibLine()
     onScaleSetRef.current?.(origPxPerCm)
 
-    // Persist
+    // Persist scale AND zoom together so they are always in sync.
+    // uploadElevation hard-codes zoom:1 in the DB and relies on a debounced
+    // persistZoom() call to correct it — but if the user calibrates before that
+    // debounce fires, the saved zoom will be wrong, making artwork sizes
+    // incorrect on the next page load.  Saving both here atomically fixes that.
     const supabase = createClient()
-    supabase.from('elevation_options').update({ scale_px_per_cm: origPxPerCm }).eq('id', optionId).then(() => {})
+    supabase.from('elevation_options')
+      .update({ scale_px_per_cm: origPxPerCm, zoom: currentZoom })
+      .eq('id', optionId)
+      .then(() => {})
   }
 
   function onCalibMouseDown(e: React.MouseEvent<SVGSVGElement>) {

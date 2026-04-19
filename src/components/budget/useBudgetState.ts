@@ -58,7 +58,7 @@ export function useBudgetState(projectId: string): UseBudgetStateResult {
         setBudget(mapped)
         budgetIdRef.current = mapped.id
       } else {
-        const { data: created } = await supabase
+        const { data: created, error: insertErr } = await supabase
           .from('project_budgets')
           .insert({
             project_id: projectId,
@@ -70,6 +70,9 @@ export function useBudgetState(projectId: string): UseBudgetStateResult {
           .select('*')
           .single()
         if (cancelled) return
+        if (insertErr) {
+          console.error('[useBudgetState] Failed to create budget row:', insertErr)
+        }
         if (created) {
           const mapped = mapRow(created as Record<string, unknown>)
           setBudget(mapped)
