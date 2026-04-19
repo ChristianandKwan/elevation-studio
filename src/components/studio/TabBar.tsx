@@ -5,7 +5,7 @@ import { useState } from 'react'
 interface ElevationTab {
   id: string
   name: string
-  options: Array<{ key: string; hasArtworks: boolean }>
+  options: Array<{ key: string; hasArtworks: boolean; hasClientNotes: boolean }>
 }
 
 interface Props {
@@ -67,36 +67,51 @@ export default function TabBar({
 
               {multiOption ? (
                 // Multiple options: render a tab per option
-                elev.options.map(opt => (
-                  <button
-                    key={opt.key}
-                    className={`studio-tab${activeElevId === elev.id && activeOption === opt.key ? ' active' : ''}`}
-                    onClick={() => onSwitch(elev.id, opt.key)}
-                  >
-                    <span className={optionTagClass(opt.key)} style={{ marginRight: 5 }}>{opt.key}</span>
-                    {elev.name}
-                    {elev.options.length > 1 && (
-                      <span
-                        className="studio-tab-del-opt"
-                        title={`Remove option ${opt.key}`}
-                        onClick={e => {
-                          e.stopPropagation()
-                          setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, hasArtworks: opt.hasArtworks })
-                        }}
-                      >
-                        ×
-                      </span>
-                    )}
-                  </button>
-                ))
+                elev.options.map(opt => {
+                  const isActive = activeElevId === elev.id && activeOption === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      className={`studio-tab${isActive ? ' active' : ''}`}
+                      onClick={() => onSwitch(elev.id, opt.key)}
+                    >
+                      <span className={optionTagClass(opt.key)} style={{ marginRight: 5 }}>{opt.key}</span>
+                      {elev.name}
+                      {opt.hasClientNotes && !isActive && (
+                        <span className="studio-tab-notes-dot" title="Client has left notes on this option" aria-label="Has client notes" />
+                      )}
+                      {elev.options.length > 1 && (
+                        <span
+                          className="studio-tab-del-opt"
+                          title={`Remove option ${opt.key}`}
+                          onClick={e => {
+                            e.stopPropagation()
+                            setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, hasArtworks: opt.hasArtworks })
+                          }}
+                        >
+                          ×
+                        </span>
+                      )}
+                    </button>
+                  )
+                })
               ) : (
                 // Single option: just elevation name, no letter badge
-                <button
-                  className={`studio-tab${activeElevId === elev.id ? ' active' : ''}`}
-                  onClick={() => onSwitch(elev.id, elev.options[0]?.key ?? 'A')}
-                >
-                  {elev.name}
-                </button>
+                (() => {
+                  const onlyOpt = elev.options[0]
+                  const isActive = activeElevId === elev.id
+                  return (
+                    <button
+                      className={`studio-tab${isActive ? ' active' : ''}`}
+                      onClick={() => onSwitch(elev.id, onlyOpt?.key ?? 'A')}
+                    >
+                      {elev.name}
+                      {onlyOpt?.hasClientNotes && !isActive && (
+                        <span className="studio-tab-notes-dot" title="Client has left notes on this elevation" aria-label="Has client notes" />
+                      )}
+                    </button>
+                  )
+                })()
               )}
 
               {/* Add option button */}

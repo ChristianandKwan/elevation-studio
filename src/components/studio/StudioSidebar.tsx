@@ -13,8 +13,6 @@ interface Props {
   projectId: string
   onStatus: (msg: string) => void
   clientNotes?: string
-  otherOptionNotes?: string
-  otherOptionKey?: string
   activityLogs?: ActivityLog[]
   onRequestDeleteArtworks: (ids: Set<string>) => void
   approvalStatus?: {
@@ -27,7 +25,7 @@ interface Props {
   onBudgetChange?: (budget: number | null) => void
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes, otherOptionNotes, otherOptionKey, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange }: Props) {
+export default function StudioSidebar({ studio, onStatus, clientNotes, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -364,23 +362,13 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
         </div>
       )}
 
-      {/* Client notes (read-only) */}
+      {/* Client notes (read-only, scoped to the active option) */}
       {clientNotes && (
         <div className="sidebar-section" style={{ background: 'var(--amber-light)', border: '1px solid rgba(139,111,71,.2)', padding: '10px 14px', marginTop: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
-            {otherOptionNotes
-              ? `Client Notes — Option ${otherOptionKey === 'B' ? 'A' : 'B'}`
-              : 'Client Notes'}
+            Client Notes
           </div>
           <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--charcoal)', whiteSpace: 'pre-wrap' }}>{clientNotes}</div>
-        </div>
-      )}
-      {otherOptionNotes && (
-        <div className="sidebar-section" style={{ background: 'var(--amber-light)', border: '1px solid rgba(139,111,71,.2)', padding: '10px 14px', marginTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
-            Client Notes — Option {otherOptionKey}
-          </div>
-          <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--charcoal)', whiteSpace: 'pre-wrap' }}>{otherOptionNotes}</div>
         </div>
       )}
 

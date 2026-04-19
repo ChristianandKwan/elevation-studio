@@ -287,6 +287,11 @@ body {
 }
 .studio-tab:hover .studio-tab-del-opt { opacity: 0.6; }
 .studio-tab-del-opt:hover { opacity: 1 !important; color: var(--red); }
+.studio-tab-notes-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); margin-left: 6px; flex-shrink: 0;
+  vertical-align: middle;
+}
 .studio-tab-rename-btn {
   opacity: 0; transition: opacity .15s;
   padding: 3px 4px; background: none; border: none; cursor: pointer;

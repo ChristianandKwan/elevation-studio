@@ -90,10 +90,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
   const optionId = activeOptData?.id ?? ''
-  // "other option" = first option that isn't the active one (for client notes display)
-  const otherOptData = activeElev?.elevation_options.find(o => o.option !== activeOption)
-  const otherOptionKey = otherOptData?.option ?? ''
-  const otherOptionNotes = otherOptData?.clientNotes ?? ''
 
   const studio = useStudio({
     projectId: project.id,
@@ -650,7 +646,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           elevations={elevations.map(e => ({
             id: e.id,
             name: e.name,
-            options: e.elevation_options.map(o => ({ key: o.option, hasArtworks: o.artworks.length > 0 })),
+            options: e.elevation_options.map(o => ({
+              key: o.option,
+              hasArtworks: o.artworks.length > 0,
+              hasClientNotes: (o.clientNotes ?? '').trim().length > 0,
+            })),
           }))}
           activeElevId={activeElevId}
           activeOption={activeOption}
@@ -670,8 +670,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             projectId={project.id}
             onStatus={onStatus}
             clientNotes={activeOptData?.clientNotes ?? ''}
-            otherOptionNotes={otherOptionNotes}
-            otherOptionKey={otherOptionKey}
             activityLogs={activityLogs}
             onRequestDeleteArtworks={requestDeleteArtworks}
             approvalStatus={{
