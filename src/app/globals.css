@@ -296,7 +296,7 @@ body {
   width: var(--badge-size); height: var(--badge-size); border-radius: 50%;
   background: var(--charcoal); color: white; font-size: 10px; font-family: 'Karla';
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  line-height: 1; text-align: center;
+  line-height: 1; text-align: center; letter-spacing: 0;
 }
 .upload-zone {
   background: var(--charcoal); color: white; border: 1px solid var(--charcoal);
