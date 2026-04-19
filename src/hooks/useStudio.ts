@@ -1217,6 +1217,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // ─── ADD ARTWORKS ─────────────────────────────────────────────────
   async function addArtworks(files: File[], metas: Array<{
     name: string; wCm: number; hCm: number; price: number
+    artist: string; framingStatus: 'framed' | 'requires_framing'; framingCost: number | null
   }>) {
     const supabase = createClient()
     let completed = 0
@@ -1245,9 +1246,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         y_fraction: Math.min(0.08 + off, 0.6),
         visible: true,
         price: meta.price,
-        artist: '',
-        framing_status: 'framed',
-        framing_cost: null,
+        artist: meta.artist,
+        framing_status: meta.framingStatus,
+        framing_cost: meta.framingCost,
         display_order: i,
       }).select().single()
 
@@ -1272,9 +1273,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         yF: Math.min(0.08 + off, 0.6),
         visible: true,
         price: meta.price,
-        artist: '',
-        framingStatus: 'framed' as const,
-        framingCost: null,
+        artist: meta.artist,
+        framingStatus: meta.framingStatus,
+        framingCost: meta.framingCost,
         frameType: null,
         frameWidthMm: null,
         brightness: 1,

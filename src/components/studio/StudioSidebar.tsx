@@ -541,6 +541,7 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
         <img className="aw-thumb" src={art.imageUrl ?? ''} alt={art.name} />
         <div className="aw-info">
           <div className="aw-name">{art.name}</div>
+          {art.artist && <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 1 }}>{art.artist}</div>}
           <div className="aw-price">
             {art.price ? `${formatPrice(art.price)} (${framingLabel(art.framingStatus)})` : 'No price set'}
           </div>
