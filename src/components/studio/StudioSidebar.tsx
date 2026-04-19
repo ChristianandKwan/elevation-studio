@@ -100,7 +100,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
           Scale Calibration
         </div>
         <button
-          className="btn btn-sm btn-full"
+          className="btn btn-sm btn-full btn-step"
           disabled={!hasElev}
           onClick={startCalibration}
         >
@@ -120,7 +120,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
           Artworks
         </div>
         <button
-          className="btn btn-sm btn-primary btn-full"
+          className="btn btn-sm btn-step btn-full"
           disabled={!hasScale || isLocked}
           onClick={() => setShowArtModal(true)}
         >
@@ -183,7 +183,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
           {!maskDrawActive ? (
             <>
               <button
-                className="btn btn-sm btn-full"
+                className="btn btn-sm btn-full btn-step"
                 disabled={!hasElev}
                 onClick={startMaskDraw}
               >
@@ -314,7 +314,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
           ) : (
             <>
               <button
-                className="btn btn-sm btn-full"
+                className="btn btn-sm btn-full btn-step"
                 disabled={!hasElev}
                 onClick={studio.startSkewDef}
               >
