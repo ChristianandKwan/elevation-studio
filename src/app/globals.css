@@ -600,7 +600,7 @@ body {
 .client-logo { height: 44px; width: auto; position: absolute; left: 40px; }
 .client-header-brand {
   position: absolute; left: 50%; transform: translateX(-50%);
-  font-size: 17px; font-weight: 400; color: #fff; font-family: 'Cormorant Garamond', serif; letter-spacing: .5px;
+  font-size: 22px; font-weight: 400; color: #fff; font-family: 'Cormorant Garamond', serif; letter-spacing: .12em;
 }
 .client-project-label { font-size: 11px; color: rgba(255,255,255,.5); font-family: 'Karla'; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .client-prepared-by { font-size: 10px; color: rgba(255,255,255,.35); font-family: 'Karla'; }
@@ -798,7 +798,7 @@ body {
   background: var(--charcoal); flex-shrink: 0;
   gap: 16px;
 }
-.budget-header-left { display: flex; align-items: center; gap: 12px; min-width: 120px; }
+.budget-header-left { display: flex; align-items: center; gap: 12px; flex: 1; }
 .budget-header-left .save-status { color: rgba(255,255,255,0.7); }
 .budget-header-left .save-status--saved { color: rgba(100,200,140,0.9); }
 .budget-header-left .save-status--error { color: rgba(220,100,100,0.9); }
@@ -814,7 +814,7 @@ body {
 .budget-vat-btn:hover:not(.active) { color: rgba(255,255,255,0.75); }
 
 /* Header right group (preview btn + export btn) */
-.budget-header-right { display: flex; align-items: center; gap: 8px; }
+.budget-header-right { display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end; }
 
 /* Preview as client button */
 .budget-preview-btn {
