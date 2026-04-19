@@ -11,8 +11,10 @@ import CalibrationModal from './CalibrationModal'
 import AddArtworkModal from './AddArtworkModal'
 import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
+import BudgetScreen from '@/components/budget/BudgetScreen'
 import { timeNow } from '@/lib/utils'
 import type { Artwork, ActivityLog } from '@/types'
+import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 
 interface DbElevation {
   id: string
@@ -77,6 +79,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [projectStatus, setProjectStatus] = useState(project.status)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
   const [budget, setBudget] = useState<number | null>(project.budget)
+  const [view, setView] = useState<'studio' | 'budget'>('studio')
 
   function onStatus(msg: string) {
     setToast(msg)
@@ -602,68 +605,120 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         </div>
         <div className="header-app-title">Elevation Studio</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {activeOptData?.approved && (
+          {/* Studio / Budget view toggle */}
+          <div className="budget-view-toggle">
+            <button
+              className={`budget-view-tab${view === 'studio' ? ' active' : ''}`}
+              onClick={() => setView('studio')}
+            >
+              Studio
+            </button>
+            <button
+              className={`budget-view-tab${view === 'budget' ? ' active' : ''}`}
+              onClick={() => setView('budget')}
+            >
+              Budget
+            </button>
+          </div>
+
+          {view === 'studio' && (
             <>
-              <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 500 }}>✓ Approved</span>
-              <button className="btn btn-sm btn-ghost" onClick={handleUnapprove}>
-                Unapprove
+              {activeOptData?.approved && (
+                <>
+                  <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 500 }}>✓ Approved</span>
+                  <button className="btn btn-sm btn-ghost" onClick={handleUnapprove}>
+                    Unapprove
+                  </button>
+                </>
+              )}
+              <button className="btn btn-sm btn-ghost" onClick={() => studio.setShowShareModal(true)}>
+                Share with client
+              </button>
+              <button className="btn btn-sm" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
+                Export PNG
               </button>
             </>
           )}
-          <button className="btn btn-sm btn-ghost" onClick={() => studio.setShowShareModal(true)}>
-            Share with client
-          </button>
-          <button className="btn btn-sm" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
-            Export PNG
-          </button>
         </div>
       </div>
 
-      {/* Tab bar */}
-      <TabBar
-        elevations={elevations.map(e => ({
-          id: e.id,
-          name: e.name,
-          options: e.elevation_options.map(o => ({ key: o.option, hasArtworks: o.artworks.length > 0 })),
-        }))}
-        activeElevId={activeElevId}
-        activeOption={activeOption}
-        onSwitch={handleSwitch}
-        onAddElevation={addElevation}
-        onRenameElevation={renameElevation}
-        onDeleteElevation={deleteElevation}
-        onAddOption={addOption}
-        onDeleteOption={deleteOption}
-      />
+      {view === 'studio' ? (
+        <>
+          {/* Tab bar */}
+          <TabBar
+            elevations={elevations.map(e => ({
+              id: e.id,
+              name: e.name,
+              options: e.elevation_options.map(o => ({ key: o.option, hasArtworks: o.artworks.length > 0 })),
+            }))}
+            activeElevId={activeElevId}
+            activeOption={activeOption}
+            onSwitch={handleSwitch}
+            onAddElevation={addElevation}
+            onRenameElevation={renameElevation}
+            onDeleteElevation={deleteElevation}
+            onAddOption={addOption}
+            onDeleteOption={deleteOption}
+          />
 
-      {/* Main */}
-      <div className="studio-main">
-        <StudioSidebar
-          studio={studio}
-          optionId={optionId}
+          {/* Main */}
+          <div className="studio-main">
+            <StudioSidebar
+              studio={studio}
+              optionId={optionId}
+              projectId={project.id}
+              onStatus={onStatus}
+              clientNotes={activeOptData?.clientNotes ?? ''}
+              otherOptionNotes={otherOptionNotes}
+              otherOptionKey={otherOptionKey}
+              activityLogs={activityLogs}
+              onRequestDeleteArtworks={requestDeleteArtworks}
+              approvalStatus={{
+                pickedOption: activeElev?.clientPickedOption ?? null,
+                approved: activeOptData?.approved ?? false,
+                approvedAt: activeOptData?.approved_at ?? null,
+              }}
+              onUnapprove={handleConsultantUnapprove}
+              budget={budget}
+              onBudgetChange={updateBudget}
+            />
+            <StudioCanvas
+              studio={studio}
+              onStatus={onStatus}
+              clientPickedOption={activeElev?.clientPickedOption ?? null}
+              activeOption={activeOption}
+            />
+          </div>
+        </>
+      ) : (
+        <BudgetScreen
           projectId={project.id}
-          onStatus={onStatus}
-          clientNotes={activeOptData?.clientNotes ?? ''}
-          otherOptionNotes={otherOptionNotes}
-          otherOptionKey={otherOptionKey}
-          activityLogs={activityLogs}
-          onRequestDeleteArtworks={requestDeleteArtworks}
-          approvalStatus={{
-            pickedOption: activeElev?.clientPickedOption ?? null,
-            approved: activeOptData?.approved ?? false,
-            approvedAt: activeOptData?.approved_at ?? null,
-          }}
-          onUnapprove={handleConsultantUnapprove}
-          budget={budget}
-          onBudgetChange={updateBudget}
+          projectName={project.name}
+          clientName={project.client_name}
+          elevations={elevations.map<BudgetElevationData>(e => ({
+            id: e.id,
+            name: e.name,
+            clientPickedOption: e.clientPickedOption,
+            options: e.elevation_options.map(o => ({
+              key: o.option,
+              artworks: o.artworks.map(a => ({
+                id: a.id,
+                name: a.name,
+                artist: a.artist ?? '',
+                wCm: a.wCm,
+                hCm: a.hCm,
+                price: a.price,
+                framingStatus: a.framingStatus,
+                framingCost: a.framingCost,
+              })),
+            })),
+          }))}
+          isConsultant={true}
+          isPreviewingClientView={false}
+          clientBudget={budget}
+          onClientBudgetChange={updateBudget}
         />
-        <StudioCanvas
-          studio={studio}
-          onStatus={onStatus}
-          clientPickedOption={activeElev?.clientPickedOption ?? null}
-          activeOption={activeOption}
-        />
-      </div>
+      )}
 
       {/* Modals */}
       {studio.showScaleModal && (
