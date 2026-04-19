@@ -33,6 +33,15 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
   const [historyOpen, setHistoryOpen] = useState(false)
   const [editingBudget, setEditingBudget] = useState(false)
   const [budgetInput, setBudgetInput] = useState(budget != null ? String(budget) : '')
+  const [expandedArtId, setExpandedArtId] = useState<string | null>(null)
+
+  // Auto-expand the artwork's toolbar panel when it is selected (from canvas click or sidebar click)
+  useEffect(() => {
+    if (state.selIds.size === 1) {
+      const id = [...state.selIds][0]
+      setExpandedArtId(id)
+    }
+  }, [state.selIds]) // eslint-disable-line
 
   const hasElev = !!state.elev
   const hasScale = !!state.scale
@@ -133,15 +142,18 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
                   key={art.id}
                   art={art}
                   isSelected={state.selIds.has(art.id)}
+                  isExpanded={expandedArtId === art.id}
                   hasScale={hasScale}
                   isLocked={isLocked}
                   onSelect={() => studio.selectArtwork(art.id)}
                   onDeselect={() => studio.selectArtwork(null)}
+                  onToggleExpand={() => setExpandedArtId(expandedArtId === art.id ? null : art.id)}
                   onToggleVis={() => studio.toggleVisibility(art.id)}
                   onDelete={() => onRequestDeleteArtworks(new Set([art.id]))}
                   onDimsChange={(w, h) => studio.updateArtworkDims(art.id, w, h)}
                   onPriceChange={(p) => studio.updateArtworkPrice(art.id, p)}
                   onNameChange={(n) => studio.updateArtworkName(art.id, n)}
+                  onArtistChange={(a) => studio.updateArtworkArtist(art.id, a)}
                   onFrameChange={(ft, fw) => studio.updateArtworkFrame(art.id, ft, fw)}
                   onBrightnessChange={(b) => studio.updateArtworkBrightness(art.id, b)}
                   onBrightnessApplyAll={(b) => studio.updateAllArtworksBrightness(b)}
@@ -375,8 +387,9 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
       {/* Cost summary */}
       {visibleArtworksWithPrice.length > 0 && (
         <div className="cost-summary">
-          <div style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--mid)', marginBottom: 8 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--mid)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
             Cost Summary
+            <span title="All prices are exclusive of VAT" style={{ fontSize: 9, fontWeight: 400, letterSpacing: '0.02em', textTransform: 'none', opacity: 0.65, cursor: 'help', border: '1px solid currentColor', borderRadius: 3, padding: '0 3px', lineHeight: '14px' }}>ex-VAT</span>
           </div>
           {visibleArtworksWithPrice.map(a => (
             <div key={a.id} className="cost-row">
@@ -482,15 +495,18 @@ const FRAME_COLORS: Record<string, string> = {
 interface ArtworkItemProps {
   art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; framingStatus: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null }
   isSelected: boolean
+  isExpanded: boolean
   hasScale: boolean
   isLocked: boolean
   onSelect: () => void
   onDeselect: () => void
+  onToggleExpand: () => void
   onToggleVis: () => void
   onDelete: () => void
   onDimsChange: (w: number, h: number) => void
   onPriceChange: (p: number) => void
   onNameChange: (name: string) => void
+  onArtistChange: (artist: string) => void
   onFrameChange: (frameType: string | null, frameWidthMm: number | null) => void
   onBrightnessChange: (b: number) => void
   onBrightnessApplyAll: (b: number) => void
@@ -498,20 +514,31 @@ interface ArtworkItemProps {
   onShadowApplyAll: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
+function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
+  const [artistValue, setArtistValue] = useState(art.artist ?? '')
   const [brightnessVal, setBrightnessVal] = useState(art.brightness ?? 1)
   const [shadowAngle, setShadowAngle] = useState(art.shadowAngle ?? 225)
   const [shadowBlur, setShadowBlur] = useState(art.shadowBlur ?? 0)
   const [shadowOpacity, setShadowOpacity] = useState(art.shadowOpacity ?? 0)
 
   useEffect(() => { setNameValue(art.name) }, [art.name])
+  useEffect(() => { setArtistValue(art.artist ?? '') }, [art.artist])
   useEffect(() => { setBrightnessVal(art.brightness ?? 1) }, [art.brightness])
   useEffect(() => { setShadowAngle(art.shadowAngle ?? 225) }, [art.shadowAngle])
   useEffect(() => { setShadowBlur(art.shadowBlur ?? 0) }, [art.shadowBlur])
   useEffect(() => { setShadowOpacity(art.shadowOpacity ?? 0) }, [art.shadowOpacity])
+
+  // Sync expand/collapse with controlled isExpanded prop
+  useEffect(() => {
+    const dr = dimsRef.current
+    const btn = editBtnRef.current
+    if (!dr || !btn) return
+    dr.classList.toggle('visible', isExpanded)
+    btn.classList.toggle('edit-active', isExpanded)
+  }, [isExpanded])
 
   function handleShadowAngle(a: number) {
     setShadowAngle(a)
@@ -524,14 +551,6 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
   function handleShadowOpacity(o: number) {
     setShadowOpacity(o)
     onShadowChange(shadowAngle, shadowBlur > 0 ? shadowBlur : null, o > 0 ? o : null)
-  }
-
-  function toggleDims() {
-    const dr = dimsRef.current
-    const btn = editBtnRef.current
-    if (!dr || !btn) return
-    const open = dr.classList.toggle('visible')
-    btn.classList.toggle('edit-active', open)
   }
 
   return (
@@ -552,7 +571,7 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
             className="icon-btn"
             title="Edit dimensions & price"
             disabled={isLocked}
-            onClick={e => { e.stopPropagation(); toggleDims() }}
+            onClick={e => { e.stopPropagation(); onToggleExpand() }}
           >
             <EditIcon />
           </button>
@@ -576,6 +595,7 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
       </div>
 
       <div className="aw-dims-row" ref={dimsRef}>
+        {/* Title */}
         <input
           type="text"
           className="name-input"
@@ -586,8 +606,25 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
           onChange={e => setNameValue(e.target.value)}
           onBlur={() => onNameChange(nameValue)}
           onKeyDown={e => { if (e.key === 'Enter') { onNameChange(nameValue); (e.target as HTMLInputElement).blur() } }}
-          style={{ gridColumn: '1 / -1', marginBottom: 6 }}
+          style={{ gridColumn: '1 / -1', marginBottom: 4 }}
         />
+        {/* Artist — full-width row */}
+        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>Artist</label>
+          <input
+            type="text"
+            className="name-input"
+            value={artistValue}
+            placeholder="Artist name"
+            disabled={isLocked}
+            onClick={e => e.stopPropagation()}
+            onChange={e => setArtistValue(e.target.value)}
+            onBlur={() => onArtistChange(artistValue)}
+            onKeyDown={e => { if (e.key === 'Enter') { onArtistChange(artistValue); (e.target as HTMLInputElement).blur() } }}
+            style={{ flex: 1 }}
+          />
+        </div>
+        {/* Dimensions */}
         <label>W</label>
         <input
           type="number" className="dim-input" defaultValue={art.wCm} min={1} step={0.5}
@@ -606,14 +643,17 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
           onKeyDown={e => { if (e.key === 'Enter') { const h = parseFloat((e.target as HTMLInputElement).value); if (h > 0) onDimsChange(art.wCm, h) } }}
         />
         <label>cm</label>
-        <label style={{ marginLeft: 6 }}>£</label>
-        <input
-          type="number" className="price-input" defaultValue={art.price || ''} placeholder="Price"
-          disabled={isLocked}
-          onClick={e => e.stopPropagation()}
-          onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
-          onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
-        />
+        {/* Price — own full-width row */}
+        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>£</label>
+          <input
+            type="number" className="dim-input" style={{ flex: 1 }} defaultValue={art.price || ''} placeholder="Price (ex-VAT)"
+            disabled={isLocked}
+            onClick={e => e.stopPropagation()}
+            onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
+            onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
+          />
+        </div>
         {/* Frame controls */}
         <div style={{ width: '100%', display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, opacity: hasScale ? 1 : 0.45 }}>
           <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>Frame</label>

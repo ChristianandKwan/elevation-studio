@@ -1478,6 +1478,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  function updateArtworkArtist(artId: string, artist: string) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, artist: artist.trim() } : a)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
   // ─── SELECT ───────────────────────────────────────────────────────
   function selectArtwork(id: string | null) {
     setState(s => {
@@ -1679,6 +1687,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkDims,
     updateArtworkPrice,
     updateArtworkName,
+    updateArtworkArtist,
     updateArtworkFrame,
     updateArtworkBrightness,
     updateAllArtworksBrightness,

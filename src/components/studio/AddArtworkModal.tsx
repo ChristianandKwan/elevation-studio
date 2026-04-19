@@ -178,7 +178,10 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
               </div>
             </div>
             <div className="field">
-              <label className="field-label">Price (£)</label>
+              <label className="field-label">
+                Price (£)
+                <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--mid)', marginLeft: 5 }}>ex-VAT</span>
+              </label>
               <input type="number" className="field-input" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 4500" min={0} step={50} />
             </div>
             <div className="field">
@@ -251,7 +254,7 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
                       <input type="text" inputMode="decimal" className="field-input" value={meta.hStr} onChange={e => updateRow(i, { hStr: e.target.value })} style={{ fontSize: 12, width: 60 }} />
                     </div>
                     <div>
-                      <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>Price (£)</div>
+                      <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>Price (£) <span style={{ opacity: 0.7 }}>ex-VAT</span></div>
                       <input type="number" className="field-input" value={meta.price || ''} onChange={e => updateRow(i, { price: parseFloat(e.target.value) || 0 })} min={0} step={50} placeholder="0" style={{ fontSize: 12, width: 80 }} />
                     </div>
                   </div>

@@ -643,55 +643,57 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         </div>
       </div>
 
-      {view === 'studio' ? (
-        <>
-          {/* Tab bar */}
-          <TabBar
-            elevations={elevations.map(e => ({
-              id: e.id,
-              name: e.name,
-              options: e.elevation_options.map(o => ({ key: o.option, hasArtworks: o.artworks.length > 0 })),
-            }))}
-            activeElevId={activeElevId}
-            activeOption={activeOption}
-            onSwitch={handleSwitch}
-            onAddElevation={addElevation}
-            onRenameElevation={renameElevation}
-            onDeleteElevation={deleteElevation}
-            onAddOption={addOption}
-            onDeleteOption={deleteOption}
-          />
+      {/* Studio view — kept mounted (display:none when hidden) so the canvas DOM and artwork overlays are preserved */}
+      <div style={{ display: view === 'studio' ? 'flex' : 'none', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+        {/* Tab bar */}
+        <TabBar
+          elevations={elevations.map(e => ({
+            id: e.id,
+            name: e.name,
+            options: e.elevation_options.map(o => ({ key: o.option, hasArtworks: o.artworks.length > 0 })),
+          }))}
+          activeElevId={activeElevId}
+          activeOption={activeOption}
+          onSwitch={handleSwitch}
+          onAddElevation={addElevation}
+          onRenameElevation={renameElevation}
+          onDeleteElevation={deleteElevation}
+          onAddOption={addOption}
+          onDeleteOption={deleteOption}
+        />
 
-          {/* Main */}
-          <div className="studio-main">
-            <StudioSidebar
-              studio={studio}
-              optionId={optionId}
-              projectId={project.id}
-              onStatus={onStatus}
-              clientNotes={activeOptData?.clientNotes ?? ''}
-              otherOptionNotes={otherOptionNotes}
-              otherOptionKey={otherOptionKey}
-              activityLogs={activityLogs}
-              onRequestDeleteArtworks={requestDeleteArtworks}
-              approvalStatus={{
-                pickedOption: activeElev?.clientPickedOption ?? null,
-                approved: activeOptData?.approved ?? false,
-                approvedAt: activeOptData?.approved_at ?? null,
-              }}
-              onUnapprove={handleConsultantUnapprove}
-              budget={budget}
-              onBudgetChange={updateBudget}
-            />
-            <StudioCanvas
-              studio={studio}
-              onStatus={onStatus}
-              clientPickedOption={activeElev?.clientPickedOption ?? null}
-              activeOption={activeOption}
-            />
-          </div>
-        </>
-      ) : (
+        {/* Main */}
+        <div className="studio-main">
+          <StudioSidebar
+            studio={studio}
+            optionId={optionId}
+            projectId={project.id}
+            onStatus={onStatus}
+            clientNotes={activeOptData?.clientNotes ?? ''}
+            otherOptionNotes={otherOptionNotes}
+            otherOptionKey={otherOptionKey}
+            activityLogs={activityLogs}
+            onRequestDeleteArtworks={requestDeleteArtworks}
+            approvalStatus={{
+              pickedOption: activeElev?.clientPickedOption ?? null,
+              approved: activeOptData?.approved ?? false,
+              approvedAt: activeOptData?.approved_at ?? null,
+            }}
+            onUnapprove={handleConsultantUnapprove}
+            budget={budget}
+            onBudgetChange={updateBudget}
+          />
+          <StudioCanvas
+            studio={studio}
+            onStatus={onStatus}
+            clientPickedOption={activeElev?.clientPickedOption ?? null}
+            activeOption={activeOption}
+          />
+        </div>
+      </div>
+
+      {/* Budget view — mounted only when active */}
+      {view === 'budget' && (
         <BudgetScreen
           projectId={project.id}
           projectName={project.name}
