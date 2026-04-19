@@ -595,164 +595,170 @@ function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect
       </div>
 
       <div className="aw-dims-row" ref={dimsRef}>
-        {/* Title */}
-        <input
-          type="text"
-          className="name-input"
-          value={nameValue}
-          placeholder="Artwork name"
-          disabled={isLocked}
-          onClick={e => e.stopPropagation()}
-          onChange={e => setNameValue(e.target.value)}
-          onBlur={() => onNameChange(nameValue)}
-          onKeyDown={e => { if (e.key === 'Enter') { onNameChange(nameValue); (e.target as HTMLInputElement).blur() } }}
-          style={{ gridColumn: '1 / -1', marginBottom: 4 }}
-        />
-        {/* Artist — full-width row */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>Artist</label>
-          <input
-            type="text"
-            className="name-input"
-            value={artistValue}
-            placeholder="Artist name"
-            disabled={isLocked}
-            onClick={e => e.stopPropagation()}
-            onChange={e => setArtistValue(e.target.value)}
-            onBlur={() => onArtistChange(artistValue)}
-            onKeyDown={e => { if (e.key === 'Enter') { onArtistChange(artistValue); (e.target as HTMLInputElement).blur() } }}
-            style={{ flex: 1 }}
-          />
-        </div>
-        {/* Dimensions */}
-        <label>W</label>
-        <input
-          type="number" className="dim-input" defaultValue={art.wCm} min={1} step={0.5}
-          disabled={isLocked}
-          onClick={e => e.stopPropagation()}
-          onBlur={e => { const w = parseFloat(e.target.value); if (w > 0) onDimsChange(w, art.hCm) }}
-          onKeyDown={e => { if (e.key === 'Enter') { const w = parseFloat((e.target as HTMLInputElement).value); if (w > 0) onDimsChange(w, art.hCm) } }}
-        />
-        <span className="dim-sep">×</span>
-        <label>H</label>
-        <input
-          type="number" className="dim-input" defaultValue={art.hCm} min={1} step={0.5}
-          disabled={isLocked}
-          onClick={e => e.stopPropagation()}
-          onBlur={e => { const h = parseFloat(e.target.value); if (h > 0) onDimsChange(art.wCm, h) }}
-          onKeyDown={e => { if (e.key === 'Enter') { const h = parseFloat((e.target as HTMLInputElement).value); if (h > 0) onDimsChange(art.wCm, h) } }}
-        />
-        <label>cm</label>
-        {/* Price — own full-width row */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>£</label>
-          <input
-            type="number" className="dim-input" style={{ flex: 1 }} defaultValue={art.price || ''} placeholder="Price (ex-VAT)"
-            disabled={isLocked}
-            onClick={e => e.stopPropagation()}
-            onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
-            onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
-          />
-        </div>
-        {/* Frame controls */}
-        <div style={{ width: '100%', display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, opacity: hasScale ? 1 : 0.45 }}>
-          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 34 }}>Frame</label>
-          <select
-            className="dim-input"
-            style={{ flex: 1, height: 24, fontSize: 11 }}
-            disabled={!hasScale || isLocked}
-            value={art.frameType ?? ''}
-            onClick={e => e.stopPropagation()}
-            onChange={e => {
-              const ft = e.target.value || null
-              onFrameChange(ft, ft ? (art.frameWidthMm ?? 20) : null)
-            }}
-          >
-            <option value="">None</option>
-            {Object.keys(FRAME_COLORS).map(k => (
-              <option key={k} value={k}>{k.replace('-', ' ')}</option>
-            ))}
-          </select>
-          {art.frameType && (
-            <>
-              <input
-                type="number" className="dim-input" style={{ width: 46, fontSize: 11 }}
-                disabled={!hasScale || isLocked}
-                defaultValue={art.frameWidthMm ?? 20} min={5} max={200} step={5}
-                title="Frame width (mm)"
-                onClick={e => e.stopPropagation()}
-                onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFrameChange(art.frameType!, v) }}
-                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { onFrameChange(art.frameType!, v); onDeselect() } } }}
-              />
-              <label style={{ fontSize: 10, color: 'var(--mid)' }}>mm</label>
-            </>
-          )}
-        </div>
-        {/* Brightness */}
-        <div style={{ width: '100%', display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-          <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 54 }}>Brightness</label>
-          <input
-            type="range" min={0.5} max={1.5} step={0.05}
-            value={brightnessVal}
-            disabled={isLocked}
-            style={{ flex: 1, minWidth: 0 }}
-            onClick={e => e.stopPropagation()}
-            onChange={e => {
-              const v = parseFloat(e.target.value)
-              setBrightnessVal(v)
-              onBrightnessChange(v)
-            }}
-          />
-          <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 28, textAlign: 'right', flexShrink: 0 }}>
-            {brightnessVal.toFixed(2)}
-          </span>
-        </div>
-        {/* Shadow */}
-        <div style={{ width: '100%', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
-            <label style={{ fontSize: 10, color: 'var(--mid)', flex: 1 }}>Shadow</label>
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ fontSize: 10, padding: '1px 5px', height: 20 }}
-              title="Apply shadow to all artworks"
+
+        {/* Group 1: Identity */}
+        <div className="aw-edit-group">
+          <div className="aw-field-row">
+            <label className="aw-f-label">Name</label>
+            <input
+              type="text"
+              className="aw-f-input"
+              value={nameValue}
+              placeholder="Artwork name"
               disabled={isLocked}
-              onClick={e => { e.stopPropagation(); onShadowApplyAll(shadowAngle, shadowBlur > 0 ? shadowBlur : null, shadowOpacity > 0 ? shadowOpacity : null) }}
-            >
-              All
-            </button>
+              onClick={e => e.stopPropagation()}
+              onChange={e => setNameValue(e.target.value)}
+              onBlur={() => onNameChange(nameValue)}
+              onKeyDown={e => { if (e.key === 'Enter') { onNameChange(nameValue); (e.target as HTMLInputElement).blur() } }}
+            />
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <SunAnglePicker angle={shadowAngle} onChange={handleShadowAngle} disabled={isLocked} />
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42, flexShrink: 0 }}>Spread</label>
+          <div className="aw-field-row">
+            <label className="aw-f-label">Artist Name</label>
+            <input
+              type="text"
+              className="aw-f-input"
+              value={artistValue}
+              placeholder="Artist name"
+              disabled={isLocked}
+              onClick={e => e.stopPropagation()}
+              onChange={e => setArtistValue(e.target.value)}
+              onBlur={() => onArtistChange(artistValue)}
+              onKeyDown={e => { if (e.key === 'Enter') { onArtistChange(artistValue); (e.target as HTMLInputElement).blur() } }}
+            />
+          </div>
+        </div>
+
+        {/* Group 2: Size & Price */}
+        <div className="aw-edit-group">
+          <div className="aw-field-row">
+            <label className="aw-f-label">Size</label>
+            <div className="aw-dims-group">
+              <input
+                type="number" className="dim-input" defaultValue={art.wCm} min={1} step={0.5}
+                disabled={isLocked}
+                onClick={e => e.stopPropagation()}
+                onBlur={e => { const w = parseFloat(e.target.value); if (w > 0) onDimsChange(w, art.hCm) }}
+                onKeyDown={e => { if (e.key === 'Enter') { const w = parseFloat((e.target as HTMLInputElement).value); if (w > 0) onDimsChange(w, art.hCm) } }}
+              />
+              <span className="dim-sep">×</span>
+              <input
+                type="number" className="dim-input" defaultValue={art.hCm} min={1} step={0.5}
+                disabled={isLocked}
+                onClick={e => e.stopPropagation()}
+                onBlur={e => { const h = parseFloat(e.target.value); if (h > 0) onDimsChange(art.wCm, h) }}
+                onKeyDown={e => { if (e.key === 'Enter') { const h = parseFloat((e.target as HTMLInputElement).value); if (h > 0) onDimsChange(art.wCm, h) } }}
+              />
+              <span className="dim-unit">cm</span>
+            </div>
+          </div>
+          <div className="aw-field-row">
+            <label className="aw-f-label">Price</label>
+            <div className="aw-price-wrap">
+              <span className="aw-price-prefix">£</span>
+              <input
+                type="number" className="aw-price-input" defaultValue={art.price || ''} placeholder="ex-VAT"
+                disabled={isLocked}
+                onClick={e => e.stopPropagation()}
+                onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
+                onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Group 3: Frame */}
+        <div className="aw-edit-group" style={{ opacity: hasScale ? 1 : 0.45 }}>
+          <div className="aw-field-row">
+            <label className="aw-f-label">Frame</label>
+            <select
+              className="aw-frame-select"
+              disabled={!hasScale || isLocked}
+              value={art.frameType ?? ''}
+              onClick={e => e.stopPropagation()}
+              onChange={e => {
+                const ft = e.target.value || null
+                onFrameChange(ft, ft ? (art.frameWidthMm ?? 20) : null)
+              }}
+            >
+              <option value="">None</option>
+              {Object.keys(FRAME_COLORS).map(k => (
+                <option key={k} value={k}>{k.replace('-', ' ')}</option>
+              ))}
+            </select>
+            {art.frameType && (
+              <>
                 <input
-                  type="range" min={0} max={20} step={1}
-                  value={shadowBlur}
-                  disabled={isLocked}
-                  style={{ flex: 1, minWidth: 0 }}
-                  onChange={e => handleShadowBlur(parseFloat(e.target.value))}
+                  type="number" className="dim-input" style={{ width: 44, marginLeft: 5 }}
+                  disabled={!hasScale || isLocked}
+                  defaultValue={art.frameWidthMm ?? 20} min={5} max={200} step={5}
+                  title="Frame width (mm)"
+                  onClick={e => e.stopPropagation()}
+                  onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFrameChange(art.frameType!, v) }}
+                  onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { onFrameChange(art.frameType!, v); onDeselect() } } }}
                 />
-                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 20, textAlign: 'right', flexShrink: 0 }}>
-                  {shadowBlur}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <label style={{ fontSize: 10, color: 'var(--mid)', minWidth: 42, flexShrink: 0 }}>Opacity</label>
-                <input
-                  type="range" min={0} max={0.8} step={0.05}
-                  value={shadowOpacity}
-                  disabled={isLocked}
-                  style={{ flex: 1, minWidth: 0 }}
-                  onChange={e => handleShadowOpacity(parseFloat(e.target.value))}
-                />
-                <span style={{ fontSize: 10, color: 'var(--mid)', minWidth: 20, textAlign: 'right', flexShrink: 0 }}>
-                  {shadowOpacity.toFixed(2)}
-                </span>
+                <span className="dim-unit" style={{ marginLeft: 3 }}>mm</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Group 4: Lighting */}
+        <div className="aw-edit-group">
+          <div className="aw-slider-row">
+            <label className="aw-f-label">Brightness</label>
+            <input
+              type="range" min={0.5} max={1.5} step={0.05}
+              value={brightnessVal}
+              disabled={isLocked}
+              onClick={e => e.stopPropagation()}
+              onChange={e => {
+                const v = parseFloat(e.target.value)
+                setBrightnessVal(v)
+                onBrightnessChange(v)
+              }}
+            />
+            <span className="aw-slider-val">{brightnessVal.toFixed(2)}</span>
+          </div>
+          <div className="aw-shadow-section" onClick={e => e.stopPropagation()}>
+            <div className="aw-shadow-header">
+              <label className="aw-shadow-label">Shadow</label>
+              <button
+                className="aw-apply-all"
+                title="Apply shadow to all artworks"
+                disabled={isLocked}
+                onClick={e => { e.stopPropagation(); onShadowApplyAll(shadowAngle, shadowBlur > 0 ? shadowBlur : null, shadowOpacity > 0 ? shadowOpacity : null) }}
+              >
+                Apply to all
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <SunAnglePicker angle={shadowAngle} onChange={handleShadowAngle} disabled={isLocked} />
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="aw-slider-row">
+                  <label style={{ fontSize: 10, color: 'var(--mid)', width: 42, flexShrink: 0 }}>Spread</label>
+                  <input
+                    type="range" min={0} max={20} step={1}
+                    value={shadowBlur}
+                    disabled={isLocked}
+                    onChange={e => handleShadowBlur(parseFloat(e.target.value))}
+                  />
+                  <span className="aw-slider-val">{shadowBlur}</span>
+                </div>
+                <div className="aw-slider-row">
+                  <label style={{ fontSize: 10, color: 'var(--mid)', width: 42, flexShrink: 0 }}>Opacity</label>
+                  <input
+                    type="range" min={0} max={0.8} step={0.05}
+                    value={shadowOpacity}
+                    disabled={isLocked}
+                    onChange={e => handleShadowOpacity(parseFloat(e.target.value))}
+                  />
+                  <span className="aw-slider-val">{shadowOpacity.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
       </div>
     </div>
   )
@@ -798,10 +804,17 @@ function SunAnglePicker({ angle, onChange, disabled }: { angle: number; onChange
       style={{ flexShrink: 0, cursor: 'default', userSelect: 'none' }}
     >
       <title>Drag sun to set shadow direction</title>
+      {/* Warm background fill */}
+      <circle cx={cx} cy={cy} r={r - 0.5} fill="var(--cream)" />
       {/* Track circle */}
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth={1.5} />
+      {/* Compass tick marks */}
+      <line x1={cx} y1={cy - r + 5} x2={cx} y2={cy - r} stroke="var(--border)" strokeWidth={1.5} />
+      <line x1={cx} y1={cy + r - 5} x2={cx} y2={cy + r} stroke="var(--border)" strokeWidth={1.5} />
+      <line x1={cx - r + 5} y1={cy} x2={cx - r} y2={cy} stroke="var(--border)" strokeWidth={1.5} />
+      <line x1={cx + r - 5} y1={cy} x2={cx + r} y2={cy} stroke="var(--border)" strokeWidth={1.5} />
       {/* Centre dot */}
-      <circle cx={cx} cy={cy} r={2} fill="var(--mid)" />
+      <circle cx={cx} cy={cy} r={2.5} fill="var(--mid)" />
       {/* Shadow direction indicator */}
       <line x1={cx} y1={cy} x2={sdX} y2={sdY} stroke="var(--mid)" strokeWidth={2} strokeLinecap="round" opacity={0.5} />
       {/* Sun rays */}
