@@ -28,17 +28,15 @@ export default function OptionBlock({ option, vatMode }: Props) {
         <span className={`budget-option-chevron${open ? ' open' : ''}`}>›</span>
       </button>
 
-      {open && (
-        <div className="budget-option-artworks">
-          {option.artworks.length === 0 ? (
-            <p className="budget-empty-note">No artworks added</p>
-          ) : (
-            option.artworks.map(a => (
-              <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} />
-            ))
-          )}
-        </div>
-      )}
+      <div className={`budget-option-artworks${open ? '' : ' budget-option-artworks--collapsed'}`}>
+        {option.artworks.length === 0 ? (
+          <p className="budget-empty-note">No artworks added</p>
+        ) : (
+          option.artworks.map(a => (
+            <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} />
+          ))
+        )}
+      </div>
     </div>
   )
 }

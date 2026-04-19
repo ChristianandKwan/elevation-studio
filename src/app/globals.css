@@ -794,6 +794,7 @@ body {
 }
 .budget-option-chevron.open { transform: rotate(-90deg); }
 .budget-option-artworks { padding: 0 14px 12px; border-top: 1px solid var(--border); }
+.budget-option-artworks--collapsed { display: none; }
 
 /* ── Artwork lines ──────────────────────────────────────── */
 .budget-artwork-line { padding: 9px 0; border-top: 1px solid var(--border); }
@@ -915,6 +916,7 @@ body {
 
 /* ── Print styles ───────────────────────────────────────── */
 @media print {
+  /* Hide all interactive chrome */
   .studio-header,
   .studio-tab-bar,
   .client-tab-bar,
@@ -927,10 +929,21 @@ body {
   .budget-add-item,
   .budget-toggle,
   .budget-inline-edit,
-  .budget-fee-mode-toggle { display: none !important; }
+  .budget-fee-mode-toggle,
+  .budget-option-chevron { display: none !important; }
 
+  /* Layout resets */
   .budget-view { overflow: visible; }
   .budget-content { max-width: 100%; padding: 20px; }
+
+  /* Page breaks */
   .budget-elev-block { page-break-inside: avoid; }
   .budget-option-block { page-break-inside: avoid; }
+
+  /* Force collapsed option panels open so all artworks print */
+  .budget-option-artworks--collapsed { display: block !important; }
+
+  /* Neutralise the option header button appearance */
+  .budget-option-header { cursor: default; pointer-events: none; }
+  .budget-option-header:hover { background: none; }
 }
