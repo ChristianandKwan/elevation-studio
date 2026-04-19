@@ -20,7 +20,7 @@ export default function ElevationSection({ elevation, vatMode }: Props) {
     const displayTotal = vatMode ? Math.round(subtotal * 1.2) : subtotal
 
     return (
-      <div className="budget-elev-block">
+      <div className="budget-elev-block budget-elev-block--picked">
         <div className="budget-elev-header budget-elev-header--picked">
           <span className="budget-elev-name">{elevation.name}</span>
           <span className="budget-elev-pick-badge">✓ Option {picked}</span>

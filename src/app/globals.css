@@ -863,11 +863,19 @@ body {
 .budget-elev-block { margin-top: 24px; }
 .budget-elev-block:first-of-type { margin-top: 0; }
 
+/* Picked elevation: white card matching Additional Costs / Totals panel */
+.budget-elev-block--picked {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  margin-top: 12px;
+}
+.budget-elev-block--picked:first-of-type { margin-top: 16px; }
+
 .budget-elev-header {
   display: flex; align-items: baseline; gap: 10px;
   padding-bottom: 11px; border-bottom: 1px solid var(--border);
 }
-.budget-elev-header--picked { margin-bottom: 0; }
+.budget-elev-header--picked { padding: 14px 20px 13px; }
 .budget-elev-header--pending { margin-bottom: 12px; }
 
 .budget-elev-name {
@@ -889,7 +897,7 @@ body {
 }
 
 /* Picked elevation artwork list */
-.budget-picked-artworks { }
+.budget-picked-artworks { padding: 0 20px; }
 
 /* Pending elevation: two option blocks side by side */
 .budget-options-row { display: flex; gap: 14px; }
