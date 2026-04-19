@@ -7,7 +7,6 @@ export interface ArtMeta {
   wCm: number
   hCm: number
   price: number
-  priceIncludes: 'artwork' | 'all'
 }
 
 // Internal row type uses strings for dimension inputs to allow free editing
@@ -16,7 +15,6 @@ interface RowMeta {
   wStr: string
   hStr: string
   price: number
-  priceIncludes: 'artwork' | 'all'
 }
 
 interface Props {
@@ -36,7 +34,6 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
   const [wCm, setWCm] = useState('')
   const [hCm, setHCm] = useState('')
   const [price, setPrice] = useState('')
-  const [priceIncludes, setPriceIncludes] = useState<'artwork' | 'all'>('artwork')
   // Multi-file per-row metas
   const [rowMetas, setRowMetas] = useState<RowMeta[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -67,7 +64,6 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
       wStr: String(DEFAULT_W),
       hStr: String(DEFAULT_H),
       price: 0,
-      priceIncludes: 'artwork',
     })))
     const readers = selected.map(f => new Promise<string>(resolve => {
       const r = new FileReader()
@@ -90,7 +86,6 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
         wCm: parseFloat(wCm) || DEFAULT_W,
         hCm: parseFloat(hCm) || DEFAULT_H,
         price: parseFloat(price) || 0,
-        priceIncludes,
       }])
     } else {
       onConfirm(files, rowMetas.map(m => ({
@@ -98,7 +93,6 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
         wCm: parseFloat(m.wStr) || DEFAULT_W,
         hCm: parseFloat(m.hStr) || DEFAULT_H,
         price: m.price,
-        priceIncludes: m.priceIncludes,
       })))
     }
   }
@@ -163,13 +157,6 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
             <div className="field">
               <label className="field-label">Price (£)</label>
               <input type="number" className="field-input" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 4500" min={0} step={50} />
-            </div>
-            <div className="field">
-              <label className="field-label">Price includes</label>
-              <select className="field-input" value={priceIncludes} onChange={e => setPriceIncludes(e.target.value as 'artwork' | 'all')}>
-                <option value="artwork">Artwork only</option>
-                <option value="all">Including framing &amp; installation</option>
-              </select>
             </div>
           </>
         )}

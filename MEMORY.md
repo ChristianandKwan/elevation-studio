@@ -106,8 +106,8 @@ Tables: `profiles`, `projects`, `elevations`, `elevation_options`, `artworks`, `
 - `elevation_options` has a `foreground_masks` JSONB column (added in `003_foreground_masks.sql`) — stores an array of polygons, each polygon being an array of `{x, y}` points in 0–1 fractional coordinates
 - `elevation_options` has a `client_notes text` column (added in `005_client_notes.sql`)
 - `elevations` has a `client_picked_option text` column; `elevation_options` has client-token RLS update policies (added in `006_client_approval.sql`)
-- `artworks` has a `brightness float DEFAULT 1.0` column (`009_brightness.sql`) ⚠️ pending prod apply
-- `elevation_options` has 9 skew columns: `skew_tl_x/y`, `skew_tr_x/y`, `skew_br_x/y`, `skew_bl_x/y` (all float nullable) + `skew_active boolean DEFAULT true` (`010_skew.sql`) ⚠️ pending prod apply
+- `artworks` has a `brightness float DEFAULT 1.0` column (`009_brightness.sql`) ✅ applied to prod
+- `elevation_options` has 9 skew columns: `skew_tl_x/y`, `skew_tr_x/y`, `skew_br_x/y`, `skew_bl_x/y` (all float nullable) + `skew_active boolean DEFAULT true` (`010_skew.sql`) ✅ applied to prod
 
 ---
 
@@ -164,9 +164,7 @@ git push
 
 ### Feature backlog
 - No known backlog items. All planned waves shipped as of 2026-03-28.
-- ⚠️ Two DB migrations outstanding — must apply to production before brightness + skew features work live:
-  - `009_brightness.sql` — `ALTER TABLE artworks ADD COLUMN brightness float NOT NULL DEFAULT 1.0`
-  - `010_skew.sql` — 9 new columns on `elevation_options` (skew corners + skew_active)
+- ✅ Migrations 009 and 010 applied to production (2026-03-29)
 
 ### What's shipped (as of 2026-03-28, all on `dev`, commit `b2ae772`)
 - ✅ Archived tab re-fetch guard (`archivedLoaded` flag in `DashboardClient.tsx`)

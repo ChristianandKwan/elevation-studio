@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elevation Studio — Budget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Karla:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cream: #F7F4EF; --panel: #FDFBF9; --charcoal: #1C1A18;
+      --brown: #8B6F47; --border: #E3DED7; --mid: #7A746E;
+      --green: #2E6B4F; --red: #b94040;
+      --serif: 'Cormorant Garamond', Georgia, serif;
+      --sans: 'Karla', system-ui, sans-serif;
+    }
+    html, body { height: 100%; }
+    body {
+      background: var(--cream); color: var(--charcoal);
+      font-family: var(--sans); font-size: 14px; line-height: 1.5;
+      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    }
+    ::selection { background: rgba(139,111,71,.15); }
+    button { cursor: pointer; }
+    input:focus, button:focus { outline: 1px solid var(--brown); outline-offset: 1px; }
+    input { border-radius: 0; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Tokens ────────────────────────────────────────────────────────────────
+const C = {
+  cream:'#F7F4EF', panel:'#FDFBF9', charcoal:'#1C1A18',
+  brown:'#8B6F47', border:'#E3DED7', mid:'#7A746E',
+  green:'#2E6B4F', red:'#b94040',
+  serif:"'Cormorant Garamond', Georgia, serif",
+  sans:"'Karla', system-ui, sans-serif",
+};
+
+// ─── Data ──────────────────────────────────────────────────────────────────
+const PROJECT = { name: 'Harrington Residence', client: 'James & Eleanor Harrington' };
+
+const ELEVATIONS = [
+  {
+    id:'e1', name:'Living Room — North Wall',
+    options:{
+      A:[
+        { id:'a1', title:'Untitled No. 3',    artist:'Sarah Lucas',   dims:'120 × 90 cm', price:8200,  framing:null },
+        { id:'a2', title:'Study for Blue',     artist:'Marcus Field',  dims:'60 × 40 cm',  price:4200,  framing:320  },
+      ],
+      B:[
+        { id:'a3', title:'Amber Ground',       artist:'Nour Khalil',   dims:'100 × 75 cm', price:9800,  framing:450  },
+        { id:'a4', title:'Edge Series II',     artist:'Marcus Field',  dims:'50 × 50 cm',  price:3800,  framing:null },
+      ],
+    },
+  },
+  {
+    id:'e2', name:'Study — West Wall',
+    options:{
+      A:[
+        { id:'a5', title:'Morning Light I',    artist:'Yuki Tanaka',   dims:'80 × 60 cm',  price:6500,  framing:280  },
+        { id:'a6', title:'Form Study',         artist:'Petra Voss',    dims:'40 × 40 cm',  price:2800,  framing:null },
+      ],
+      B:[
+        { id:'a7', title:'Coastline Fragment', artist:'Yuki Tanaka',   dims:'120 × 80 cm', price:8400,  framing:null },
+        { id:'a8', title:'Still Life w. Stone',artist:'Nour Khalil',   dims:'50 × 65 cm',  price:4200,  framing:350  },
+        { id:'a9', title:'Threshold I',        artist:'Petra Voss',    dims:'30 × 30 cm',  price:1800,  framing:180  },
+      ],
+    },
+  },
+  {
+    id:'e3', name:'Entrance Hall — South Wall',
+    options:{
+      A:[
+        { id:'b1', title:'Passage (Diptych)',  artist:'Chen Wei',      dims:'150 × 60 cm', price:11200, framing:null },
+      ],
+      B:[
+        { id:'b2', title:'Grey Field No. 7',   artist:'Sarah Lucas',   dims:'90 × 90 cm',  price:7600,  framing:520  },
+        { id:'b3', title:'Mineral Study',      artist:'Marcus Field',  dims:'40 × 50 cm',  price:3200,  framing:null },
+      ],
+    },
+  },
+];
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+const fmt = n => '£' + Math.round(n).toLocaleString('en-GB');
+const withVAT = (n, inc) => inc ? Math.round(n * 1.2) : n;
+const optionRaw = artworks => artworks.reduce((s, a) => s + a.price + (a.framing||0), 0);
+
+const installRange = count => {
+  if (count <= 5)  return { lo:125,  hi:185  };
+  if (count <= 15) return { lo:250,  hi:350  };
+  if (count <= 30) return { lo:600,  hi:700  };
+  const x = Math.ceil((count-30)/15);
+  return { lo:600+x*350, hi:700+x*350 };
+};
+
+// ─── Atoms ────────────────────────────────────────────────────────────────
+const Kicker = ({ children, style={} }) => (
+  <span style={{ fontFamily:C.sans, fontSize:'10.5px', letterSpacing:'.14em',
+    textTransform:'uppercase', color:C.mid, fontWeight:500, ...style }}>{children}</span>
+);
+
+const Badge = ({ variant='neutral', children }) => {
+  const v = {
+    indicative:{ bg:'rgba(139,111,71,.09)',  fg:C.brown, bd:'rgba(139,111,71,.28)' },
+    confirmed: { bg:'rgba(46,107,79,.08)',   fg:C.green, bd:'rgba(46,107,79,.28)'  },
+    neutral:   { bg:'transparent',           fg:C.mid,   bd:C.border               },
+    pending:   { bg:'rgba(139,111,71,.06)',  fg:C.brown, bd:'rgba(139,111,71,.2)'  },
+  }[variant];
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', padding:'1px 7px',
+      fontSize:'10px', letterSpacing:'.09em', textTransform:'uppercase',
+      fontFamily:C.sans, fontWeight:500, lineHeight:'18px',
+      background:v.bg, color:v.fg, border:`1px solid ${v.bd}`,
+    }}>{children}</span>
+  );
+};
+
+const Divider = ({ heavy }) => (
+  <hr style={{ border:'none', borderTop:`${heavy?'2px':'1px'} solid ${heavy?C.charcoal:C.border}`, margin:0 }} />
+);
+
+const BtnPrimary = ({ onClick, children, style={} }) => (
+  <button onClick={onClick} style={{
+    padding:'7px 18px', background:C.charcoal, color:'#fff', border:`1px solid ${C.charcoal}`,
+    fontFamily:C.sans, fontSize:'12px', letterSpacing:'.05em', fontWeight:500,
+    transition:'opacity .15s', ...style,
+  }} onMouseEnter={e=>e.currentTarget.style.opacity='.8'}
+     onMouseLeave={e=>e.currentTarget.style.opacity='1'}
+  >{children}</button>
+);
+
+const BtnGhost = ({ onClick, children, style={} }) => (
+  <button onClick={onClick} style={{
+    padding:'5px 12px', background:'transparent', color:C.charcoal, border:`1px solid ${C.border}`,
+    fontFamily:C.sans, fontSize:'12px', letterSpacing:'.03em',
+    transition:'border-color .15s', ...style,
+  }} onMouseEnter={e=>e.currentTarget.style.borderColor=C.mid}
+     onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+  >{children}</button>
+);
+
+const VATToggle = ({ value, onChange }) => (
+  <div style={{ display:'flex', border:`1px solid ${C.border}`, overflow:'hidden' }}>
+    {['ex','inc'].map(v => {
+      const active = value===v;
+      return (
+        <button key={v} onClick={()=>onChange(v)} style={{
+          padding:'5px 14px', fontFamily:C.sans, fontSize:'12px', fontWeight:active?500:400,
+          letterSpacing:'.04em', border:'none',
+          background:active?C.charcoal:'transparent',
+          color:active?'#fff':C.mid,
+          transition:'background .15s, color .15s',
+        }}>
+          {v==='ex'?'Ex VAT':'Inc VAT'}
+        </button>
+      );
+    })}
+  </div>
+);
+
+// ─── Artwork lines ─────────────────────────────────────────────────────────
+const ArtworkLine = ({ artwork, vatMode }) => {
+  const price = withVAT(artwork.price, vatMode==='inc');
+  const framing = artwork.framing ? withVAT(artwork.framing, vatMode==='inc') : null;
+  return (
+    <>
+      <div style={{ display:'flex', alignItems:'baseline', padding:'10px 0',
+        borderBottom:`1px solid ${C.border}`, gap:'12px' }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <span style={{ fontFamily:C.serif, fontSize:'15px', fontWeight:400 }}>{artwork.title}</span>
+          <span style={{ color:C.mid, fontSize:'12px', marginLeft:'8px', fontFamily:C.sans }}>{artwork.artist}</span>
+        </div>
+        <span style={{ color:C.mid, fontSize:'12px', fontFamily:C.sans, whiteSpace:'nowrap', flexShrink:0 }}>{artwork.dims}</span>
+        <span style={{ fontFamily:C.sans, fontSize:'14px', minWidth:'68px', textAlign:'right', flexShrink:0 }}>{fmt(price)}</span>
+      </div>
+      {framing && (
+        <div style={{ display:'flex', padding:'6px 0 6px 18px', borderBottom:`1px solid ${C.border}` }}>
+          <span style={{ flex:1, color:C.mid, fontSize:'12px', fontFamily:C.sans, fontStyle:'italic' }}>+ Framing</span>
+          <span style={{ fontFamily:C.sans, fontSize:'12px', color:C.mid, minWidth:'68px', textAlign:'right' }}>{fmt(framing)}</span>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ─── Option block (A or B for unpicked elevation) ─────────────────────────
+const OptionBlock = ({ label, artworks, vatMode }) => {
+  const [open, setOpen] = useState(true);
+  const total = withVAT(optionRaw(artworks), vatMode==='inc');
+  return (
+    <div style={{ flex:1, minWidth:0, border:`1px solid ${C.border}`, background:C.panel }}>
+      <button onClick={()=>setOpen(o=>!o)} style={{
+        display:'flex', alignItems:'center', width:'100%', padding:'11px 16px',
+        borderBottom: open?`1px solid ${C.border}`:'none',
+        background:'transparent', border:'none', textAlign:'left', gap:'10px',
+        borderBottom:`1px solid ${C.border}`,
+      }}>
+        <Kicker>{label}</Kicker>
+        <div style={{ flex:1 }} />
+        <span style={{ fontFamily:C.serif, fontSize:'18px', fontWeight:400, color:C.charcoal }}>{fmt(total)}</span>
+        <span style={{ color:C.mid, fontSize:'10px', display:'inline-block',
+          transform:open?'rotate(180deg)':'rotate(0deg)', transition:'transform .2s', marginLeft:'4px' }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ padding:'0 16px' }}>
+          {artworks.map(a => <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Elevation section ─────────────────────────────────────────────────────
+const ElevationSection = ({ elevation, pickedOption, vatMode, layout }) => {
+  const picked = pickedOption !== null;
+
+  if (picked) {
+    const artworks = elevation.options[pickedOption];
+    const total = withVAT(optionRaw(artworks), vatMode==='inc');
+    return (
+      <div style={{ marginBottom:'28px' }}>
+        <div style={{ display:'flex', alignItems:'baseline', gap:'12px', marginBottom:'14px' }}>
+          <h2 style={{ fontFamily:C.serif, fontWeight:600, fontSize:'20px', flex:1, lineHeight:1.15 }}>{elevation.name}</h2>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:'5px',
+            fontFamily:C.sans, fontSize:'10.5px', letterSpacing:'.1em', textTransform:'uppercase',
+            color:C.green, flexShrink:0 }}>
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+              <path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Option {pickedOption}
+          </span>
+          <span style={{ fontFamily:C.serif, fontSize:'20px', fontWeight:400, flexShrink:0 }}>{fmt(total)}</span>
+        </div>
+        <Divider />
+        {artworks.map(a => <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} />)}
+      </div>
+    );
+  }
+
+  // Not yet picked — show A/B side by side
+  return (
+    <div style={{ marginBottom:'28px' }}>
+      <div style={{ display:'flex', alignItems:'baseline', gap:'12px', marginBottom:'14px' }}>
+        <h2 style={{ fontFamily:C.serif, fontWeight:600, fontSize:'20px', flex:1, lineHeight:1.15 }}>{elevation.name}</h2>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:'5px',
+          fontFamily:C.sans, fontSize:'10.5px', letterSpacing:'.1em', textTransform:'uppercase',
+          color:C.brown, flexShrink:0 }}>
+          <svg width="16" height="8" viewBox="0 0 16 8" fill="none">
+            <path d="M1 4 Q2.75 1 4.5 4 Q6.25 7 8 4 Q9.75 1 11.5 4 Q13.25 7 15 4"
+              stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/>
+          </svg>
+          Selection pending
+        </span>
+      </div>
+      <div style={{ display:'flex', gap:'10px' }}>
+        <OptionBlock label="Option A" artworks={elevation.options.A} vatMode={vatMode} />
+        <OptionBlock label="Option B" artworks={elevation.options.B} vatMode={vatMode} />
+      </div>
+    </div>
+  );
+};
+
+// ─── Installation row ──────────────────────────────────────────────────────
+const InstallationRow = ({ artworkCount, confirmed, confirmedAmt, vatMode, isConsultant, onConfirm }) => {
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState(confirmedAmt ? String(confirmedAmt) : '');
+  const range = installRange(artworkCount);
+
+  let display;
+  if (confirmed && confirmedAmt) {
+    display = fmt(withVAT(confirmedAmt, vatMode==='inc'));
+  } else {
+    display = `${fmt(withVAT(range.lo, vatMode==='inc'))} – ${fmt(withVAT(range.hi, vatMode==='inc'))}`;
+  }
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', padding:'11px 0',
+      borderBottom:`1px solid ${C.border}`, gap:'12px', flexWrap:'wrap' }}>
+      <span style={{ fontFamily:C.sans, fontSize:'14px', flex:1 }}>Installation</span>
+      <Badge variant={confirmed?'confirmed':'indicative'}>{confirmed?'Confirmed':'Indicative'}</Badge>
+      {isConsultant && !editing && (
+        <button onClick={()=>setEditing(true)} style={{
+          fontFamily:C.sans, fontSize:'11px', color:C.brown, background:'none', border:'none',
+          letterSpacing:'.03em', textDecoration:'underline', textUnderlineOffset:'2px',
+        }}>{confirmed?'Edit figure':'Confirm figure'}</button>
+      )}
+      {editing ? (
+        <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+          <span style={{ fontFamily:C.sans, fontSize:'14px' }}>£</span>
+          <input value={input} onChange={e=>setInput(e.target.value)} autoFocus
+            style={{ width:'80px', padding:'4px 7px', border:`1px solid ${C.border}`,
+              fontFamily:C.sans, fontSize:'14px', background:C.panel }} />
+          <BtnPrimary style={{ padding:'4px 12px' }} onClick={()=>{ onConfirm(Number(input)); setEditing(false); }}>Save</BtnPrimary>
+          <BtnGhost style={{ padding:'4px 10px' }} onClick={()=>setEditing(false)}>Cancel</BtnGhost>
+        </div>
+      ) : (
+        <span style={{ fontFamily:C.sans, fontSize:'14px', minWidth:'120px', textAlign:'right' }}>{display}</span>
+      )}
+    </div>
+  );
+};
+
+// ─── Consultant fee ────────────────────────────────────────────────────────
+const ConsultantFee = ({ amount, shownToClient, onToggle, vatMode, isConsultant }) => {
+  const [editing, setEditing] = useState(false);
+  const [amt, setAmt] = useState(amount);
+  const [input, setInput] = useState(String(amount));
+
+  if (!isConsultant && !shownToClient) return null;
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', padding:'11px 0',
+      borderBottom:`1px solid ${C.border}`, gap:'12px', flexWrap:'wrap' }}>
+      <span style={{ fontFamily:C.sans, fontSize:'14px', flex:1 }}>Consultant fee</span>
+      {isConsultant && (
+        <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', userSelect:'none' }}>
+          <input type="checkbox" checked={shownToClient} onChange={onToggle}
+            style={{ accentColor:C.charcoal, width:'13px', height:'13px' }} />
+          <Kicker>Shown to client</Kicker>
+        </label>
+      )}
+      {isConsultant && !editing && (
+        <button onClick={()=>setEditing(true)} style={{
+          fontFamily:C.sans, fontSize:'11px', color:C.brown, background:'none', border:'none',
+          textDecoration:'underline', textUnderlineOffset:'2px',
+        }}>Edit</button>
+      )}
+      {editing ? (
+        <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+          <span style={{ fontFamily:C.sans, fontSize:'14px' }}>£</span>
+          <input value={input} onChange={e=>setInput(e.target.value)} autoFocus
+            style={{ width:'80px', padding:'4px 7px', border:`1px solid ${C.border}`,
+              fontFamily:C.sans, fontSize:'14px', background:C.panel }} />
+          <BtnPrimary style={{ padding:'4px 12px' }} onClick={()=>{ setAmt(Number(input)); setEditing(false); }}>Save</BtnPrimary>
+          <BtnGhost style={{ padding:'4px 10px' }} onClick={()=>setEditing(false)}>Cancel</BtnGhost>
+        </div>
+      ) : (
+        <span style={{ fontFamily:C.sans, fontSize:'14px', minWidth:'68px', textAlign:'right' }}>{fmt(withVAT(amt, vatMode==='inc'))}</span>
+      )}
+    </div>
+  );
+};
+
+// ─── Custom line items ─────────────────────────────────────────────────────
+const CustomLines = ({ items, onAdd, onRemove, vatMode, isConsultant }) => {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name:'', amount:'', vatApplies:false, shownToClient:true });
+
+  const visibleItems = isConsultant ? items : items.filter(i=>i.shownToClient);
+
+  return (
+    <div>
+      {visibleItems.map((item, i) => (
+        <div key={i} style={{ display:'flex', alignItems:'center', padding:'11px 0',
+          borderBottom:`1px solid ${C.border}`, gap:'10px' }}>
+          <span style={{ fontFamily:C.sans, fontSize:'14px', flex:1 }}>{item.name}</span>
+          <div style={{ display:'flex', gap:'5px' }}>
+            {isConsultant && item.vatApplies && <Badge variant="indicative">VAT</Badge>}
+            {isConsultant && item.shownToClient && <Badge variant="neutral">Client</Badge>}
+          </div>
+          <span style={{ fontFamily:C.sans, fontSize:'14px', minWidth:'68px', textAlign:'right' }}>
+            {fmt(withVAT(Number(item.amount), vatMode==='inc' && item.vatApplies))}
+          </span>
+          {isConsultant && (
+            <button onClick={()=>onRemove(i)} style={{ color:C.mid, background:'none', border:'none',
+              fontSize:'16px', lineHeight:1, padding:'0 4px', flexShrink:0 }}>×</button>
+          )}
+        </div>
+      ))}
+      {isConsultant && (
+        adding ? (
+          <div style={{ padding:'14px 0', borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+              <input placeholder="Description" value={draft.name}
+                onChange={e=>setDraft(d=>({...d,name:e.target.value}))}
+                style={{ flex:'2 1 140px', padding:'6px 8px', border:`1px solid ${C.border}`,
+                  fontFamily:C.sans, fontSize:'13px', background:C.panel }} />
+              <input placeholder="Amount (£)" value={draft.amount}
+                onChange={e=>setDraft(d=>({...d,amount:e.target.value}))}
+                style={{ flex:'1 1 80px', maxWidth:'110px', padding:'6px 8px', border:`1px solid ${C.border}`,
+                  fontFamily:C.sans, fontSize:'13px', background:C.panel }} />
+              <label style={{ display:'flex', gap:'4px', alignItems:'center', fontSize:'12px', fontFamily:C.sans, cursor:'pointer', whiteSpace:'nowrap' }}>
+                <input type="checkbox" checked={draft.vatApplies} onChange={e=>setDraft(d=>({...d,vatApplies:e.target.checked}))}
+                  style={{ accentColor:C.charcoal }} /> VAT applies
+              </label>
+              <label style={{ display:'flex', gap:'4px', alignItems:'center', fontSize:'12px', fontFamily:C.sans, cursor:'pointer', whiteSpace:'nowrap' }}>
+                <input type="checkbox" checked={draft.shownToClient} onChange={e=>setDraft(d=>({...d,shownToClient:e.target.checked}))}
+                  style={{ accentColor:C.charcoal }} /> Show to client
+              </label>
+              <BtnPrimary style={{ padding:'5px 14px', fontSize:'12px' }}
+                onClick={()=>{ onAdd({...draft,amount:Number(draft.amount)}); setAdding(false); setDraft({name:'',amount:'',vatApplies:false,shownToClient:true}); }}>Add</BtnPrimary>
+              <BtnGhost style={{ padding:'5px 10px', fontSize:'12px' }} onClick={()=>setAdding(false)}>Cancel</BtnGhost>
+            </div>
+          </div>
+        ) : (
+          <button onClick={()=>setAdding(true)} style={{
+            marginTop:'10px', fontFamily:C.sans, fontSize:'12px', color:C.brown,
+            background:'none', border:'none', letterSpacing:'.04em',
+            textDecoration:'underline', textUnderlineOffset:'2px',
+          }}>+ Add line item</button>
+        )
+      )}
+    </div>
+  );
+};
+
+// ─── Totals panel ──────────────────────────────────────────────────────────
+const TotalsPanel = ({ picks, vatMode, isConsultant, feeShownToClient, consultantFee,
+  customLines, installConfirmed, confirmedInstallation }) => {
+
+  // Per-elevation numbers
+  let artLo = 0, artHi = 0, isRange = false;
+  let artworkCount = 0;
+  ELEVATIONS.forEach(el => {
+    const p = picks[el.id];
+    if (p) {
+      const tot = optionRaw(el.options[p]);
+      artLo += tot; artHi += tot;
+      artworkCount += el.options[p].length;
+    } else {
+      isRange = true;
+      const tA = optionRaw(el.options.A), tB = optionRaw(el.options.B);
+      artLo += Math.min(tA, tB);
+      artHi += Math.max(tA, tB);
+      artworkCount += Math.max(el.options.A.length, el.options.B.length);
+    }
+  });
+
+  // Framing (only for picked options — for unpicked it's folded into the range)
+  let framingLo = 0, framingHi = 0;
+  ELEVATIONS.forEach(el => {
+    const p = picks[el.id];
+    if (p) {
+      const f = el.options[p].reduce((s,a)=>s+(a.framing||0),0);
+      framingLo += f; framingHi += f;
+    }
+    // for unpicked, framing is included in artLo/artHi already
+  });
+
+  const iRange = installRange(artworkCount);
+  const instLo = installConfirmed ? confirmedInstallation : iRange.lo;
+  const instHi = installConfirmed ? confirmedInstallation : iRange.hi;
+
+  const customTotal = customLines.reduce((s,l) => s+(isConsultant||l.shownToClient?Number(l.amount):0), 0);
+  const feeAmt = (isConsultant || feeShownToClient) ? consultantFee : 0;
+
+  const subLo = artLo + instLo + customTotal + feeAmt;
+  const subHi = artHi + instHi + customTotal + feeAmt;
+  const vatLo = Math.round(subLo * .2), vatHi = Math.round(subHi * .2);
+  const grandLo = vatMode==='inc' ? subLo + vatLo : subLo;
+  const grandHi = vatMode==='inc' ? subHi + vatHi : subHi;
+
+  const Row = ({ label, lo, hi, dim }) => (
+    <div style={{ display:'flex', padding:'7px 0', borderBottom:`1px solid ${C.border}` }}>
+      <span style={{ flex:1, fontFamily:C.sans, fontSize:'13px', color:dim?C.mid:C.charcoal }}>{label}</span>
+      <span style={{ fontFamily:C.sans, fontSize:'13px', color:dim?C.mid:C.charcoal }}>
+        {lo===hi ? fmt(lo) : `${fmt(lo)} – ${fmt(hi)}`}
+      </span>
+    </div>
+  );
+
+  return (
+    <div>
+      <Row label="Artworks" lo={withVAT(artLo, vatMode==='inc')} hi={withVAT(artHi, vatMode==='inc')} />
+      {(framingLo > 0 || framingHi > 0) && (
+        <Row label="Framing" lo={withVAT(framingLo, vatMode==='inc')} hi={withVAT(framingHi, vatMode==='inc')} dim />
+      )}
+      <Row label="Installation" lo={withVAT(instLo, vatMode==='inc')} hi={withVAT(instHi, vatMode==='inc')} />
+      {customTotal > 0 && <Row label="Other" lo={withVAT(customTotal, vatMode==='inc')} hi={withVAT(customTotal, vatMode==='inc')} />}
+      {(isConsultant || feeShownToClient) && feeAmt > 0 && (
+        <Row label="Consultant fee" lo={withVAT(feeAmt, vatMode==='inc')} hi={withVAT(feeAmt, vatMode==='inc')} />
+      )}
+      {vatMode==='inc' && <Row label="VAT (20%)" lo={vatLo} hi={vatHi} dim />}
+      <div style={{ borderTop:`2px solid ${C.charcoal}`, marginTop:'6px', paddingTop:'13px',
+        display:'flex', alignItems:'baseline' }}>
+        <span style={{ flex:1, fontFamily:C.sans, fontSize:'26px', letterSpacing:'.12em',
+          textTransform:'uppercase', fontWeight:700, color:C.charcoal }}>Total</span>
+        <span style={{ fontFamily:C.serif, fontSize:'26px', fontWeight:500 }}>
+          {grandLo===grandHi ? fmt(grandLo) : `${fmt(grandLo)} – ${fmt(grandHi)}`}
+        </span>
+      </div>
+      {vatMode==='ex' && <div style={{ textAlign:'right', marginTop:'3px' }}><Kicker>Excluding VAT</Kicker></div>}
+    </div>
+  );
+};
+
+// ─── Main App ──────────────────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "layout": "A",
+  "appState": "full",
+  "view": "client",
+  "vatMode": "ex",
+  "installConfirmed": true
+}/*EDITMODE-END*/;
+
+function App() {
+  const load = key => {
+    try { return JSON.parse(localStorage.getItem('es_budget_'+key)); } catch { return null; }
+  };
+  const persist = (key, val) => localStorage.setItem('es_budget_'+key, JSON.stringify(val));
+
+  const [layout,         setLayout]         = useState(()=>load('layout')         ?? TWEAK_DEFAULTS.layout);
+  const [appState,       setAppState]       = useState(()=>load('appState')       ?? TWEAK_DEFAULTS.appState);
+  const [view,           setView]           = useState(()=>load('view')           ?? TWEAK_DEFAULTS.view);
+  const [vatMode,        setVATMode]        = useState(()=>load('vatMode')        ?? TWEAK_DEFAULTS.vatMode);
+  const [installConfirmed, setInstallConfirmed] = useState(()=>load('installConfirmed') ?? TWEAK_DEFAULTS.installConfirmed);
+  const [confirmedInstallation, setConfirmedInstallation] = useState(350);
+  const [consultantFee]  = useState(1500);
+  const [feeShownToClient, setFeeShownToClient] = useState(false);
+  const [customLines, setCustomLines] = useState([
+    { name:'Crating & international delivery', amount:480, vatApplies:true,  shownToClient:true  },
+  ]);
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+
+  useEffect(()=>{ persist('layout',layout); },[layout]);
+  useEffect(()=>{ persist('appState',appState); },[appState]);
+  useEffect(()=>{ persist('view',view); },[view]);
+  useEffect(()=>{ persist('vatMode',vatMode); },[vatMode]);
+  useEffect(()=>{ persist('installConfirmed',installConfirmed); },[installConfirmed]);
+
+  // Tweaks protocol
+  useEffect(()=>{
+    const handler = e=>{
+      if (e.data?.type==='__activate_edit_mode')   setTweaksOpen(true);
+      if (e.data?.type==='__deactivate_edit_mode') setTweaksOpen(false);
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type:'__edit_mode_available' }, '*');
+    return ()=>window.removeEventListener('message', handler);
+  },[]);
+
+  useEffect(()=>{
+    const edits = { layout, appState, view, vatMode, installConfirmed };
+    window.parent.postMessage({ type:'__edit_mode_set_keys', edits }, '*');
+  },[layout,appState,view,vatMode,installConfirmed]);
+
+  const getPicks = () => {
+    if (appState==='early')   return { e1:null, e2:null, e3:null };
+    if (appState==='partial') return { e1:'A',  e2:null, e3:null };
+    return                           { e1:'A',  e2:'B',  e3:'A'  };
+  };
+  const picks = getPicks();
+  const isConsultant = view==='consultant';
+
+  // ── Content ──────────────────────────────────────────────────────
+  const elevContent = (
+    <div>
+      <Kicker style={{ display:'block', marginBottom:'14px', fontWeight:700, color:C.charcoal, fontSize:'11px', letterSpacing:'.16em' }}>Elevations</Kicker>
+      {ELEVATIONS.map(el => (
+        <ElevationSection key={el.id} elevation={el} pickedOption={picks[el.id]}
+          vatMode={vatMode} layout={layout} />
+      ))}
+    </div>
+  );
+
+  const costsContent = (
+    <div style={{ marginTop:'4px' }}>
+      <Kicker style={{ display:'block', marginBottom:'14px', marginTop:'8px', fontWeight:700, color:C.charcoal, fontSize:'11px', letterSpacing:'.16em' }}>Additional costs</Kicker>
+      <div style={{ borderTop:`1px solid ${C.border}` }}>
+        <InstallationRow
+          artworkCount={Object.values(picks).filter(Boolean).length * 2 + 3}
+          confirmed={installConfirmed}
+          confirmedAmt={confirmedInstallation}
+          vatMode={vatMode}
+          isConsultant={isConsultant}
+          onConfirm={amt=>{ setConfirmedInstallation(amt); setInstallConfirmed(true); }}
+        />
+        <ConsultantFee
+          amount={consultantFee} shownToClient={feeShownToClient}
+          onToggle={()=>setFeeShownToClient(f=>!f)}
+          vatMode={vatMode} isConsultant={isConsultant}
+        />
+        <CustomLines
+          items={customLines}
+          onAdd={item=>setCustomLines(ls=>[...ls,item])}
+          onRemove={i=>setCustomLines(ls=>ls.filter((_,idx)=>idx!==i))}
+          vatMode={vatMode} isConsultant={isConsultant}
+        />
+      </div>
+    </div>
+  );
+
+  const totalsEl = (
+    <TotalsPanel
+      picks={picks} vatMode={vatMode} isConsultant={isConsultant}
+      feeShownToClient={feeShownToClient} consultantFee={consultantFee}
+      customLines={customLines} installConfirmed={installConfirmed}
+      confirmedInstallation={confirmedInstallation}
+    />
+  );
+
+  // ── Header ─────────────────────────────────────────────────────────
+  const header = (
+    <div style={{ background:C.charcoal,
+      padding:'15px 40px', display:'flex', alignItems:'center', gap:'16px',
+      position:'sticky', top:0, zIndex:20 }}>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+          <span style={{ fontFamily:C.serif, fontSize:'21px', fontWeight:400, lineHeight:1.1, color:'#fff' }}>{PROJECT.name}</span>
+          {!isConsultant && (
+            <span style={{ fontFamily:C.sans, fontSize:'10px', letterSpacing:'.1em', textTransform:'uppercase',
+              color:'rgba(255,255,255,.45)', border:'1px solid rgba(255,255,255,.2)',
+              padding:'1px 7px', lineHeight:'18px' }}>Client view</span>
+          )}
+        </div>
+        <div style={{ fontFamily:C.sans, fontSize:'11.5px', color:'rgba(255,255,255,.45)', marginTop:'2px', letterSpacing:'.01em' }}>
+          {PROJECT.client}
+          <span style={{ margin:'0 8px', opacity:.3 }}>·</span>
+          <span style={{ letterSpacing:'.06em', textTransform:'uppercase', fontSize:'10px' }}>Budget</span>
+        </div>
+      </div>
+      {/* Inverted VAT toggle */}
+      <div style={{ display:'flex', border:'1px solid rgba(255,255,255,.25)', overflow:'hidden' }}>
+        {['ex','inc'].map(v => {
+          const active = vatMode===v;
+          return (
+            <button key={v} onClick={()=>setVATMode(v)} style={{
+              padding:'5px 14px', fontFamily:C.sans, fontSize:'12px', fontWeight:active?500:400,
+              letterSpacing:'.04em', border:'none',
+              background:active?'rgba(255,255,255,.15)':'transparent',
+              color:active?'#fff':'rgba(255,255,255,.5)',
+              transition:'background .15s, color .15s',
+            }}>{v==='ex'?'Ex VAT':'Inc VAT'}</button>
+          );
+        })}
+      </div>
+      {isConsultant && (
+        <button style={{ padding:'7px 18px', background:'transparent', color:'#fff',
+          border:'1px solid rgba(255,255,255,.35)', fontFamily:C.sans, fontSize:'12px',
+          letterSpacing:'.05em', fontWeight:500, cursor:'pointer',
+          transition:'border-color .15s',
+        }} onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(255,255,255,.7)'}
+           onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(255,255,255,.35)'}
+        >Export PDF</button>
+      )}
+    </div>
+  );
+
+  // ── Layout renderers ────────────────────────────────────────────────
+
+  // A: Ledger — narrow single column
+  const layoutA = (
+    <div style={{ maxWidth:'780px', margin:'0 auto', padding:'44px 40px 80px' }}>
+      {elevContent}
+      {costsContent}
+      <div style={{ marginTop:'44px' }}>
+        <Kicker style={{ display:'block', marginBottom:'14px', fontWeight:700, color:C.charcoal, fontSize:'11px', letterSpacing:'.16em' }}>Summary</Kicker>
+        {totalsEl}
+      </div>
+    </div>
+  );
+
+  // B: Sidebar — main + sticky right
+  const layoutB = (
+    <div style={{ maxWidth:'1120px', margin:'0 auto', padding:'44px 40px 80px',
+      display:'grid', gridTemplateColumns:'1fr 300px', gap:'56px', alignItems:'start' }}>
+      <div>
+        {elevContent}
+        {costsContent}
+      </div>
+      <div style={{ position:'sticky', top:'74px',
+        background:C.panel, border:`1px solid ${C.border}`, padding:'22px 22px 18px' }}>
+        <Kicker style={{ display:'block', marginBottom:'14px' }}>Summary</Kicker>
+        {totalsEl}
+      </div>
+    </div>
+  );
+
+  // C: Airy — wider with card-contained elevations
+  const layoutC = (
+    <div style={{ maxWidth:'960px', margin:'0 auto', padding:'44px 40px 80px' }}>
+      {elevContent}
+      <div style={{ background:C.panel, border:`1px solid ${C.border}`, padding:'22px 24px', marginTop:'8px' }}>
+        <Kicker style={{ display:'block', marginBottom:'2px' }}>Additional costs</Kicker>
+        <InstallationRow
+          artworkCount={Object.values(picks).filter(Boolean).length * 2 + 3}
+          confirmed={installConfirmed}
+          confirmedAmt={confirmedInstallation}
+          vatMode={vatMode}
+          isConsultant={isConsultant}
+          onConfirm={amt=>{ setConfirmedInstallation(amt); setInstallConfirmed(true); }}
+        />
+        <ConsultantFee
+          amount={consultantFee} shownToClient={feeShownToClient}
+          onToggle={()=>setFeeShownToClient(f=>!f)}
+          vatMode={vatMode} isConsultant={isConsultant}
+        />
+        <CustomLines
+          items={customLines}
+          onAdd={item=>setCustomLines(ls=>[...ls,item])}
+          onRemove={i=>setCustomLines(ls=>ls.filter((_,idx)=>idx!==i))}
+          vatMode={vatMode} isConsultant={isConsultant}
+        />
+      </div>
+      <div style={{ background:C.panel, border:`1px solid ${C.border}`, padding:'22px 24px', marginTop:'10px' }}>
+        <Kicker style={{ display:'block', marginBottom:'14px' }}>Summary</Kicker>
+        {totalsEl}
+      </div>
+    </div>
+  );
+
+  // ── Tweaks panel ────────────────────────────────────────────────
+  const TG = ({ label, children }) => (
+    <div style={{ marginBottom:'16px' }}>
+      <Kicker style={{ display:'block', marginBottom:'7px' }}>{label}</Kicker>
+      <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>{children}</div>
+    </div>
+  );
+  const TO = ({ active, onClick, children }) => (
+    <button onClick={onClick} style={{
+      padding:'5px 10px', textAlign:'left', fontFamily:C.sans, fontSize:'12px',
+      background:active?C.charcoal:'transparent', color:active?'#fff':C.charcoal,
+      border:`1px solid ${active?C.charcoal:C.border}`, transition:'all .12s',
+    }}>{children}</button>
+  );
+
+  return (
+    <div style={{ minHeight:'100vh', background:C.cream }}>
+      {header}
+      {layoutA}
+
+      {tweaksOpen && (
+        <div style={{ position:'fixed', bottom:'24px', right:'24px', background:C.panel,
+          border:`1px solid ${C.border}`, padding:'20px 20px 16px', width:'220px',
+          boxShadow:'0 6px 32px rgba(0,0,0,.12)', zIndex:100 }}>
+          <div style={{ fontFamily:C.sans, fontSize:'11px', letterSpacing:'.12em',
+            textTransform:'uppercase', fontWeight:600, color:C.charcoal, marginBottom:'18px' }}>Tweaks</div>
+
+
+          <TG label="Client state">
+            <TO active={appState==='early'}   onClick={()=>setAppState('early')}>Early draft</TO>
+            <TO active={appState==='partial'} onClick={()=>setAppState('partial')}>Partially chosen</TO>
+            <TO active={appState==='full'}    onClick={()=>setAppState('full')}>Fully chosen</TO>
+          </TG>
+          <TG label="View">
+            <TO active={view==='consultant'} onClick={()=>setView('consultant')}>Consultant</TO>
+            <TO active={view==='client'}     onClick={()=>setView('client')}>Client</TO>
+          </TG>
+          <TG label="Installation">
+            <TO active={!installConfirmed} onClick={()=>setInstallConfirmed(false)}>Indicative</TO>
+            <TO active={installConfirmed}  onClick={()=>setInstallConfirmed(true)}>Confirmed</TO>
+          </TG>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

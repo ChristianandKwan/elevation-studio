@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elevation Studio — Costs Screen Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #f0f0ed;
+    color: #1a1a1a;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── View toggle ── */
+  .view-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    background: #e4e4e0;
+    border-bottom: 1px solid #d0d0cb;
+  }
+  .view-toggle button {
+    padding: 7px 20px;
+    border-radius: 6px;
+    border: 1px solid #b0b0aa;
+    background: white;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: #555;
+    transition: all 0.15s;
+  }
+  .view-toggle button.active {
+    background: #1a1a2e;
+    color: white;
+    border-color: #1a1a2e;
+  }
+  .view-label {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 6px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* ── App shell ── */
+  .app {
+    max-width: 1100px;
+    margin: 0 auto;
+    background: white;
+    min-height: calc(100vh - 70px);
+    box-shadow: 0 0 40px rgba(0,0,0,0.08);
+  }
+
+  /* ── Header ── */
+  .app-header {
+    background: #1a1a2e;
+    color: white;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+  }
+  .app-header .logo {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.9;
+  }
+  .app-header .project-name {
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0.75;
+  }
+
+  /* ── Tab bar ── */
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid #e8e8e4;
+    background: #fafaf8;
+    padding: 0 24px;
+  }
+  .tab {
+    padding: 12px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #888;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab.active {
+    color: #1a1a2e;
+    border-bottom-color: #1a1a2e;
+  }
+
+  /* ── Page content ── */
+  .page {
+    padding: 28px 32px;
+  }
+
+  /* ── Cost basis banner ── */
+  .basis-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f5f5f2;
+    border: 1px solid #e0e0db;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+  }
+  .basis-banner .label {
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 3px;
+  }
+  .basis-banner .value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+  .basis-banner select {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #d0d0cb;
+    background: white;
+    color: #1a1a2e;
+    cursor: pointer;
+  }
+  .basis-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #555;
+    background: white;
+    border: 1px solid #d0d0cb;
+    border-radius: 20px;
+    padding: 4px 12px;
+  }
+  .basis-badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #4a9eff;
+  }
+
+  /* ── Section heading ── */
+  .section-heading {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 12px;
+  }
+
+  /* ── Elevation cost cards ── */
+  .elevation-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .elev-card {
+    border: 1px solid #e4e4e0;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .elev-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #fafaf8;
+    border-bottom: 1px solid #e4e4e0;
+  }
+  .elev-card-header .elev-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1a1a2e;
+  }
+  .elev-card-header .status-badge {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .badge-confirmed {
+    background: #d4f0e8;
+    color: #1a7a55;
+  }
+  .badge-pending {
+    background: #fef3d0;
+    color: #9a6800;
+  }
+
+  .elev-card-body {
+    padding: 14px 16px;
+  }
+
+  .options-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .option-block {
+    border-radius: 8px;
+    padding: 12px 14px;
+    position: relative;
+  }
+  .option-block.picked {
+    background: #edfaf4;
+    border: 1.5px solid #2ecc8a;
+  }
+  .option-block.not-picked {
+    background: #f8f8f6;
+    border: 1px solid #e4e4e0;
+    opacity: 0.55;
+  }
+  .option-block.pending {
+    background: #fffbf0;
+    border: 1px dashed #d4a800;
+  }
+  .option-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .option-label .tick {
+    color: #2ecc8a;
+    font-size: 13px;
+  }
+  .option-price {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .option-block.not-picked .option-price {
+    text-decoration: line-through;
+    color: #bbb;
+  }
+  .option-breakdown {
+    font-size: 11px;
+    color: #999;
+    margin-top: 4px;
+  }
+
+  /* single-option (confirmed) */
+  .confirmed-cost {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .confirmed-cost .big-price {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a7a55;
+  }
+  .confirmed-cost .sub {
+    font-size: 12px;
+    color: #888;
+  }
+
+  /* ── Totals panel ── */
+  .totals-panel {
+    border: 1px solid #e4e4e0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .totals-header {
+    padding: 12px 16px;
+    background: #1a1a2e;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .totals-body {
+    padding: 4px 0;
+  }
+  .totals-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid #f0f0ed;
+  }
+  .totals-row:last-child { border-bottom: none; }
+  .totals-row.subtotal {
+    background: #fafaf8;
+  }
+  .totals-row.grand {
+    background: #1a1a2e;
+    color: white;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .totals-row.vat-row {
+    background: #f5f5f2;
+  }
+  .totals-row .row-label {
+    color: #555;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .totals-row.grand .row-label { color: rgba(255,255,255,0.8); font-size: 14px; }
+  .totals-row .row-value {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1a1a2e;
+  }
+  .totals-row.grand .row-value { color: white; font-size: 16px; }
+  .est-tag {
+    font-size: 10px;
+    font-weight: 600;
+    background: #fef3d0;
+    color: #9a6800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+  .confirmed-tag {
+    font-size: 10px;
+    font-weight: 600;
+    background: #d4f0e8;
+    color: #1a7a55;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* ── Consultancy fee row ── */
+  .fee-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid #f0f0ed;
+    background: #fafaf8;
+  }
+  .fee-label {
+    font-size: 13px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .fee-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .fee-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: white;
+    border: 1px solid #d0d0cb;
+    border-radius: 6px;
+    padding: 4px 8px;
+  }
+  .fee-input-wrap span { color: #888; font-size: 13px; }
+  .fee-input-wrap input {
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    width: 70px;
+    color: #1a1a2e;
+  }
+  .toggle-small {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #888;
+    cursor: pointer;
+  }
+  .toggle-pill {
+    width: 32px; height: 18px;
+    background: #2ecc8a;
+    border-radius: 9px;
+    position: relative;
+    cursor: pointer;
+  }
+  .toggle-pill::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 16px;
+    width: 14px; height: 14px;
+    background: white;
+    border-radius: 50%;
+    transition: left 0.15s;
+  }
+  .toggle-pill.off {
+    background: #ccc;
+  }
+  .toggle-pill.off::after { left: 2px; }
+
+  /* ── VAT toggle ── */
+  .vat-toggle-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .vat-toggle-bar span { font-size: 12px; color: #888; }
+  .seg-control {
+    display: flex;
+    background: #f0f0ed;
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg-btn {
+    padding: 4px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: #888;
+    font-family: inherit;
+  }
+  .seg-btn.active {
+    background: white;
+    color: #1a1a2e;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  /* ── Client view specifics ── */
+  .client-info-strip {
+    background: #f5f5f2;
+    border: 1px solid #e4e4e0;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    font-size: 12px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .client-info-strip strong { color: #1a1a2e; }
+
+  .client-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+  }
+  .client-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #999;
+    padding: 8px 14px;
+    background: #fafaf8;
+    border-bottom: 1px solid #e4e4e0;
+  }
+  .client-table th:last-child { text-align: right; }
+  .client-table td {
+    padding: 14px 14px;
+    border-bottom: 1px solid #f0f0ed;
+    font-size: 14px;
+    color: #1a1a2e;
+    vertical-align: middle;
+  }
+  .client-table td:last-child { text-align: right; font-weight: 600; }
+  .client-table tr:last-child td { border-bottom: none; }
+
+  .client-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 3px;
+  }
+  .client-status.confirmed { color: #1a7a55; }
+  .client-status.pending { color: #9a6800; }
+  .client-status .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+  .client-status.confirmed .dot { background: #2ecc8a; }
+  .client-status.pending .dot { background: #f0b429; }
+
+  .client-totals {
+    border: 1px solid #e4e4e0;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .client-totals .ct-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 11px 16px;
+    border-bottom: 1px solid #f0f0ed;
+    font-size: 14px;
+  }
+  .client-totals .ct-row:last-child { border-bottom: none; }
+  .client-totals .ct-row.dim { color: #888; font-size: 13px; }
+  .client-totals .ct-row.grand {
+    background: #1a1a2e;
+    color: white;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .client-totals .ct-row .ct-val { font-weight: 600; }
+  .client-totals .ct-row.grand .ct-val { color: white; font-size: 16px; }
+  .client-totals .ct-row.dim .ct-val { font-weight: 400; }
+
+  .pending-note {
+    background: #fffbf0;
+    border: 1px solid #f0d080;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #7a5500;
+    margin-top: 16px;
+    line-height: 1.5;
+  }
+
+  /* ── View panels ── */
+  #consultant-view, #client-view { display: none; }
+  #consultant-view.active, #client-view.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- View switcher -->
+<div class="view-toggle">
+  <button class="active" onclick="showView('consultant')">Consultant View</button>
+  <button onclick="showView('client')">Client View</button>
+</div>
+<div class="view-label">Toggle to switch between what C&K see vs what the client sees</div>
+
+<div class="app">
+  <!-- Header -->
+  <div class="app-header">
+    <div class="logo">Elevation Studio</div>
+    <div class="project-name">Chelsea Residence</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <div class="tab">Overview</div>
+    <div class="tab active">Costs</div>
+    <div class="tab">History</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- CONSULTANT VIEW -->
+  <!-- ══════════════════════════════════════════ -->
+  <div id="consultant-view" class="active">
+    <div class="page">
+
+      <!-- Cost basis selector -->
+      <div class="basis-banner">
+        <div>
+          <div class="label">Cost basis</div>
+          <div class="value">Artwork + framing &amp; installation</div>
+        </div>
+        <select>
+          <option selected>Artwork + framing &amp; installation</option>
+          <option>Artwork only</option>
+        </select>
+      </div>
+
+      <!-- VAT toggle -->
+      <div class="vat-toggle-bar">
+        <span>Show prices</span>
+        <div class="seg-control">
+          <button class="seg-btn active" onclick="setVat('ex', this)">Ex. VAT</button>
+          <button class="seg-btn" onclick="setVat('inc', this)">Inc. VAT</button>
+        </div>
+      </div>
+
+      <!-- Elevations -->
+      <div class="section-heading">Elevation breakdown</div>
+      <div class="elevation-cards">
+
+        <!-- Living Room — PICKED -->
+        <div class="elev-card">
+          <div class="elev-card-header">
+            <div class="elev-name">Living Room</div>
+            <span class="status-badge badge-confirmed">Option A picked ✓</span>
+          </div>
+          <div class="elev-card-body">
+            <div class="options-row">
+              <div class="option-block picked">
+                <div class="option-label">Option A <span class="tick">✓ Picked</span></div>
+                <div class="option-price">£12,400</div>
+                <div class="option-breakdown">3 artworks · 2 frames</div>
+              </div>
+              <div class="option-block not-picked">
+                <div class="option-label">Option B</div>
+                <div class="option-price">£9,800</div>
+                <div class="option-breakdown">2 artworks · 1 frame</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Master Bedroom — PENDING -->
+        <div class="elev-card">
+          <div class="elev-card-header">
+            <div class="elev-name">Master Bedroom</div>
+            <span class="status-badge badge-pending">Awaiting selection</span>
+          </div>
+          <div class="elev-card-body">
+            <div class="options-row">
+              <div class="option-block pending">
+                <div class="option-label">Option A</div>
+                <div class="option-price">£8,600</div>
+                <div class="option-breakdown">4 artworks · 3 frames</div>
+              </div>
+              <div class="option-block pending">
+                <div class="option-label">Option B</div>
+                <div class="option-price">£7,200</div>
+                <div class="option-breakdown">3 artworks · 2 frames</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hallway — PENDING -->
+        <div class="elev-card">
+          <div class="elev-card-header">
+            <div class="elev-name">Hallway</div>
+            <span class="status-badge badge-pending">Awaiting selection</span>
+          </div>
+          <div class="elev-card-body">
+            <div class="options-row">
+              <div class="option-block pending">
+                <div class="option-label">Option A</div>
+                <div class="option-price">£4,100</div>
+                <div class="option-breakdown">2 artworks · 2 frames</div>
+              </div>
+              <div class="option-block pending">
+                <div class="option-label">Option B</div>
+                <div class="option-price">£4,100</div>
+                <div class="option-breakdown">2 artworks · 2 frames</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /elevation-cards -->
+
+      <!-- Totals -->
+      <div class="section-heading">Project total</div>
+      <div class="totals-panel">
+        <div class="totals-header">Cost summary — Ex. VAT</div>
+        <div class="totals-body">
+
+          <div class="totals-row">
+            <div class="row-label">Living Room <span class="confirmed-tag">Confirmed</span></div>
+            <div class="row-value">£12,400</div>
+          </div>
+          <div class="totals-row">
+            <div class="row-label">Master Bedroom <span class="est-tag">Estimate</span></div>
+            <div class="row-value">£7,900</div>
+          </div>
+          <div class="totals-row">
+            <div class="row-label">Hallway <span class="est-tag">Estimate</span></div>
+            <div class="row-value">£4,100</div>
+          </div>
+
+          <div class="totals-row subtotal">
+            <div class="row-label" style="font-weight:600;color:#1a1a2e;">Artworks subtotal</div>
+            <div class="row-value">£24,400</div>
+          </div>
+
+          <!-- Consultancy fee row -->
+          <div class="fee-row">
+            <div class="fee-label">
+              C&amp;K Consultancy fee
+              <div class="toggle-small">
+                <div class="toggle-pill" title="Show to client"></div>
+                Show to client
+              </div>
+            </div>
+            <div class="fee-controls">
+              <div class="fee-input-wrap">
+                <span>£</span>
+                <input type="text" value="3,500">
+              </div>
+            </div>
+          </div>
+
+          <div class="totals-row subtotal">
+            <div class="row-label" style="font-weight:600;color:#1a1a2e;">Subtotal ex. VAT</div>
+            <div class="row-value">£27,900</div>
+          </div>
+          <div class="totals-row vat-row">
+            <div class="row-label">VAT (20%)</div>
+            <div class="row-value" style="color:#888;">£5,580</div>
+          </div>
+          <div class="totals-row grand">
+            <div class="row-label">Total inc. VAT</div>
+            <div class="row-value">£33,480</div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="pending-note">
+        ⚠️ Totals include estimated costs for <strong>2 elevations</strong> awaiting client selection. Final project cost will be confirmed once the client picks their preferred options.
+      </div>
+
+    </div>
+  </div><!-- /consultant-view -->
+
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- CLIENT VIEW -->
+  <!-- ══════════════════════════════════════════ -->
+  <div id="client-view">
+    <div class="page">
+
+      <!-- Basis info strip -->
+      <div class="client-info-strip">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#888"/><path d="M7 6v4M7 4.5v.5" stroke="#888" stroke-width="1.2" stroke-linecap="round"/></svg>
+        <span>Prices shown include: <strong>Artwork, framing &amp; installation</strong> · All figures ex. VAT</span>
+      </div>
+
+      <!-- Clean table -->
+      <table class="client-table">
+        <thead>
+          <tr>
+            <th>Elevation</th>
+            <th>Status</th>
+            <th>Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div style="font-weight:600;">Living Room</div>
+              <div class="client-status confirmed">
+                <span class="dot"></span> Option A confirmed
+              </div>
+            </td>
+            <td><span class="status-badge badge-confirmed">Confirmed ✓</span></td>
+            <td>£12,400</td>
+          </tr>
+          <tr>
+            <td>
+              <div style="font-weight:600;">Master Bedroom</div>
+              <div class="client-status pending">
+                <span class="dot"></span> Awaiting your selection
+              </div>
+            </td>
+            <td><span class="status-badge badge-pending">Pending</span></td>
+            <td style="color:#9a6800;">£7,900 <span style="font-size:11px;font-weight:400;">est.</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div style="font-weight:600;">Hallway</div>
+              <div class="client-status pending">
+                <span class="dot"></span> Awaiting your selection
+              </div>
+            </td>
+            <td><span class="status-badge badge-pending">Pending</span></td>
+            <td style="color:#9a6800;">£4,100 <span style="font-size:11px;font-weight:400;">est.</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Client totals -->
+      <div class="client-totals">
+        <div class="ct-row">
+          <span>Artworks subtotal</span>
+          <span class="ct-val">£24,400</span>
+        </div>
+        <div class="ct-row">
+          <span>C&amp;K Consultancy</span>
+          <span class="ct-val">£3,500</span>
+        </div>
+        <div class="ct-row dim">
+          <span>Subtotal ex. VAT</span>
+          <span class="ct-val">£27,900</span>
+        </div>
+        <div class="ct-row dim">
+          <span>VAT (20%)</span>
+          <span class="ct-val">£5,580</span>
+        </div>
+        <div class="ct-row grand">
+          <span>Total inc. VAT</span>
+          <span class="ct-val">£33,480</span>
+        </div>
+      </div>
+
+      <div class="pending-note">
+        Costs for <strong>Master Bedroom</strong> and <strong>Hallway</strong> are estimated until you select your preferred option. Visit those elevations to make your selection.
+      </div>
+
+    </div>
+  </div><!-- /client-view -->
+
+</div><!-- /app -->
+
+<script>
+  function showView(v) {
+    document.getElementById('consultant-view').classList.toggle('active', v === 'consultant');
+    document.getElementById('client-view').classList.toggle('active', v === 'client');
+    document.querySelectorAll('.view-toggle button').forEach((b, i) => {
+      b.classList.toggle('active', (i === 0 && v === 'consultant') || (i === 1 && v === 'client'));
+    });
+  }
+  function setVat(mode, btn) {
+    document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  document.querySelectorAll('.toggle-pill').forEach(p => {
+    p.addEventListener('click', () => p.classList.toggle('off'));
+  });
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 export type ProjectStatus = 'draft' | 'sent' | 'approved'
 export type OptionKey = 'A' | 'B'
-export type PriceIncludes = 'artwork' | 'all'
+export type FramingStatus = 'framed' | 'requires_framing'
 
 export interface Scale {
   origPxPerCm: number
@@ -21,7 +21,9 @@ export interface Artwork {
   yF: number
   visible: boolean
   price: number
-  priceIncludes: PriceIncludes
+  artist: string
+  framingStatus: FramingStatus
+  framingCost: number | null
   /** Optional frame: type and width in mm (requires scale to be set) */
   frameType?: string | null
   frameWidthMm?: number | null
@@ -81,6 +83,8 @@ export interface Project {
   createdAt: string
   elevations: Elevation[]
   activity: ActivityLog[]
+  /** Optional client-stated budget (ex-VAT, £). null means no budget set. */
+  clientBudget: number | null
   /** Thumbnail URL from first elevation option A */
   thumbnailUrl?: string | null
 }
@@ -116,6 +120,42 @@ export interface MaskPoint {
 }
 
 export type ForegroundMasks = MaskPoint[][]
+
+// ─── Budget types ──────────────────────────────────────────────────────────────
+
+export interface BudgetInstallation {
+  indicative: boolean
+  confirmedAmount: number | null
+}
+
+export interface BudgetConsultantFee {
+  mode: 'flat' | 'percentage'
+  /** £ when flat; percentage as a number (e.g. 15 = 15%) when percentage */
+  amount: number
+  shownToClient: boolean
+}
+
+export interface BudgetCustomLineItem {
+  id: string
+  name: string
+  amount: number
+  /** Default true on creation */
+  vatApplies: boolean
+  /** Default true on creation */
+  shownToClient: boolean
+}
+
+export interface ProjectBudget {
+  id: string
+  projectId: string
+  installation: BudgetInstallation
+  consultantFee: BudgetConsultantFee | null
+  customLineItems: BudgetCustomLineItem[]
+  /** Consultant-set VAT default for the client view */
+  vatIncludedDefault: boolean
+  createdAt: string
+  updatedAt: string
+}
 
 export interface MaskDrawState {
   active: boolean

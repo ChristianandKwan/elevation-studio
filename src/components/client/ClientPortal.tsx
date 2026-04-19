@@ -15,7 +15,9 @@ interface ClientArtwork {
   yF: number
   visible: boolean
   price: number
-  priceIncludes: string
+  artist: string
+  framingStatus: string
+  framingCost: number | null
   brightness?: number | null
 }
 

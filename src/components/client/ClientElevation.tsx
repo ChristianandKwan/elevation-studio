@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import { formatPrice, priceLabel } from '@/lib/utils'
+import { formatPrice } from '@/lib/utils'
 import { quadToCSSMatrix3d } from '@/lib/homography'
 
 interface ClientArtwork {
@@ -14,7 +14,9 @@ interface ClientArtwork {
   yF: number
   visible: boolean
   price: number
-  priceIncludes: string
+  artist: string
+  framingStatus: string
+  framingCost: number | null
   frameType?: string | null
   frameWidthMm?: number | null
   brightness?: number | null

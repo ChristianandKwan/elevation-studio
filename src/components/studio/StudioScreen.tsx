@@ -277,7 +277,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   xF: cur.xF, yF: cur.yF,
                   name: cur.name,
                   wCm: cur.wCm, hCm: cur.hCm,
-                  price: cur.price, priceIncludes: cur.priceIncludes,
+                  price: cur.price, artist: cur.artist, framingStatus: cur.framingStatus, framingCost: cur.framingCost,
                   frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
                   brightness: cur.brightness,
                   shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
@@ -521,8 +521,16 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const supabase = createClient()
     if (shareToken) return shareToken
 
-    const { data } = await supabase.from('client_tokens').insert({ project_id: project.id }).select().single()
-    const token = data?.token ?? ''
+    // Generate a friendly artist-name token (e.g. "monet-warhol-basquiat").
+    // Retry once on the rare chance of a collision.
+    const { generateArtistToken } = await import('@/lib/artistToken')
+    let token = generateArtistToken()
+    let result = await supabase.from('client_tokens').insert({ project_id: project.id, token }).select().single()
+    if (result.error) {
+      token = generateArtistToken()
+      result = await supabase.from('client_tokens').insert({ project_id: project.id, token }).select().single()
+    }
+    token = result.data?.token ?? token
     setShareToken(token)
 
     // Log activity + set status to sent (only if not already approved)

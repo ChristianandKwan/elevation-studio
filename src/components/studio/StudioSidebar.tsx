@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 import type { ActivityLog } from '@/types'
-import { priceLabel, formatPrice } from '@/lib/utils'
+import { framingLabel, formatPrice } from '@/lib/utils'
 
 type StudioHook = ReturnType<typeof useStudio>
 
@@ -58,8 +58,8 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, otherOpti
   const elevationTotal = visibleArtworksWithPrice.reduce((s, a) => s + a.price, 0)
   const hasMixedPricing = (() => {
     if (visibleArtworksWithPrice.length < 2) return false
-    const first = visibleArtworksWithPrice[0].priceIncludes
-    return visibleArtworksWithPrice.some(a => a.priceIncludes !== first)
+    const first = visibleArtworksWithPrice[0].framingStatus
+    return visibleArtworksWithPrice.some(a => a.framingStatus !== first)
   })()
 
   return (
@@ -480,7 +480,7 @@ const FRAME_COLORS: Record<string, string> = {
 }
 
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; priceIncludes: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; framingStatus: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null }
   isSelected: boolean
   hasScale: boolean
   isLocked: boolean
@@ -542,7 +542,7 @@ function ArtworkItem({ art, isSelected, hasScale, isLocked, onSelect, onDeselect
         <div className="aw-info">
           <div className="aw-name">{art.name}</div>
           <div className="aw-price">
-            {art.price ? `${formatPrice(art.price)} (${priceLabel(art.priceIncludes)})` : 'No price set'}
+            {art.price ? `${formatPrice(art.price)} (${framingLabel(art.framingStatus)})` : 'No price set'}
           </div>
         </div>
         <div className="aw-btns">

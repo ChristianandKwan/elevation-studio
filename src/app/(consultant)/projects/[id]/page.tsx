@@ -37,7 +37,7 @@ export default async function ProjectPage({ params }: Props) {
         id, option, image_path, orig_w, orig_h, scale_px_per_cm, zoom, approved, approved_at, foreground_masks, client_notes,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, price_includes, display_order, frame_type, frame_width_mm, brightness, shadow_angle, shadow_blur, shadow_opacity
+          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, framing_status, framing_cost, display_order, frame_type, frame_width_mm, brightness, shadow_angle, shadow_blur, shadow_opacity
         )
       )
     `)
@@ -61,7 +61,7 @@ export default async function ProjectPage({ params }: Props) {
           artworks: Array<{
             id: string; name: string; image_path: string;
             w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
-            visible: boolean; price: number; price_includes: string; display_order: number;
+            visible: boolean; price: number; artist: string; framing_status: string; framing_cost: number | null; display_order: number;
           }>;
           foreground_masks: unknown;
         }) => {
@@ -88,7 +88,9 @@ export default async function ProjectPage({ params }: Props) {
                   yF: art.y_fraction,
                   wCm: art.w_cm,
                   hCm: art.h_cm,
-                  priceIncludes: art.price_includes as 'artwork' | 'all',
+                  artist: (art as any).artist ?? '',
+                  framingStatus: ((art as any).framing_status ?? 'framed') as 'framed' | 'requires_framing',
+                  framingCost: (art as any).framing_cost ?? null,
                   frameType: (art as any).frame_type ?? null,
                   frameWidthMm: (art as any).frame_width_mm ?? null,
                   brightness: (art as any).brightness ?? 1,

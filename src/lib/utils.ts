@@ -13,8 +13,8 @@ export function timeNow(): string {
   })
 }
 
-export function priceLabel(v: string): string {
-  return ({ artwork: 'artwork only', all: 'incl. framing & install' } as Record<string, string>)[v] ?? v
+export function framingLabel(v: string): string {
+  return ({ framed: 'framed', requires_framing: 'requires framing' } as Record<string, string>)[v] ?? v
 }
 
 export function formatPrice(p: number): string {
