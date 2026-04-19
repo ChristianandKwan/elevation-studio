@@ -273,7 +273,11 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                 <div style={{ color: 'var(--muted)', padding: '1rem' }}>No archived projects.</div>
               ) : archivedProjects.map(p => (
                 <div key={p.id} className="project-card project-card--archived">
-                  <div className="project-card-thumb project-card-thumb-empty">⬜</div>
+                  <div className="project-card-thumb">
+                    <div className="project-card-thumb-placeholder">
+                      <span>{p.name.charAt(0)}</span>
+                    </div>
+                  </div>
                   <div className="project-card-body">
                     <div className="project-card-name">{p.name}</div>
                     <div className="project-card-client">{p.client_name}</div>
@@ -313,7 +317,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                 <div className="project-card-thumb">
                   {p.thumbnailUrl
                     ? <img src={p.thumbnailUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    : <div className="project-card-thumb-empty">⬜</div>
+                    : <div className="project-card-thumb-placeholder"><span>{p.name.charAt(0)}</span></div>
                   }
                 </div>
                 <div className="project-card-body">

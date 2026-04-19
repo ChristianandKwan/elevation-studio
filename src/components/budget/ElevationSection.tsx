@@ -44,7 +44,7 @@ export default function ElevationSection({ elevation, vatMode }: Props) {
     <div className="budget-elev-block">
       <div className="budget-elev-header budget-elev-header--pending">
         <span className="budget-elev-name">{elevation.name}</span>
-        <span className="budget-elev-pending-badge">Selection pending</span>
+        <span className="budget-elev-pending-badge">● Selection pending</span>
       </div>
       <div className="budget-options-row">
         {elevation.options.length === 0 ? (

@@ -122,30 +122,31 @@ export default function BudgetScreen({
             {/* ── Additional costs ─────────────────────────────────────── */}
             <section className="budget-section">
               <div className="budget-section-kicker">Additional Costs</div>
+              <div className="budget-costs-panel">
+                <InstallationRow
+                  installation={budget.installation}
+                  artCountMin={pt.artCountMin}
+                  artCountMax={pt.artCountMax}
+                  isConsultant={effectiveIsConsultant}
+                  onChange={setInstallation}
+                />
 
-              <InstallationRow
-                installation={budget.installation}
-                artCountMin={pt.artCountMin}
-                artCountMax={pt.artCountMax}
-                isConsultant={effectiveIsConsultant}
-                onChange={setInstallation}
-              />
+                <ConsultantFeeRow
+                  fee={budget.consultantFee}
+                  artMin={pt.artMin}
+                  artMax={pt.artMax}
+                  isConsultant={effectiveIsConsultant}
+                  onChange={setConsultantFee}
+                />
 
-              <ConsultantFeeRow
-                fee={budget.consultantFee}
-                artMin={pt.artMin}
-                artMax={pt.artMax}
-                isConsultant={effectiveIsConsultant}
-                onChange={setConsultantFee}
-              />
-
-              <CustomLineItems
-                items={budget.customLineItems}
-                isConsultant={effectiveIsConsultant}
-                onAdd={addCustomLineItem}
-                onUpdate={updateCustomLineItem}
-                onRemove={removeCustomLineItem}
-              />
+                <CustomLineItems
+                  items={budget.customLineItems}
+                  isConsultant={effectiveIsConsultant}
+                  onAdd={addCustomLineItem}
+                  onUpdate={updateCustomLineItem}
+                  onRemove={removeCustomLineItem}
+                />
+              </div>
             </section>
 
             {/* ── Totals ───────────────────────────────────────────────── */}
