@@ -561,9 +561,6 @@ function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect
         <div className="aw-info">
           <div className="aw-name">{art.name}</div>
           {art.artist && <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 1 }}>{art.artist}</div>}
-          <div className="aw-price">
-            {art.price ? `${formatPrice(art.price)} (${framingLabel(art.framingStatus)})` : 'No price set'}
-          </div>
         </div>
         <div className="aw-btns">
           <button
