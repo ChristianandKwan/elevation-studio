@@ -7,9 +7,20 @@ interface Props {
   onVatToggle: (v: boolean) => void
   saveStatus: SaveStatus
   onExportPdf: () => void
+  isConsultant?: boolean
+  isPreviewingClientView?: boolean
+  onPreviewToggle?: () => void
 }
 
-export default function BudgetHeader({ vatMode, onVatToggle, saveStatus, onExportPdf }: Props) {
+export default function BudgetHeader({
+  vatMode,
+  onVatToggle,
+  saveStatus,
+  onExportPdf,
+  isConsultant = false,
+  isPreviewingClientView = false,
+  onPreviewToggle,
+}: Props) {
   return (
     <div className="budget-header">
       <div className="budget-header-left">
@@ -39,9 +50,19 @@ export default function BudgetHeader({ vatMode, onVatToggle, saveStatus, onExpor
         </button>
       </div>
 
-      <button className="budget-export-btn" onClick={onExportPdf}>
-        Export PDF
-      </button>
+      <div className="budget-header-right">
+        {isConsultant && onPreviewToggle && (
+          <button
+            className={`budget-preview-btn${isPreviewingClientView ? ' active' : ''}`}
+            onClick={onPreviewToggle}
+          >
+            {isPreviewingClientView ? 'Exit preview' : 'Preview as client'}
+          </button>
+        )}
+        <button className="budget-export-btn" onClick={onExportPdf}>
+          Export PDF
+        </button>
+      </div>
     </div>
   )
 }

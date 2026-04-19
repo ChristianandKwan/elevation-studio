@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ClientElevation from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
+import BudgetScreen from '@/components/budget/BudgetScreen'
+import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 
 interface ClientArtwork {
   id: string
@@ -65,10 +67,12 @@ interface Props {
   }
   elevations: ClientElevationData[]
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
+  clientBudget: number | null
 }
 
-export default function ClientPortal({ token, project, elevations, approvalActivity }: Props) {
+export default function ClientPortal({ token, project, elevations, approvalActivity, clientBudget }: Props) {
   const [toast, setToast] = useState('')
+  const [portalView, setPortalView] = useState<'elevations' | 'budget'>('elevations')
 
   // Track which option the client has picked per elevation (persisted to DB)
   const [pickedOptions, setPickedOptions] = useState<Record<string, string | null>>(() => {
@@ -146,6 +150,25 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
 
   const activeElev = elevations.find(e => e.id === activeElevId)
   const optData = optionsState[activeElevId]?.[activeOpt]
+
+  const budgetElevations: BudgetElevationData[] = elevations.map(elev => ({
+    id: elev.id,
+    name: elev.name,
+    clientPickedOption: pickedOptions[elev.id] ?? elev.clientPickedOption,
+    options: elev.elevation_options.map(opt => ({
+      key: opt.option,
+      artworks: opt.artworks.map(a => ({
+        id: a.id,
+        name: a.name,
+        artist: a.artist ?? '',
+        wCm: a.wCm,
+        hCm: a.hCm,
+        price: a.price,
+        framingStatus: (a.framingStatus === 'requires_framing' ? 'requires_framing' : 'framed') as 'framed' | 'requires_framing',
+        framingCost: a.framingCost ?? null,
+      })),
+    })),
+  }))
 
   function onArtworkMove(artId: string, xF: number, yF: number) {
     setOptionsState(prev => ({
@@ -296,73 +319,107 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="client-tab-bar">
-        {elevations.map((elev, i) => {
-          const optsWithImages = elev.elevation_options.filter(o => o.imageUrl)
-          const multiOption = optsWithImages.length > 1
-          const picked = pickedOptions[elev.id]
-
-          // Once picked: only show the chosen option's tab
-          const visibleOpts = multiOption && picked
-            ? optsWithImages.filter(o => o.option === picked)
-            : optsWithImages
-
-          return (
-            <div key={elev.id} style={{ display: 'flex', alignItems: 'center' }}>
-              {i > 0 && <div className="client-tab-divider" />}
-              {visibleOpts.map(opt => {
-                const tagClass = opt.option === 'A' ? 'tag tag-option-a' : opt.option === 'B' ? 'tag tag-option-b' : 'tag tag-option-other'
-                return multiOption ? (
-                  <button
-                    key={opt.option}
-                    className={`client-tab-btn${activeElevId === elev.id && activeOpt === opt.option ? ' active' : ''}`}
-                    onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
-                  >
-                    <span className={tagClass} style={{ marginRight: 5 }}>{opt.option}</span>
-                    {elev.name}{picked === opt.option ? ' ✓' : ''}
-                  </button>
-                ) : (
-                  <button
-                    key={opt.option}
-                    className={`client-tab-btn${activeElevId === elev.id ? ' active' : ''}`}
-                    onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
-                  >
-                    {elev.name}
-                  </button>
-                )
-              })}
-            </div>
-          )
-        })}
+      {/* Top-level view toggle: Elevations / Budget */}
+      <div className="client-view-toggle">
+        <button
+          className={`client-view-tab${portalView === 'elevations' ? ' active' : ''}`}
+          onClick={() => setPortalView('elevations')}
+        >
+          Elevations
+        </button>
+        <button
+          className={`client-view-tab${portalView === 'budget' ? ' active' : ''}`}
+          onClick={() => setPortalView('budget')}
+        >
+          Budget
+        </button>
       </div>
 
-      {/* Main content */}
-      {optData ? (
-        <ClientElevation
-          optData={optData}
-          elevationName={activeElev?.name ?? ''}
-          activeOpt={activeOpt}
+      {/* Elevations view */}
+      {portalView === 'elevations' && (
+        <>
+          {/* Elevation tab bar */}
+          <div className="client-tab-bar">
+            {elevations.map((elev, i) => {
+              const optsWithImages = elev.elevation_options.filter(o => o.imageUrl)
+              const multiOption = optsWithImages.length > 1
+              const picked = pickedOptions[elev.id]
+
+              // Once picked: only show the chosen option's tab
+              const visibleOpts = multiOption && picked
+                ? optsWithImages.filter(o => o.option === picked)
+                : optsWithImages
+
+              return (
+                <div key={elev.id} style={{ display: 'flex', alignItems: 'center' }}>
+                  {i > 0 && <div className="client-tab-divider" />}
+                  {visibleOpts.map(opt => {
+                    const tagClass = opt.option === 'A' ? 'tag tag-option-a' : opt.option === 'B' ? 'tag tag-option-b' : 'tag tag-option-other'
+                    return multiOption ? (
+                      <button
+                        key={opt.option}
+                        className={`client-tab-btn${activeElevId === elev.id && activeOpt === opt.option ? ' active' : ''}`}
+                        onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
+                      >
+                        <span className={tagClass} style={{ marginRight: 5 }}>{opt.option}</span>
+                        {elev.name}{picked === opt.option ? ' ✓' : ''}
+                      </button>
+                    ) : (
+                      <button
+                        key={opt.option}
+                        className={`client-tab-btn${activeElevId === elev.id ? ' active' : ''}`}
+                        onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
+                      >
+                        {elev.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Main content */}
+          {optData ? (
+            <ClientElevation
+              optData={optData}
+              elevationName={activeElev?.name ?? ''}
+              activeOpt={activeOpt}
+              projectId={project.id}
+              rerenderKey={rerenderKey}
+              approvalActivity={approvalActivity}
+              isPicked={!activeElev ? true : !needsPick(activeElev) || pickedOptions[activeElevId] != null}
+              artworksLocked={optData.approved || (!!activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null)}
+              onPick={(opt) => handlePick(activeElevId, opt)}
+              onClearPick={
+                activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null && !optData?.approved
+                  ? () => handleClearPick(activeElevId)
+                  : undefined
+              }
+              zoom={zoom}
+              onZoom={setZoom}
+              onArtworkMove={onArtworkMove}
+              onToggleVisibility={toggleVisibility}
+              onNotesChange={onNotesChange}
+              onApprove={handleApprove}
+            />
+          ) : (
+            <div className="client-empty-state">No elevation uploaded for this option</div>
+          )}
+        </>
+      )}
+
+      {/* Budget view */}
+      {portalView === 'budget' && (
+        <BudgetScreen
           projectId={project.id}
-          rerenderKey={rerenderKey}
-          approvalActivity={approvalActivity}
-          isPicked={!activeElev ? true : !needsPick(activeElev) || pickedOptions[activeElevId] != null}
-          artworksLocked={optData.approved || (!!activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null)}
-          onPick={(opt) => handlePick(activeElevId, opt)}
-          onClearPick={
-            activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null && !optData?.approved
-              ? () => handleClearPick(activeElevId)
-              : undefined
-          }
-          zoom={zoom}
-          onZoom={setZoom}
-          onArtworkMove={onArtworkMove}
-          onToggleVisibility={toggleVisibility}
-          onNotesChange={onNotesChange}
-          onApprove={handleApprove}
+          projectName={project.name}
+          clientName={project.clientName}
+          elevations={budgetElevations}
+          isConsultant={false}
+          isPreviewingClientView={false}
+          clientBudget={clientBudget}
         />
-      ) : (
-        <div className="client-empty-state">No elevation uploaded for this option</div>
       )}
 
       <StatusToast message={toast} />

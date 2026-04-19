@@ -18,6 +18,7 @@ interface Props {
   elevations: BudgetElevationData[]
   isConsultant: boolean
   isPreviewingClientView: boolean
+  onPreviewToggle?: () => void
   clientBudget: number | null
   onClientBudgetChange?: (v: number | null) => void
 }
@@ -31,6 +32,7 @@ export default function BudgetScreen({
   elevations,
   isConsultant,
   isPreviewingClientView,
+  onPreviewToggle,
   clientBudget,
   onClientBudgetChange,
 }: Props) {
@@ -80,6 +82,9 @@ export default function BudgetScreen({
         onVatToggle={handleVatToggle}
         saveStatus={saveStatus}
         onExportPdf={handleExportPdf}
+        isConsultant={isConsultant}
+        isPreviewingClientView={isPreviewingClientView}
+        onPreviewToggle={onPreviewToggle}
       />
 
       <div className="budget-content">

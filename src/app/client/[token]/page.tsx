@@ -26,7 +26,7 @@ export default async function ClientPortalPage({ params }: Props) {
   // Fetch project
   const { data: project } = await supabase
     .from('projects')
-    .select('id, name, client_name, status, consultant_id, created_at')
+    .select('id, name, client_name, status, consultant_id, created_at, client_budget')
     .eq('id', projectId)
     .single()
 
@@ -158,6 +158,7 @@ export default async function ClientPortalPage({ params }: Props) {
       }}
       elevations={elevationsWithUrls}
       approvalActivity={activity ?? []}
+      clientBudget={(project as any).client_budget ?? null}
     />
   )
 }

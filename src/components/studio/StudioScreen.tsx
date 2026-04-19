@@ -80,6 +80,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
   const [budget, setBudget] = useState<number | null>(project.budget)
   const [view, setView] = useState<'studio' | 'budget'>('studio')
+  const [isPreviewingClientView, setIsPreviewingClientView] = useState(false)
 
   function onStatus(msg: string) {
     setToast(msg)
@@ -609,7 +610,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           <div className="budget-view-toggle">
             <button
               className={`budget-view-tab${view === 'studio' ? ' active' : ''}`}
-              onClick={() => setView('studio')}
+              onClick={() => { setView('studio'); setIsPreviewingClientView(false) }}
             >
               Studio
             </button>
@@ -714,7 +715,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             })),
           }))}
           isConsultant={true}
-          isPreviewingClientView={false}
+          isPreviewingClientView={isPreviewingClientView}
+          onPreviewToggle={() => setIsPreviewingClientView(v => !v)}
           clientBudget={budget}
           onClientBudgetChange={updateBudget}
         />

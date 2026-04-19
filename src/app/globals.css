@@ -493,6 +493,20 @@ body {
 .client-project-label { font-size: 11px; color: rgba(255,255,255,.5); font-family: 'Karla'; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .client-prepared-by { font-size: 10px; color: rgba(255,255,255,.35); font-family: 'Karla'; }
 
+/* Top-level Elevations / Budget toggle */
+.client-view-toggle {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--charcoal); padding: 0 20px; height: 38px; flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.client-view-tab {
+  padding: 0 14px; height: 30px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+  background: transparent; border: none; color: rgba(255,255,255,0.45); cursor: pointer;
+  transition: color .15s; letter-spacing: .02em;
+}
+.client-view-tab:hover { color: rgba(255,255,255,0.75); }
+.client-view-tab.active { color: white; border-bottom: 2px solid white; }
+
 /* Tab bar */
 .client-tab-bar {
   display: flex; align-items: center; overflow-x: auto; flex-shrink: 0;
@@ -686,6 +700,18 @@ body {
 }
 .budget-vat-btn.active { background: rgba(255,255,255,0.15); color: white; }
 .budget-vat-btn:hover:not(.active) { color: rgba(255,255,255,0.75); }
+
+/* Header right group (preview btn + export btn) */
+.budget-header-right { display: flex; align-items: center; gap: 8px; }
+
+/* Preview as client button */
+.budget-preview-btn {
+  padding: 6px 14px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+  border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.6);
+  cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
+}
+.budget-preview-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+.budget-preview-btn.active { background: rgba(255,255,255,0.15); color: white; border-color: rgba(255,255,255,0.5); }
 
 /* Export PDF button */
 .budget-export-btn {
@@ -892,9 +918,11 @@ body {
   .studio-header,
   .studio-tab-bar,
   .client-tab-bar,
+  .client-view-toggle,
   .budget-header,
   .budget-view-toggle,
   .budget-export-btn,
+  .budget-preview-btn,
   .budget-cost-edit,
   .budget-add-item,
   .budget-toggle,
