@@ -1024,14 +1024,14 @@ body {
 
 .budget-grand-total {
   display: flex; justify-content: space-between; align-items: baseline;
-  padding: 20px 0 0; border-top: 2px solid var(--charcoal); margin-top: 4px;
+  padding: 14px 0 0; border-top: 2px solid var(--charcoal); margin-top: 4px;
 }
 .budget-grand-total-label {
-  font-family: 'Karla', sans-serif; font-size: 24px; font-weight: 700;
+  font-family: 'Karla', sans-serif; font-size: 15px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em; color: var(--charcoal);
 }
 .budget-grand-total-value {
-  font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 500; color: var(--charcoal);
+  font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 500; color: var(--charcoal);
 }
 
 /* Client budget section */

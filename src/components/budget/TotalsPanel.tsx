@@ -56,11 +56,21 @@ export default function TotalsPanel({
 
   const grandIsRange = isRange || installIsRange || (feeMin !== feeMax)
 
-  // VAT
-  const vatMin = Math.round(subMin * 0.2)
-  const vatMax = Math.round(subMax * 0.2)
+  // Grand totals (inc-VAT when vatMode)
   const totalMin = vatMode ? Math.round(subMin * 1.2) : subMin
   const totalMax = vatMode ? Math.round(subMax * 1.2) : subMax
+
+  // Display values for each line item — inc-VAT in vatMode so they match the detail view
+  const vatMult = vatMode ? 1.2 : 1
+  const dispArtMin = Math.round(artMin * vatMult)
+  const dispArtMax = Math.round(artMax * vatMult)
+  const dispFramingMin = Math.round(framingMin * vatMult)
+  const dispFramingMax = Math.round(framingMax * vatMult)
+  const dispInstallMin = Math.round(installMin * vatMult)
+  const dispInstallMax = Math.round(installMax * vatMult)
+  const dispCustomTotal = Math.round(customTotal * vatMult)
+  const dispFeeMin = Math.round(feeMin * vatMult)
+  const dispFeeMax = Math.round(feeMax * vatMult)
 
   // ── Client budget variance ──────────────────────────────────────────────────
   const budgetDisplay = clientBudget != null && vatMode
@@ -117,7 +127,7 @@ export default function TotalsPanel({
         <div className="budget-totals-row">
           <span className="budget-totals-label">Artworks</span>
           <span className="budget-totals-value">
-            {fmtRange(artMin, artMax)}
+            {fmtRange(dispArtMin, dispArtMax)}
           </span>
         </div>
 
@@ -126,7 +136,7 @@ export default function TotalsPanel({
           <div className="budget-totals-row">
             <span className="budget-totals-label">Framing</span>
             <span className="budget-totals-value">
-              {fmtRange(framingMin, framingMax)}
+              {fmtRange(dispFramingMin, dispFramingMax)}
             </span>
           </div>
         )}
@@ -140,15 +150,15 @@ export default function TotalsPanel({
             )}
           </span>
           <span className="budget-totals-value">
-            {fmtRange(installMin, installMax)}
+            {fmtRange(dispInstallMin, dispInstallMax)}
           </span>
         </div>
 
         {/* Custom items */}
-        {customTotal > 0 && (
+        {dispCustomTotal > 0 && (
           <div className="budget-totals-row">
             <span className="budget-totals-label">Other</span>
-            <span className="budget-totals-value">{fmtGbp(customTotal)}</span>
+            <span className="budget-totals-value">{fmtGbp(dispCustomTotal)}</span>
           </div>
         )}
 
@@ -156,15 +166,7 @@ export default function TotalsPanel({
         {showFee && (
           <div className="budget-totals-row">
             <span className="budget-totals-label">Consultant fee</span>
-            <span className="budget-totals-value">{fmtRange(feeMin, feeMax)}</span>
-          </div>
-        )}
-
-        {/* VAT row — Inc mode only */}
-        {vatMode && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">VAT (20%)</span>
-            <span className="budget-totals-value">{fmtRange(vatMin, vatMax)}</span>
+            <span className="budget-totals-value">{fmtRange(dispFeeMin, dispFeeMax)}</span>
           </div>
         )}
       </div>

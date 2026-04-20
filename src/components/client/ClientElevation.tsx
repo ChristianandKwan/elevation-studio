@@ -242,13 +242,17 @@ export default function ClientElevation({
                 ✓ Approve Option {activeOpt}
               </button>
               {onClearPick && (
-                <button
-                  className="btn btn-ghost btn-sm btn-full"
-                  style={{ marginTop: 6 }}
-                  onClick={onClearPick}
-                >
-                  Change selection
-                </button>
+                <>
+                  <p className="client-pick-hint" style={{ marginTop: 10, marginBottom: 4 }}>
+                    Changed your mind? Use this to go back and compare options before making a final choice.
+                  </p>
+                  <button
+                    className="btn btn-ghost btn-sm btn-full"
+                    onClick={onClearPick}
+                  >
+                    Change selection
+                  </button>
+                </>
               )}
             </>
           )}
