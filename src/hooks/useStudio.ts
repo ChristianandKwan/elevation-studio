@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
-import { quadToCSSMatrix3d } from '@/lib/homography'
+import { wallQuadToSkewMatrix } from '@/lib/homography'
 
 export interface StudioElev {
   imagePath: string
@@ -178,7 +178,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       [s.skewCorners[2][0] * dispW, s.skewCorners[2][1] * dispH],
       [s.skewCorners[3][0] * dispW, s.skewCorners[3][1] * dispH],
     ]
-    const matrix = quadToCSSMatrix3d(dispW, dispH, quad)
+    const matrix = wallQuadToSkewMatrix(dispW, dispH, quad)
     if (matrix) layer.style.transform = matrix
   }
 
@@ -202,7 +202,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       l.setAttribute('y1', String(corners[i][1] * elev.dispH))
       l.setAttribute('x2', String(corners[nextIdx][0] * elev.dispW))
       l.setAttribute('y2', String(corners[nextIdx][1] * elev.dispH))
-      l.setAttribute('stroke', 'var(--accent)')
+      l.setAttribute('stroke', '#000')
       l.setAttribute('stroke-width', '1.5')
       l.setAttribute('stroke-dasharray', '4 3')
       l.style.pointerEvents = 'none'
@@ -242,7 +242,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
                 [newCorners[2][0] * elev.dispW, newCorners[2][1] * elev.dispH],
                 [newCorners[3][0] * elev.dispW, newCorners[3][1] * elev.dispH],
               ]
-              const matrix = quadToCSSMatrix3d(elev.dispW, elev.dispH, quad)
+              const matrix = wallQuadToSkewMatrix(elev.dispW, elev.dispH, quad)
               if (matrix) layer.style.transform = matrix
             }
           }
@@ -263,6 +263,47 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       t.textContent = labels[idx] ?? ''
       svg.appendChild(t)
     })
+  }
+
+  // Rubber-band preview: after the first click in skew-def mode, show a
+  // dashed line from the last placed corner to the cursor so the consultant
+  // can see the edge they're about to commit before they commit it.
+  function renderSkewPreviewLine(elev: StudioElev, cursorX: number, cursorY: number) {
+    const svg = document.getElementById('skew-handles-svg') as SVGSVGElement | null
+    if (!svg) return
+    const corners = skewDefCornersRef.current
+    if (corners.length === 0 || corners.length >= 4) {
+      const existing = svg.querySelector('#skew-preview-line')
+      if (existing) existing.remove()
+      return
+    }
+    const last = corners[corners.length - 1]
+    const x1 = last[0] * elev.dispW
+    const y1 = last[1] * elev.dispH
+    let line = svg.querySelector('#skew-preview-line') as SVGLineElement | null
+    if (!line) {
+      line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+      line.setAttribute('id', 'skew-preview-line')
+      line.setAttribute('stroke', '#000')
+      line.setAttribute('stroke-width', '1.5')
+      line.setAttribute('stroke-dasharray', '4 3')
+      line.setAttribute('stroke-opacity', '0.7')
+      line.style.pointerEvents = 'none'
+      svg.appendChild(line)
+    }
+    line.setAttribute('x1', String(x1))
+    line.setAttribute('y1', String(y1))
+    line.setAttribute('x2', String(cursorX))
+    line.setAttribute('y2', String(cursorY))
+  }
+
+  function onWrapMouseMove(e: React.MouseEvent) {
+    const s = stateRef.current
+    if (!s.skewDefMode || !s.elev) return
+    const wrap = elevWrapRef.current
+    if (!wrap) return
+    const rect = wrap.getBoundingClientRect()
+    renderSkewPreviewLine(s.elev, e.clientX - rect.left, e.clientY - rect.top)
   }
 
   async function finaliseSkewAdjust() {
@@ -337,7 +378,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           [s.skewCorners[2][0] * dispW, s.skewCorners[2][1] * dispH],
           [s.skewCorners[3][0] * dispW, s.skewCorners[3][1] * dispH],
         ]
-        const matrix = quadToCSSMatrix3d(dispW, dispH, quad)
+        const matrix = wallQuadToSkewMatrix(dispW, dispH, quad)
         if (matrix) layer.style.transform = matrix
       })
       persistSkew(s.skewCorners, active)
@@ -1576,7 +1617,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             [partials[2][0] * s.elev.dispW, partials[2][1] * s.elev.dispH],
             [partials[3][0] * s.elev.dispW, partials[3][1] * s.elev.dispH],
           ]
-          const matrix = quadToCSSMatrix3d(s.elev.dispW, s.elev.dispH, quad)
+          const matrix = wallQuadToSkewMatrix(s.elev.dispW, s.elev.dispH, quad)
           if (matrix) layer.style.transform = matrix
         }
         setState(st => ({ ...st, skewDefMode: false, skewAdjustMode: true }))
@@ -1709,6 +1750,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     highlightMask,
     saveStatus,
     onWrapMouseDown,
+    onWrapMouseMove,
     boxSelectedRef,
     startSkewDef,
     cancelSkewDef,

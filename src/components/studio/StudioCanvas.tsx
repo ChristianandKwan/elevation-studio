@@ -49,6 +49,7 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
               id="elev-wrap"
               ref={elevWrapRef}
               onMouseDown={clientPickedOption && activeOption && clientPickedOption === activeOption ? undefined : studio.onWrapMouseDown}
+              onMouseMove={state.skewDefMode ? studio.onWrapMouseMove : undefined}
               onClick={onWrapClick}
               style={(state.skewDefMode || state.skewAdjustMode) ? { cursor: 'crosshair' } : { cursor: clientPickedOption && activeOption && clientPickedOption === activeOption ? 'default' : undefined }}
             >

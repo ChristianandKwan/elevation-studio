@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react'
 import { formatPrice } from '@/lib/utils'
-import { quadToCSSMatrix3d } from '@/lib/homography'
+import { wallQuadToSkewMatrix } from '@/lib/homography'
 
 interface ClientArtwork {
   id: string
@@ -550,7 +550,7 @@ function ClientCanvas({
       const dispW = img.naturalWidth * s, dispH = img.naturalHeight * s
       if (skew_active && tlx != null && tly != null && trx != null && try_ != null &&
           brx != null && bry != null && blx != null && bly != null) {
-        const matrix = quadToCSSMatrix3d(dispW, dispH, [
+        const matrix = wallQuadToSkewMatrix(dispW, dispH, [
           [tlx * dispW, tly * dispH],
           [trx * dispW, try_ * dispH],
           [brx * dispW, bry * dispH],
