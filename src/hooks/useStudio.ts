@@ -311,9 +311,24 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       div.style.width = sz.w + 'px'
       div.style.height = sz.h + 'px'
 
-      const img = document.createElement('img')
-      img.src = art.imageUrl ?? ''
-      img.draggable = false
+      if (art.loadFailed) {
+        // Grey placeholder rectangle with artwork name
+        const placeholder = document.createElement('div')
+        placeholder.style.cssText = [
+          'width:100%', 'height:100%',
+          'background:#888', 'opacity:0.5',
+          'display:flex', 'align-items:center', 'justify-content:center',
+          'color:#fff', 'font-size:11px', 'text-align:center',
+          'padding:4px', 'box-sizing:border-box', 'word-break:break-word',
+        ].join(';')
+        placeholder.textContent = art.name
+        div.appendChild(placeholder)
+      } else {
+        const img = document.createElement('img')
+        img.src = art.imageUrl ?? ''
+        img.draggable = false
+        div.appendChild(img)
+      }
 
       const tag = document.createElement('div')
       tag.className = 'aw-tag'
@@ -323,7 +338,6 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       rh.className = 'aw-resize-hint'
       rh.title = 'Drag to resize'
 
-      div.appendChild(img)
       div.appendChild(tag)
       div.appendChild(rh)
 
@@ -441,6 +455,23 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
       const masks = opts.foregroundMasks ?? []
       const newArts = opts.artworks.map(a => ({ ...a }))
 
+      // ── finalize: apply zoom once elevWrapRef is mounted (retry up to 60 frames) ──
+      const finalize = (arts: typeof newArts) => {
+        let frames = 0
+        const run = () => {
+          if (!elevWrapRef.current) {
+            if (++frames > 60) {
+              console.warn('[useStudio] finalize: elevWrapRef never set, bailing')
+              return
+            }
+            requestAnimationFrame(run)
+            return
+          }
+          applyZoom(opts.zoom, elev, scale, arts, masks)
+        }
+        requestAnimationFrame(run)
+      }
+
       // Load artwork images
       let loaded = 0
       function tryFinish() {
@@ -449,9 +480,13 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
             elev, scale, artworks: newArts, selId: null, zoom: opts.zoom,
             calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
           })
-          requestAnimationFrame(() => {
-            applyZoom(opts.zoom, elev, scale, newArts, masks)
-          })
+          finalize(newArts)
+          // Surface a warning if any artwork images failed to load
+          const failed = newArts.filter(a => a.loadFailed)
+          if (failed.length > 0) {
+            const names = failed.map(a => a.name).join(', ')
+            onStatus(`Could not load image${failed.length > 1 ? 's' : ''}: ${names}`)
+          }
         }
       }
 
@@ -460,17 +495,40 @@ export function useStudio({ projectId, optionId, onStatus }: UseStudioOptions) {
           elev, scale, artworks: [], selId: null, zoom: opts.zoom,
           calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
         })
-        requestAnimationFrame(() => applyZoom(opts.zoom, elev, scale, [], masks))
+        finalize([])
         return
       }
 
       newArts.forEach((a, i) => {
         const ai = new Image()
         ai.crossOrigin = 'anonymous'
-        ai.onload = () => { newArts[i].img = ai; tryFinish() }
-        ai.onerror = () => tryFinish()
+        let finished = false
+        const imgTimer = setTimeout(() => {
+          if (finished) return
+          finished = true
+          newArts[i].loadFailed = true
+          tryFinish()
+        }, 10_000)
+        ai.onload = () => {
+          if (finished) return
+          finished = true
+          clearTimeout(imgTimer)
+          newArts[i].img = ai
+          tryFinish()
+        }
+        ai.onerror = () => {
+          if (finished) return
+          finished = true
+          clearTimeout(imgTimer)
+          newArts[i].loadFailed = true
+          tryFinish()
+        }
         if (a.imageUrl) ai.src = a.imageUrl
-        else tryFinish()
+        else {
+          clearTimeout(imgTimer)
+          finished = true
+          tryFinish()
+        }
       })
     }
     img.src = opts.imageUrl
