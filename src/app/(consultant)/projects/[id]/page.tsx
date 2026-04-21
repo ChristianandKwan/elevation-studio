@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/supabase/auth'
 import StudioScreen from '@/components/studio/StudioScreen'
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
 export default async function ProjectPage({ params }: Props) {
   const { id } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   // Fetch project
   const { data: project } = await supabase

@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/supabase/auth'
 import DashboardClient from '@/components/dashboard/DashboardClient'
 
 /**
@@ -21,7 +22,7 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const supabaseService = await createServiceClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   // Fetch profile
   const { data: profile } = await supabase
