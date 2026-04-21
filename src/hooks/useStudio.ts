@@ -627,9 +627,36 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       div.style.width = sz.w + 'px'
       div.style.height = sz.h + 'px'
 
-      const img = document.createElement('img')
-      img.src = art.imageUrl ?? ''
-      img.draggable = false
+      if (art.loadFailed) {
+        // Grey placeholder rectangle with artwork name
+        const placeholder = document.createElement('div')
+        placeholder.style.cssText = [
+          'width:100%', 'height:100%',
+          'background:#888', 'opacity:0.5',
+          'display:flex', 'align-items:center', 'justify-content:center',
+          'color:#fff', 'font-size:11px', 'text-align:center',
+          'padding:4px', 'box-sizing:border-box', 'word-break:break-word',
+        ].join(';')
+        placeholder.textContent = art.name
+        div.appendChild(placeholder)
+      } else {
+        const img = document.createElement('img')
+        img.src = art.imageUrl ?? ''
+        img.draggable = false
+
+        // Frame border
+        if (art.frameType && art.frameWidthMm && sc) {
+          const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
+          const frameColor: Record<string, string> = {
+            black: '#1a1a1a', white: '#f0ede8',
+            'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
+          }
+          div.style.border = `${framePx}px solid ${frameColor[art.frameType] ?? '#1a1a1a'}`
+          div.style.boxSizing = 'content-box'
+        }
+
+        div.appendChild(img)
+      }
 
       // Build div-level CSS filter: brightness (covers image + frame) + drop-shadow
       const divFilters: string[] = []
@@ -653,18 +680,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       rh.className = 'aw-resize-hint'
       rh.title = 'Drag to resize'
 
-      // Frame border
-      if (art.frameType && art.frameWidthMm && sc) {
-        const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
-        const frameColor: Record<string, string> = {
-          black: '#1a1a1a', white: '#f0ede8',
-          'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-        }
-        div.style.border = `${framePx}px solid ${frameColor[art.frameType] ?? '#1a1a1a'}`
-        div.style.boxSizing = 'content-box'
-      }
-
-      div.appendChild(img)
       div.appendChild(tag)
       div.appendChild(rh)
 
@@ -936,11 +951,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const skewCorners = opts.skewCorners ?? null
       const skewActive = opts.skewActive ?? false
 
-      // On first load elev-wrap isn't in the DOM yet (rendered only when state.elev is set),
-      // so the ref may still be null when rAF fires. Retry until React has committed.
-      const finalize = (arts: Artwork[]) => {
+      // On first load elev-wrap isn't in the DOM yet; retry up to 60 frames before bailing.
+      const finalize = (arts: typeof newArts) => {
+        let frames = 0
         const run = () => {
-          if (!elevWrapRef.current) { requestAnimationFrame(run); return }
+          if (!elevWrapRef.current) {
+            if (++frames > 60) {
+              console.warn('[useStudio] finalize: elevWrapRef never set, bailing')
+              return
+            }
+            requestAnimationFrame(run)
+            return
+          }
           applyZoom(opts.zoom, elev, scale, arts, masks)
           applySkewTransform()
           if (skewCorners) renderSkewHandles([...skewCorners], elev)
@@ -959,6 +981,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
           })
           finalize(newArts)
+          // Surface a warning if any artwork images failed to load
+          const failed = newArts.filter(a => a.loadFailed)
+          if (failed.length > 0) {
+            const names = failed.map(a => a.name).join(', ')
+            onStatus(`Could not load image${failed.length > 1 ? 's' : ''}: ${names}`)
+          }
         }
       }
 
@@ -975,10 +1003,33 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       newArts.forEach((a, i) => {
         const ai = new Image()
         ai.crossOrigin = 'anonymous'
-        ai.onload = () => { newArts[i].img = ai; tryFinish() }
-        ai.onerror = () => tryFinish()
+        let finished = false
+        const imgTimer = setTimeout(() => {
+          if (finished) return
+          finished = true
+          newArts[i].loadFailed = true
+          tryFinish()
+        }, 10_000)
+        ai.onload = () => {
+          if (finished) return
+          finished = true
+          clearTimeout(imgTimer)
+          newArts[i].img = ai
+          tryFinish()
+        }
+        ai.onerror = () => {
+          if (finished) return
+          finished = true
+          clearTimeout(imgTimer)
+          newArts[i].loadFailed = true
+          tryFinish()
+        }
         if (a.imageUrl) ai.src = a.imageUrl
-        else tryFinish()
+        else {
+          clearTimeout(imgTimer)
+          finished = true
+          tryFinish()
+        }
       })
     }
     img.src = opts.imageUrl

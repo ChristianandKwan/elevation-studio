@@ -35,6 +35,8 @@ export interface Artwork {
   shadowOpacity?: number | null
   /** Loaded Image element for canvas rendering */
   img?: HTMLImageElement | null
+  /** Set to true when image failed to load (onerror or 10 s timeout) */
+  loadFailed?: boolean
 }
 
 export interface ElevationOption {
