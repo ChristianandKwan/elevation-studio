@@ -10,6 +10,7 @@ import TotalsPanel from './TotalsPanel'
 import { useBudgetState } from './useBudgetState'
 import { computeProjectTotals } from './budgetCalc'
 import type { BudgetElevationData } from './budgetCalc'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface Props {
   projectId: string
@@ -98,7 +99,9 @@ export default function BudgetScreen({
         </div>
 
         {isLoading ? (
-          <div className="budget-loading">Loading budget…</div>
+          <div className="budget-loading" style={{ position: 'relative', minHeight: 160 }}>
+            <ArcSpinner />
+          </div>
         ) : !budget ? (
           <div className="budget-loading">Unable to load budget data.</div>
         ) : (
