@@ -920,6 +920,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const skewCorners = opts.skewCorners ?? null
       const skewActive = opts.skewActive ?? false
 
+      // On first load elev-wrap isn't in the DOM yet (rendered only when state.elev is set),
+      // so the ref may still be null when rAF fires. Retry until React has committed.
+      const finalize = (arts: Artwork[]) => {
+        const run = () => {
+          if (!elevWrapRef.current) { requestAnimationFrame(run); return }
+          applyZoom(opts.zoom, elev, scale, arts, masks)
+          applySkewTransform()
+          if (skewCorners) renderSkewHandles([...skewCorners], elev)
+          else renderSkewHandles([], elev)
+        }
+        requestAnimationFrame(run)
+      }
+
       // Load artwork images
       let loaded = 0
       function tryFinish() {
@@ -929,12 +942,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
             skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
           })
-          requestAnimationFrame(() => {
-            applyZoom(opts.zoom, elev, scale, newArts, masks)
-            applySkewTransform()
-            if (skewCorners) renderSkewHandles([...skewCorners], elev)
-            else renderSkewHandles([], elev)
-          })
+          finalize(newArts)
         }
       }
 
@@ -944,12 +952,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
           skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
         })
-        requestAnimationFrame(() => {
-          applyZoom(opts.zoom, elev, scale, [], masks)
-          applySkewTransform()
-          if (skewCorners) renderSkewHandles([...skewCorners], elev)
-          else renderSkewHandles([], elev)
-        })
+        finalize([])
         return
       }
 
