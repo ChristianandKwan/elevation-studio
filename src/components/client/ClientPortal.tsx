@@ -72,6 +72,7 @@ interface Props {
 }
 
 export default function ClientPortal({ token, project, elevations, approvalActivity, clientBudget }: Props) {
+  const inFlightRef = useRef(new Set<string>())
   const [toast, setToast] = useState('')
   const [portalView, setPortalView] = useState<'elevations' | 'budget'>('elevations')
 
@@ -187,9 +188,14 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   }
 
   async function toggleVisibility(artId: string) {
+    const key = `toggleVisibility:${artId}`
+    if (inFlightRef.current.has(key)) return
     const art = optionsState[activeElevId]?.[activeOpt]?.artworks.find(a => a.id === artId)
     if (!art) return
     const newVis = !art.visible
+    inFlightRef.current.add(key)
+    // Snapshot for rollback — capture current artworks array
+    const snapshotArtworks = optionsState[activeElevId][activeOpt].artworks.map(a => ({ ...a }))
     setOptionsState(prev => ({
       ...prev,
       [activeElevId]: {
@@ -203,8 +209,27 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       },
     }))
     setRerenderKey(k => k + 1)
-    const supabase = createClient()
-    await supabase.from('artworks').update({ visible: newVis }).eq('id', artId)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from('artworks').update({ visible: newVis }).eq('id', artId)
+      if (error) throw error
+    } catch {
+      // Revert to snapshot
+      setOptionsState(prev => ({
+        ...prev,
+        [activeElevId]: {
+          ...prev[activeElevId],
+          [activeOpt]: {
+            ...prev[activeElevId][activeOpt],
+            artworks: snapshotArtworks,
+          },
+        },
+      }))
+      setRerenderKey(k => k + 1)
+      onStatus('Failed to update visibility. Please try again.')
+    } finally {
+      inFlightRef.current.delete(key)
+    }
   }
 
   function onNotesChange(notes: string) {
@@ -225,86 +250,147 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   }
 
   async function handlePick(elevId: string, opt: string) {
-    const supabase = createClient()
-    // Save client's artwork positions before locking them in
-    const artworks = optionsState[elevId]?.[opt]?.artworks ?? []
-    if (artworks.length) {
-      await Promise.all(
-        artworks.map(art =>
-          supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
-        )
-      )
-    }
-    await supabase.from('elevations').update({ client_picked_option: opt }).eq('id', elevId)
+    const key = `handlePick:${elevId}`
+    if (inFlightRef.current.has(key)) return
+    const snapshotPicked = pickedOptions[elevId]
+    inFlightRef.current.add(key)
+    // Optimistic update
     setPickedOptions(prev => ({ ...prev, [elevId]: opt }))
     setActiveElevId(elevId)
     setActiveOpt(opt)
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'pick',
-      text: `Client picked Option ${opt} for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
-    })
-    onStatus(`Option ${opt} selected`)
+    try {
+      const supabase = createClient()
+      // Save client's artwork positions before locking them in
+      const artworks = optionsState[elevId]?.[opt]?.artworks ?? []
+      if (artworks.length) {
+        await Promise.all(
+          artworks.map(art =>
+            supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
+          )
+        )
+      }
+      const { error } = await supabase.from('elevations').update({ client_picked_option: opt }).eq('id', elevId)
+      if (error) throw error
+      // Activity log: non-critical, don't roll back on failure
+      try {
+        await supabase.from('activity_logs').insert({
+          project_id: project.id,
+          type: 'pick',
+          text: `Client picked Option ${opt} for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
+        })
+      } catch (logErr) {
+        console.warn('activity_logs insert failed (pick):', logErr)
+      }
+      onStatus(`Option ${opt} selected`)
+    } catch {
+      // Revert optimistic update
+      setPickedOptions(prev => ({ ...prev, [elevId]: snapshotPicked }))
+      onStatus('Failed to save selection. Please try again.')
+    } finally {
+      inFlightRef.current.delete(key)
+    }
   }
 
   async function handleClearPick(elevId: string) {
-    const supabase = createClient()
-    await supabase.from('elevations').update({ client_picked_option: null }).eq('id', elevId)
+    const key = `handleClearPick:${elevId}`
+    if (inFlightRef.current.has(key)) return
+    const snapshotPicked = pickedOptions[elevId]
+    inFlightRef.current.add(key)
+    // Optimistic update
     setPickedOptions(prev => ({ ...prev, [elevId]: null }))
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'pick_cleared',
-      text: `Client cleared option selection for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
-    })
-    onStatus('Selection cleared')
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from('elevations').update({ client_picked_option: null }).eq('id', elevId)
+      if (error) throw error
+      // Activity log: non-critical, don't roll back on failure
+      try {
+        await supabase.from('activity_logs').insert({
+          project_id: project.id,
+          type: 'pick_cleared',
+          text: `Client cleared option selection for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
+        })
+      } catch (logErr) {
+        console.warn('activity_logs insert failed (pick_cleared):', logErr)
+      }
+      onStatus('Selection cleared')
+    } catch {
+      // Revert optimistic update
+      setPickedOptions(prev => ({ ...prev, [elevId]: snapshotPicked }))
+      onStatus('Failed to clear selection. Please try again.')
+    } finally {
+      inFlightRef.current.delete(key)
+    }
   }
 
   async function handleApprove() {
     if (!optData) return
+    const key = `handleApprove:${optData.id}`
+    if (inFlightRef.current.has(key)) return
+    inFlightRef.current.add(key)
+    const snapshotOpt = { ...optionsState[activeElevId][activeOpt] }
     const supabase = createClient()
     const now = new Date().toLocaleString('en-GB', {
       day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     })
-
-    // Save current artwork positions
-    await Promise.all(
-      optData.artworks.map(art =>
-        supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
+    try {
+      // Save current artwork positions
+      await Promise.all(
+        optData.artworks.map(art =>
+          supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
+        )
       )
-    )
 
-    // Approve the option
-    await supabase.from('elevation_options').update({ approved: true, approved_at: now }).eq('id', optData.id)
+      // Primary write: approve the option
+      const { error } = await supabase.from('elevation_options').update({ approved: true, approved_at: now }).eq('id', optData.id)
+      if (error) throw error
 
-    // Update local state
-    setOptionsState(prev => ({
-      ...prev,
-      [activeElevId]: {
-        ...prev[activeElevId],
-        [activeOpt]: { ...prev[activeElevId][activeOpt], approved: true, approved_at: now },
-      },
-    }))
+      // Primary write succeeded — update local state
+      setOptionsState(prev => ({
+        ...prev,
+        [activeElevId]: {
+          ...prev[activeElevId],
+          [activeOpt]: { ...prev[activeElevId][activeOpt], approved: true, approved_at: now },
+        },
+      }))
 
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'approved',
-      text: `Client approved Option ${activeOpt} of ${activeElev?.name ?? ''}`,
-    })
+      // Activity log: non-critical, don't roll back on failure
+      try {
+        await supabase.from('activity_logs').insert({
+          project_id: project.id,
+          type: 'approved',
+          text: `Client approved Option ${activeOpt} of ${activeElev?.name ?? ''}`,
+        })
+      } catch (logErr) {
+        console.warn('activity_logs insert failed (approve):', logErr)
+      }
 
-    // Check if ALL elevations are fully done (picked + approved)
-    const allDone = elevations.every(elev => {
-      const requires = needsPick(elev)
-      const pickedOpt = requires ? pickedOptions[elev.id] : resolveOpt(elev)
-      if (!pickedOpt) return false
-      if (elev.id === activeElevId) return true  // just approved above
-      return optionsState[elev.id]?.[pickedOpt]?.approved ?? false
-    })
+      // Check if ALL elevations are fully done (picked + approved)
+      const allDone = elevations.every(elev => {
+        const requires = needsPick(elev)
+        const pickedOpt = requires ? pickedOptions[elev.id] : resolveOpt(elev)
+        if (!pickedOpt) return false
+        if (elev.id === activeElevId) return true  // just approved above
+        return optionsState[elev.id]?.[pickedOpt]?.approved ?? false
+      })
 
-    if (allDone) {
-      await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
+      if (allDone) {
+        await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
+      }
+
+      onStatus(`Option ${activeOpt} approved!`)
+    } catch {
+      // Revert local state to snapshot
+      setOptionsState(prev => ({
+        ...prev,
+        [activeElevId]: {
+          ...prev[activeElevId],
+          [activeOpt]: snapshotOpt,
+        },
+      }))
+      onStatus('Failed to save approval. Please try again.')
+    } finally {
+      inFlightRef.current.delete(key)
     }
-
-    onStatus(`Option ${activeOpt} approved!`)
   }
 
 
