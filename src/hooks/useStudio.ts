@@ -130,6 +130,22 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   const zoomSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
+  // ─── DASHBOARD THUMBNAIL REGEN (debounced) ────────────────────────
+  // After any write that would change the rendered option (upload,
+  // calibrate, artwork add/move/restyle/delete, visibility, masks, …)
+  // we kick off a server-side regenerate so the dashboard's cached
+  // PNG stays fresh. Debounced so a burst of drags/slider moves
+  // collapses into a single composite. Fire-and-forget; failures are
+  // non-fatal (the dashboard falls back to the plain elevation URL).
+  const thumbnailRegenTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleThumbnailRegen = useCallback((id: string = optionId) => {
+    if (!id) return
+    if (thumbnailRegenTimer.current) clearTimeout(thumbnailRegenTimer.current)
+    thumbnailRegenTimer.current = setTimeout(() => {
+      fetch(`/api/thumbnails/${id}`, { method: 'POST' }).catch(() => {})
+    }, 2000)
+  }, [optionId])
+
   // ─── HELPERS ──────────────────────────────────────────────────────
   function dispSize(art: Artwork, sc: Scale | null): { w: number; h: number } {
     if (!sc) return { w: 80, h: 60 }
@@ -995,6 +1011,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         image_path: path, orig_w: img.naturalWidth, orig_h: img.naturalHeight,
         scale_px_per_cm: null, zoom: 1, foreground_masks: null,
       }).eq('id', optionId).then(() => {})
+      scheduleThumbnailRegen()
 
       requestAnimationFrame(() => {
         const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
@@ -1056,6 +1073,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       .update({ scale_px_per_cm: origPxPerCm, zoom: currentZoom })
       .eq('id', optionId)
       .then(() => {})
+    scheduleThumbnailRegen()
   }
 
   function onCalibMouseDown(e: React.MouseEvent<SVGSVGElement>) {
@@ -1348,6 +1366,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       return { ...s, artworks: newArts }
     })
     onArtworksAddedRef.current?.(placed)
+    if (placed.length > 0) scheduleThumbnailRegen()
 
     setShowArtModal(false)
     onStatus(placed.length === 1 ? `Artwork placed — drag to position` : `${placed.length} artworks placed`)
@@ -1375,6 +1394,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
+      if (thumbnailRegenTimer.current) clearTimeout(thumbnailRegenTimer.current)
     }
   }, [])
 
@@ -1415,6 +1435,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       if (artErr) throw artErr
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
+      scheduleThumbnailRegen()
     } catch {
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 5000)
@@ -1434,6 +1455,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
     })
     onArtworkDeletedRef.current?.(artId)
+    scheduleThumbnailRegen()
   }
 
   // ─── TOGGLE VISIBILITY ────────────────────────────────────────────
@@ -1446,6 +1468,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       if (art) supabase.from('artworks').update({ visible: art.visible }).eq('id', artId).then(() => {})
       return { ...s, artworks: newArts }
     })
+    scheduleThumbnailRegen()
   }
 
   // ─── UPDATE ARTWORK DIMS ─────────────────────────────────────────
