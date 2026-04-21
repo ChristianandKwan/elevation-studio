@@ -54,54 +54,50 @@ export default async function ClientPortalPage({ params }: Props) {
     .eq('project_id', projectId)
     .order('display_order', { ascending: true })
 
-  // Generate signed URLs for all images
-  const elevationsWithUrls = await Promise.all(
-    (elevations ?? []).map(async (elev) => {
-      const options = await Promise.all(
-        (elev.elevation_options ?? []).map(async (opt: {
-          id: string; option: string; image_path: string | null;
-          orig_w: number; orig_h: number; scale_px_per_cm: number | null;
-          zoom: number; approved: boolean; approved_at: string | null;
-          foreground_masks?: any[] | null;
-          artworks: Array<{
-            id: string; name: string; image_path: string;
-            w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
-            visible: boolean; price: number; price_includes: string; display_order: number;
-          }>;
-        }) => {
-          let imageUrl: string | null = null
-          if (opt.image_path) {
-            const { data } = await supabase.storage
-              .from('elevation-images')
-              .createSignedUrl(opt.image_path, 7200)
-            imageUrl = data?.signedUrl ?? null
-          }
+  // Collect all image paths up-front, deduplicated across elevations/options
+  const allOptions = (elevations ?? []).flatMap(elev => elev.elevation_options ?? [])
+  const elevPaths = [...new Set(allOptions.map((o: { image_path: string | null }) => o.image_path).filter(Boolean))] as string[]
+  const artPaths = [...new Set(allOptions.flatMap((o: { artworks: Array<{ image_path: string }> }) => (o.artworks ?? []).map(a => a.image_path)).filter(Boolean))] as string[]
 
-          const artworks = await Promise.all(
-            (opt.artworks ?? [])
-              .sort((a, b) => a.display_order - b.display_order)
-              .map(async (art) => {
-                const { data } = await supabase.storage
-                  .from('artwork-images')
-                  .createSignedUrl(art.image_path, 7200)
-                return {
-                  ...art,
-                  imageUrl: data?.signedUrl ?? null,
-                  xF: art.x_fraction,
-                  yF: art.y_fraction,
-                  wCm: art.w_cm,
-                  hCm: art.h_cm,
-                  priceIncludes: art.price_includes,
-                }
-              })
-          )
+  // Two batched createSignedUrls calls in parallel — one per bucket
+  const [{ data: elevSigned }, { data: artSigned }] = await Promise.all([
+    supabase.storage.from('elevation-images').createSignedUrls(elevPaths, 7200),
+    supabase.storage.from('artwork-images').createSignedUrls(artPaths, 7200),
+  ])
+  const elevMap = new Map(elevSigned?.map(e => [e.path, e.signedUrl]) ?? [])
+  const artMap = new Map(artSigned?.map(e => [e.path, e.signedUrl]) ?? [])
 
-          return { ...opt, imageUrl, artworks }
-        })
-      )
-      return { ...elev, elevation_options: options }
+  // Rehydrate the per-option / per-artwork structure using the maps
+  const elevationsWithUrls = (elevations ?? []).map(elev => {
+    const options = (elev.elevation_options ?? []).map((opt: {
+      id: string; option: string; image_path: string | null;
+      orig_w: number; orig_h: number; scale_px_per_cm: number | null;
+      zoom: number; approved: boolean; approved_at: string | null;
+      foreground_masks?: any[] | null;
+      artworks: Array<{
+        id: string; name: string; image_path: string;
+        w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
+        visible: boolean; price: number; price_includes: string; display_order: number;
+      }>;
+    }) => {
+      const imageUrl = opt.image_path ? (elevMap.get(opt.image_path) ?? null) : null
+
+      const artworks = (opt.artworks ?? [])
+        .sort((a, b) => a.display_order - b.display_order)
+        .map(art => ({
+          ...art,
+          imageUrl: artMap.get(art.image_path) ?? null,
+          xF: art.x_fraction,
+          yF: art.y_fraction,
+          wCm: art.w_cm,
+          hCm: art.h_cm,
+          priceIncludes: art.price_includes,
+        }))
+
+      return { ...opt, imageUrl, artworks }
     })
-  )
+    return { ...elev, elevation_options: options }
+  })
 
   // Fetch approval activity
   const { data: activity } = await supabase
