@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -41,7 +42,14 @@ export default function LoginPage() {
       }}
     >
       <div className="login-box">
-        <img src="/ck-wordmark-white.png" alt="Christian & Kwan" className="login-logo" />
+        <Image
+          src="/ck-wordmark-white.png"
+          alt="Christian & Kwan"
+          className="login-logo"
+          width={680}
+          height={340}
+          preload
+        />
 
         <div className="login-title">Welcome back</div>
         <div className="login-sub">Sign in to your consultant account</div>

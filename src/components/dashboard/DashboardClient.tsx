@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { timeNow } from '@/lib/utils'
 import StatusToast from '@/components/ui/StatusToast'
@@ -233,7 +234,14 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
       <div>
         {/* Header */}
         <div className="dash-header">
-          <img src="/ck-wordmark-black.png" alt="Christian & Kwan" className="dash-logo" />
+          <Image
+            src="/ck-wordmark-black.png"
+            alt="Christian & Kwan"
+            className="dash-logo"
+            width={224}
+            height={112}
+            preload
+          />
           <div className="header-app-title">Elevation Studio</div>
           <div className="dash-user">
             <span>Signed in as</span>

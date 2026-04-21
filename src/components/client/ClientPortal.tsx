@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import ClientElevation from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
@@ -311,7 +312,14 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     <div className="client-layout">
       {/* Header */}
       <div className="client-header">
-        <img src="/ck-wordmark-white.png" alt="Christian & Kwan" className="client-logo" />
+        <Image
+          src="/ck-wordmark-white.png"
+          alt="Christian & Kwan"
+          className="client-logo"
+          width={176}
+          height={88}
+          preload
+        />
         <div className="client-header-brand">Elevation Studio</div>
         <div className="client-project-label">
           {project.name}
