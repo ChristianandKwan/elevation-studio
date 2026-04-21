@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 export interface ArtMeta {
   name: string
@@ -35,6 +36,7 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
   const [sizeErrors, setSizeErrors] = useState<string[]>([])
+  const [reading, setReading] = useState(false)
   // Single-file fields
   const [name, setName] = useState('')
   const [wCm, setWCm] = useState('')
@@ -82,7 +84,11 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
       r.onload = ev => resolve(ev.target?.result as string)
       r.readAsDataURL(f)
     }))
-    Promise.all(readers).then(setPreviews)
+    setReading(true)
+    Promise.all(readers).then(arr => {
+      setPreviews(arr)
+      setReading(false)
+    })
     e.target.value = ''
   }
 
@@ -130,10 +136,13 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
 
         <div className="field">
           <label className="field-label">Artwork Image</label>
-          <div className={`upload-zone${files.length ? ' has-file' : ''}`} onClick={pickImages}>
-            {files.length === 0 && 'Click to upload up to 5 artwork images'}
-            {files.length === 1 && files[0].name}
-            {files.length > 1 && `${files.length} artworks selected`}
+          <div style={{ position: 'relative' }}>
+            <div className={`upload-zone${files.length ? ' has-file' : ''}`} onClick={pickImages}>
+              {files.length === 0 && 'Click to upload up to 5 artwork images'}
+              {files.length === 1 && files[0].name}
+              {files.length > 1 && `${files.length} artworks selected`}
+            </div>
+            {reading && <ArcSpinner size={36} />}
           </div>
           <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilesChange} />
           {sizeErrors.length > 0 && (

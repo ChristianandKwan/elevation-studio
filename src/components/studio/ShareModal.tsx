@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface Props {
   projectName: string
@@ -40,8 +41,8 @@ export default function ShareModal({ projectName, onGetToken, onClose, onStatus 
           Share this link with your client. No login required — they see all elevations and all options, with full approval controls.
         </div>
 
-        <div style={{ padding: 12, background: 'var(--cream)', border: '1px solid var(--border)', fontSize: 12, fontFamily: "'Karla'", wordBreak: 'break-all', color: 'var(--mid)', marginBottom: 16 }}>
-          {loading ? 'Generating link…' : url}
+        <div style={{ position: 'relative', padding: 12, background: 'var(--cream)', border: '1px solid var(--border)', fontSize: 12, fontFamily: "'Karla'", wordBreak: 'break-all', color: 'var(--mid)', marginBottom: 16, minHeight: loading ? 56 : undefined }}>
+          {loading ? <ArcSpinner size={36} /> : url}
         </div>
 
         <div style={{ fontSize: 11.5, color: 'var(--mid)', lineHeight: 1.7 }}>

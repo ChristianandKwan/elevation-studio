@@ -1048,17 +1048,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
   // ─── ELEVATION UPLOAD ────────────────────────────────────────────
   async function uploadElevation(file: File) {
+    setBusy(true)
     const supabase = createClient()
     const path = `${projectId}/${optionId}/elevation-${Date.now()}.${file.name.split('.').pop()}`
     const { error } = await supabase.storage.from('elevation-images').upload(path, file, { upsert: true })
-    if (error) { onStatus('Upload failed: ' + error.message); return }
+    if (error) { onStatus('Upload failed: ' + error.message); setBusy(false); return }
 
     const { data: signed } = await supabase.storage.from('elevation-images').createSignedUrl(path, 3600)
     const url = signed?.signedUrl
-    if (!url) return
+    if (!url) { setBusy(false); return }
 
     const img = new Image()
     img.crossOrigin = 'anonymous'
+    img.onerror = () => { setBusy(false); onStatus('Elevation image failed to load') }
     img.onload = () => {
       const elev: StudioElev = {
         imagePath: path, imageUrl: url, img,
@@ -1083,6 +1085,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
       onElevationUploadedRef.current?.({ imagePath: path, imageUrl: url, origW: img.naturalWidth, origH: img.naturalHeight, zoom: 1 })
       onStatus('Elevation loaded — draw a scale line to continue')
+      setBusy(false)
     }
     img.src = url
   }

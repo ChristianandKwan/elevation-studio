@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { timeNow } from '@/lib/utils'
 import StatusToast from '@/components/ui/StatusToast'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface DashProfile {
   id: string
@@ -276,7 +277,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
           {view === 'archived' ? (
             <div className="projects-grid">
               {loadingArchived ? (
-                <div style={{ color: 'var(--muted)', padding: '1rem' }}>Loading…</div>
+                <div style={{ position: 'relative', minHeight: 120, gridColumn: '1 / -1' }}>
+                  <ArcSpinner />
+                </div>
               ) : archivedProjects.length === 0 ? (
                 <div style={{ color: 'var(--muted)', padding: '1rem' }}>No archived projects.</div>
               ) : archivedProjects.map(p => (

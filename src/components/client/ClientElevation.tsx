@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { formatPrice } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface ClientArtwork {
   id: string
@@ -335,10 +336,14 @@ function ClientCanvas({
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const elevWrapRef = useRef<HTMLDivElement>(null)
+  const elevImgRef = useRef<HTMLImageElement>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     if (!optData.imageUrl || !canvasRef.current) return
+    setIsLoading(true)
     const img = new Image()
+    img.onerror = () => setIsLoading(false)
     img.onload = () => {
       const maxW = Math.min((canvasRef.current?.clientWidth ?? 900) - 64, img.naturalWidth)
       const s = maxW / img.naturalWidth
@@ -589,19 +594,20 @@ function ClientCanvas({
         }
         fgSvg.style.display = masks.length > 0 ? '' : 'none'
       }
+      setIsLoading(false)
     }
     img.src = optData.imageUrl
   }, [optData.id, optData.imageUrl, locked, rerenderKey]) // eslint-disable-line
 
   return (
-    <div className="client-canvas-inner" ref={canvasRef}>
+    <div className="client-canvas-inner" ref={canvasRef} style={{ position: 'relative', minHeight: isLoading ? 200 : undefined }}>
       <div
         className="client-elev-wrap"
         ref={elevWrapRef}
         style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.15s ease' }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="client-elev-img" src={optData.imageUrl!} alt="elevation" draggable={false} />
+        <img className="client-elev-img" src={optData.imageUrl!} alt="elevation" draggable={false} ref={elevImgRef} />
         <svg
           id="client-snap-svg"
           style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', display: 'none', overflow: 'visible' }}
@@ -612,6 +618,7 @@ function ClientCanvas({
           <image id="client-fg-image" href="" x="0" y="0" preserveAspectRatio="none" clipPath="url(#client-fg-clip)" style={{ pointerEvents: 'none' }} />
         </svg>
       </div>
+      {isLoading && <ArcSpinner imageRef={elevImgRef} />}
     </div>
   )
 }
