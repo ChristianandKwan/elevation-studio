@@ -164,7 +164,7 @@ export function ArcSpinner({
   imageRef,
 }: {
   size?: number
-  imageRef?: React.RefObject<HTMLImageElement>
+  imageRef?: React.RefObject<HTMLImageElement | null>
 }) {
   const [variant, setVariant] = React.useState<'light' | 'dark'>('light')
 

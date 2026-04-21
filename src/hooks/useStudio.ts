@@ -125,6 +125,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   const [showScaleModal, setShowScaleModal] = useState(false)
   const [showArtModal, setShowArtModal] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const zoomSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -329,7 +330,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     renderSkewHandles([], stateRef.current.elev)
     setState(s => ({ ...s, skewCorners: corners, skewActive: true, skewDefMode: false, skewAdjustMode: false }))
     requestAnimationFrame(() => applySkewTransform())
-    await persistSkew(corners, true)
+    setBusy(true)
+    try {
+      await persistSkew(corners, true)
+    } finally {
+      setBusy(false)
+    }
   }
 
   function cancelSkewAdjust() {
@@ -923,11 +929,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
+      setBusy(false)
       return
     }
 
+    setBusy(true)
     const img = new Image()
     img.crossOrigin = 'anonymous'
+    img.onerror = () => setBusy(false)
     img.onload = () => {
       const elev: StudioElev = {
         imagePath: opts.imagePath ?? '',
@@ -987,6 +996,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             const names = failed.map(a => a.name).join(', ')
             onStatus(`Could not load image${failed.length > 1 ? 's' : ''}: ${names}`)
           }
+          setBusy(false)
         }
       }
 
@@ -997,6 +1007,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
         })
         finalize([])
+        setBusy(false)
         return
       }
 
@@ -1618,6 +1629,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const s = state
     if (!s.elev || !s.scale) { onStatus('Please complete calibration first'); return }
     onStatus('Rendering…')
+    setBusy(true)
     const c = document.createElement('canvas')
     c.width = s.elev.origW; c.height = s.elev.origH
     const ctx = c.getContext('2d')!
@@ -1655,6 +1667,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     a.download = `${filename}.png`
     a.click()
     onStatus('PNG exported')
+    setBusy(false)
   }
 
   // ─── BOX SELECT (rubber-band drag on canvas background) ──────────
@@ -1826,6 +1839,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     clearAllMasks,
     highlightMask,
     saveStatus,
+    busy,
     onWrapMouseDown,
     onWrapMouseMove,
     boxSelectedRef,

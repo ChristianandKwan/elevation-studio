@@ -2,6 +2,7 @@
 
 import { useRef } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 type StudioHook = ReturnType<typeof useStudio>
 
@@ -14,6 +15,7 @@ interface Props {
 
 export default function StudioCanvas({ studio, onStatus, clientPickedOption, activeOption }: Props) {
   const { state, elevWrapRef, calibSvgRef, fgDrawSvgRef, vpRef, changeZoom, setZoomFit } = studio
+  const elevImgRef = useRef<HTMLImageElement>(null)
 
   // Deselect on canvas background click (skip if a box-select drag just finished)
   function onWrapClick(e: React.MouseEvent) {
@@ -60,6 +62,7 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
                 src={state.elev?.imageUrl ?? ''}
                 alt="elevation"
                 draggable={false}
+                ref={elevImgRef}
               />
 
               {/* Foreground composite SVG — sits above artwork overlays, renders elevation clipped to mask polygons */}
@@ -162,6 +165,9 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
           </div>
         </div>
       )}
+
+      {/* Loading spinner — overlaid on canvas during option load, skew persist, PNG export */}
+      {studio.busy && <ArcSpinner imageRef={elevImgRef} />}
 
       {/* Zoom controls */}
       {hasElev && (
