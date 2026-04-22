@@ -23,10 +23,9 @@ interface DraftState {
 
 export default function CustomLineItems({ items, isConsultant, vatMode, onAdd, onUpdate, onRemove }: Props) {
   const [draft, setDraft] = useState<DraftState | null>(null)
+  const pendingAdd = useRef(false)
 
   const visible = isConsultant ? items : items.filter(i => i.shownToClient)
-
-  if (!isConsultant && visible.length === 0) return null
 
   function openEdit(item: BudgetCustomLineItem) {
     const displayAmt = displayFrozenAmount(
@@ -69,7 +68,6 @@ export default function CustomLineItems({ items, isConsultant, vatMode, onAdd, o
     setDraft(null)
   }
 
-  const pendingAdd = useRef(false)
   function handleAdd() {
     pendingAdd.current = true
     onAdd()
@@ -90,6 +88,8 @@ export default function CustomLineItems({ items, isConsultant, vatMode, onAdd, o
       shownToClient: last.shownToClient,
     })
   }, [items])
+
+  if (!isConsultant && visible.length === 0) return null
 
   return (
     <div className="budget-custom-items">
