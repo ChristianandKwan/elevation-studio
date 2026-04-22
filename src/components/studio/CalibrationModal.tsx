@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Props {
   lineDispPx: number
@@ -10,6 +10,12 @@ interface Props {
 
 export default function CalibrationModal({ lineDispPx, onConfirm, onCancel }: Props) {
   const [cm, setCm] = useState('')
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onCancel])
 
   function handleConfirm() {
     const val = parseFloat(cm)

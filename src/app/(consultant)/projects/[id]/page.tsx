@@ -113,7 +113,7 @@ export default async function ProjectPage({ params }: Props) {
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
   // Fetch last 10 activity logs for the project
   const { data: activityLogs } = await supabase

@@ -166,40 +166,46 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
   async function deleteProject(id: string) {
     setDeleting(true)
     const supabase = createClient()
+    try {
+      // Fetch all elevation image paths
+      const { data: elevOpts } = await supabase
+        .from('elevation_options')
+        .select('image_path, elevations!inner(project_id)')
+        .eq('elevations.project_id', id)
 
-    // Fetch all elevation image paths
-    const { data: elevOpts } = await supabase
-      .from('elevation_options')
-      .select('image_path, elevations!inner(project_id)')
-      .eq('elevations.project_id', id)
+      // Fetch all artwork image paths
+      const { data: artworks } = await supabase
+        .from('artworks')
+        .select('image_path, elevation_options!inner(elevations!inner(project_id))')
+        .eq('elevation_options.elevations.project_id', id)
 
-    // Fetch all artwork image paths
-    const { data: artworks } = await supabase
-      .from('artworks')
-      .select('image_path, elevation_options!inner(elevations!inner(project_id))')
-      .eq('elevation_options.elevations.project_id', id)
+      // Delete elevation images from storage
+      const elevPaths = (elevOpts ?? []).map((o: { image_path: string | null }) => o.image_path).filter(Boolean) as string[]
+      if (elevPaths.length) {
+        await supabase.storage.from('elevation-images').remove(elevPaths)
+      }
 
-    // Delete elevation images from storage
-    const elevPaths = (elevOpts ?? []).map((o: { image_path: string | null }) => o.image_path).filter(Boolean) as string[]
-    if (elevPaths.length) {
-      await supabase.storage.from('elevation-images').remove(elevPaths)
+      // Delete artwork images from storage
+      const artPaths = (artworks ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
+      if (artPaths.length) {
+        await supabase.storage.from('artwork-images').remove(artPaths)
+      }
+
+      // Delete the project (cascades all DB records)
+      const { error } = await supabase.from('projects').delete().eq('id', id)
+      if (error) throw error
+
+      setProjects(prev => prev.filter(p => p.id !== id))
+      setArchivedProjects(prev => prev.filter(p => p.id !== id))
+      setConfirmDeleteId(null)
+      setMenuOpenId(null)
+      showStatus('Project deleted')
+    } catch {
+      showStatus('Failed to delete project — please try again')
+      setConfirmDeleteId(null)
+    } finally {
+      setDeleting(false)
     }
-
-    // Delete artwork images from storage
-    const artPaths = (artworks ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
-    if (artPaths.length) {
-      await supabase.storage.from('artwork-images').remove(artPaths)
-    }
-
-    // Delete the project (cascades all DB records)
-    await supabase.from('projects').delete().eq('id', id)
-
-    setProjects(prev => prev.filter(p => p.id !== id))
-    setArchivedProjects(prev => prev.filter(p => p.id !== id))
-    setConfirmDeleteId(null)
-    setMenuOpenId(null)
-    setDeleting(false)
-    showStatus('Project deleted')
   }
 
   async function renameProject(id: string, name: string) {

@@ -9,7 +9,7 @@ interface Props {
 export default async function ClientPortalPage({ params }: Props) {
   const { token } = await params
   const supabase = await createClient()
-  const supabaseService = await createServiceClient()
+  const supabaseService = createServiceClient()
 
   // Verify token
   const { data: tokenRow } = await supabase

@@ -11,6 +11,7 @@ export interface BudgetArtwork {
   price: number
   framingStatus: 'framed' | 'requires_framing'
   framingCost: number | null
+  visible: boolean
 }
 
 export interface BudgetOptionData {
@@ -79,15 +80,16 @@ export interface OptionTotals {
 }
 
 export function getOptionTotals(artworks: BudgetArtwork[]): OptionTotals {
+  const visible = artworks.filter(a => a.visible)
   let art = 0, framing = 0, hasFraming = false
-  for (const a of artworks) {
+  for (const a of visible) {
     art += a.price
     if (a.framingStatus === 'requires_framing' && a.framingCost != null) {
       framing += a.framingCost
       hasFraming = true
     }
   }
-  return { artworks: art, framing, artCount: artworks.length, hasFraming }
+  return { artworks: art, framing, artCount: visible.length, hasFraming }
 }
 
 // ── Project-level totals (handles picked vs pending elevations) ───────────────

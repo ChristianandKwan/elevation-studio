@@ -56,10 +56,6 @@ export default function TotalsPanel({
 
   const grandIsRange = isRange || installIsRange || (feeMin !== feeMax)
 
-  // Grand totals (inc-VAT when vatMode)
-  const totalMin = vatMode ? Math.round(subMin * 1.2) : subMin
-  const totalMax = vatMode ? Math.round(subMax * 1.2) : subMax
-
   // Display values for each line item — inc-VAT in vatMode so they match the detail view
   const vatMult = vatMode ? 1.2 : 1
   const dispArtMin = Math.round(artMin * vatMult)
@@ -71,6 +67,10 @@ export default function TotalsPanel({
   const dispCustomTotal = Math.round(customTotal * vatMult)
   const dispFeeMin = Math.round(feeMin * vatMult)
   const dispFeeMax = Math.round(feeMax * vatMult)
+
+  // Grand totals derived from display line items so the column always adds up
+  const totalMin = dispArtMin + dispFramingMin + dispInstallMin + dispCustomTotal + dispFeeMin
+  const totalMax = dispArtMax + dispFramingMax + dispInstallMax + dispCustomTotal + dispFeeMax
 
   // ── Client budget variance ──────────────────────────────────────────────────
   const budgetDisplay = clientBudget != null && vatMode

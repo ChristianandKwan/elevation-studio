@@ -1,5 +1,21 @@
 import type { Metadata } from 'next'
+import { Cormorant_Garamond, Karla } from 'next/font/google'
 import './globals.css'
+
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '400', '500'],
+  style: ['normal', 'italic'],
+  variable: '--font-cormorant',
+  display: 'swap',
+})
+
+const karla = Karla({
+  subsets: ['latin'],
+  weight: ['300', '400', '500'],
+  variable: '--font-karla',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Elevation Studio — Christian & Kwan',
@@ -12,14 +28,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" style={{ height: '100%' }}>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Karla:wght@300;400;500&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`${cormorant.variable} ${karla.variable}`} style={{ height: '100%' }}>
       <body style={{ height: '100%' }}>{children}</body>
     </html>
   )

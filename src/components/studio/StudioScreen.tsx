@@ -346,47 +346,51 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   async function deleteElevation(elevId: string) {
     const supabase = createClient()
+    try {
+      // Fetch all elevation_options for this elevation
+      const { data: opts } = await supabase
+        .from('elevation_options')
+        .select('id, image_path')
+        .eq('elevation_id', elevId)
 
-    // Fetch all elevation_options for this elevation
-    const { data: opts } = await supabase
-      .from('elevation_options')
-      .select('id, image_path')
-      .eq('elevation_id', elevId)
+      if (opts) {
+        // Fetch artwork image paths for all options
+        const optIds = opts.map(o => o.id)
+        const { data: arts } = await supabase
+          .from('artworks')
+          .select('image_path')
+          .in('option_id', optIds)
 
-    if (opts) {
-      // Fetch artwork image paths for all options
-      const optIds = opts.map(o => o.id)
-      const { data: arts } = await supabase
-        .from('artworks')
-        .select('image_path')
-        .in('option_id', optIds)
+        // Delete artwork images from storage
+        const artPaths = (arts ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
+        if (artPaths.length) {
+          await supabase.storage.from('artwork-images').remove(artPaths)
+        }
 
-      // Delete artwork images from storage
-      const artPaths = (arts ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
-      if (artPaths.length) {
-        await supabase.storage.from('artwork-images').remove(artPaths)
+        // Delete elevation images from storage
+        const elevPaths = opts.map(o => o.image_path).filter(Boolean) as string[]
+        if (elevPaths.length) {
+          await supabase.storage.from('elevation-images').remove(elevPaths)
+        }
       }
 
-      // Delete elevation images from storage
-      const elevPaths = opts.map(o => o.image_path).filter(Boolean) as string[]
-      if (elevPaths.length) {
-        await supabase.storage.from('elevation-images').remove(elevPaths)
-      }
+      // Delete the elevation row (DB cascades to options + artworks)
+      const { error } = await supabase.from('elevations').delete().eq('id', elevId)
+      if (error) throw error
+
+      // Update local state and switch away if needed
+      setElevations(prev => {
+        const remaining = prev.filter(e => e.id !== elevId)
+        if (activeElevId === elevId && remaining.length > 0) {
+          setActiveElevId(remaining[0].id)
+          setActiveOption(remaining[0].elevation_options[0]?.option ?? 'A')
+        }
+        return remaining
+      })
+      onStatus('Elevation deleted')
+    } catch {
+      onStatus('Failed to delete elevation — please try again')
     }
-
-    // Delete the elevation row (DB cascades to options + artworks)
-    await supabase.from('elevations').delete().eq('id', elevId)
-
-    // Update local state and switch away if needed
-    setElevations(prev => {
-      const remaining = prev.filter(e => e.id !== elevId)
-      if (activeElevId === elevId && remaining.length > 0) {
-        setActiveElevId(remaining[0].id)
-        setActiveOption(remaining[0].elevation_options[0]?.option ?? 'A')
-      }
-      return remaining
-    })
-    onStatus('Elevation deleted')
   }
 
   async function renameElevation(elevId: string, newName: string) {
@@ -525,10 +529,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     // Retry once on the rare chance of a collision.
     const { generateArtistToken } = await import('@/lib/artistToken')
     let token = generateArtistToken()
-    let result = await supabase.from('client_tokens').insert({ project_id: project.id, token }).select().single()
+    let result = await supabase.from('client_tokens').insert({ project_id: project.id, token }).select().maybeSingle()
     if (result.error) {
       token = generateArtistToken()
-      result = await supabase.from('client_tokens').insert({ project_id: project.id, token }).select().single()
+      result = await supabase.from('client_tokens').insert({ project_id: project.id, token }).select().maybeSingle()
     }
     token = result.data?.token ?? token
     setShareToken(token)
@@ -711,6 +715,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                 price: a.price,
                 framingStatus: a.framingStatus,
                 framingCost: a.framingCost,
+                visible: a.visible,
               })),
             })),
           }))}

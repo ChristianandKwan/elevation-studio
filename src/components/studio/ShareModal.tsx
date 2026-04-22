@@ -23,6 +23,12 @@ export default function ShareModal({ projectName, onGetToken, onClose, onStatus 
     })
   }, []) // eslint-disable-line
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
   function copyLink() {
     navigator.clipboard?.writeText(url)
     onStatus('Link copied to clipboard')

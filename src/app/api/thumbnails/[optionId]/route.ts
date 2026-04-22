@@ -49,7 +49,7 @@ export async function POST(
   }
 
   // 2. Regenerate with service-role perms (storage upload + row patch)
-  const serviceClient = await createServiceClient()
+  const serviceClient = createServiceClient()
   const ok = await regenerateOptionThumbnail(serviceClient, optionId)
 
   // `ok === false` isn't fatal — it just means the option has no

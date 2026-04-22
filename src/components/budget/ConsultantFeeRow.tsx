@@ -26,9 +26,10 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, on
   function save() {
     const parsed = parseFloat(draftAmount)
     if (!isNaN(parsed) && parsed >= 0) {
+      const amount = draftMode === 'percentage' ? Math.min(100, parsed) : parsed
       onChange({
         mode: draftMode,
-        amount: parsed,
+        amount,
         shownToClient: fee?.shownToClient ?? false,
       })
     }
@@ -100,6 +101,7 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, on
               className="budget-inline-input"
               type="number"
               min="0"
+              max={draftMode === 'percentage' ? '100' : undefined}
               step={draftMode === 'percentage' ? '0.5' : '1'}
               value={draftAmount}
               onChange={e => setDraftAmount(e.target.value)}

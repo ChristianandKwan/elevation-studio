@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { ArcSpinner } from '@/components/ui/Spinner'
 
 export interface ArtMeta {
@@ -49,6 +49,12 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
   const [rowMetas, setRowMetas] = useState<RowMeta[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onCancel])
+
   function pickImages() {
     inputRef.current?.click()
   }
@@ -79,14 +85,19 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
       framingStatus: 'framed',
       framingCostStr: '',
     })))
-    const readers = selected.map(f => new Promise<string>(resolve => {
+    const readers = selected.map(f => new Promise<string>((resolve, reject) => {
       const r = new FileReader()
       r.onload = ev => resolve(ev.target?.result as string)
+      r.onerror = () => reject(new Error(`Failed to read ${f.name}`))
       r.readAsDataURL(f)
     }))
     setReading(true)
     Promise.all(readers).then(arr => {
       setPreviews(arr)
+      setReading(false)
+    }).catch(() => {
+      setSizeErrors(['One or more files could not be read. Please try again.'])
+      setFiles([])
       setReading(false)
     })
     e.target.value = ''

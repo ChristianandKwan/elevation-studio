@@ -160,6 +160,8 @@ function gaussianElimination(A: number[][], b: number[]): number[] {
     }
     ;[M[col], M[maxRow]] = [M[maxRow], M[col]]
 
+    if (Math.abs(M[col][col]) < 1e-10) throw new Error('Degenerate quad: cannot compute homography')
+
     // Eliminate below
     for (let row = col + 1; row < n; row++) {
       const factor = M[row][col] / M[col][col]
@@ -172,6 +174,7 @@ function gaussianElimination(A: number[][], b: number[]): number[] {
   // Back substitution
   const x = new Array(n).fill(0)
   for (let i = n - 1; i >= 0; i--) {
+    if (Math.abs(M[i][i]) < 1e-10) throw new Error('Degenerate quad: cannot compute homography')
     x[i] = M[i][n] / M[i][i]
     for (let j = i + 1; j < n; j++) {
       x[i] -= (M[i][j] / M[i][i]) * x[j]

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, memo } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 import type { ActivityLog } from '@/types'
 import { framingLabel, formatPrice } from '@/lib/utils'
@@ -502,7 +502,7 @@ interface ArtworkItemProps {
   onShadowApplyAll: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
+const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -747,7 +747,7 @@ function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect
       </div>
     </div>
   )
-}
+})
 
 // ─── SUN ANGLE PICKER ───────────────────────────────────────────────────────
 function SunAnglePicker({ angle, onChange, disabled }: { angle: number; onChange: (a: number) => void; disabled?: boolean }) {

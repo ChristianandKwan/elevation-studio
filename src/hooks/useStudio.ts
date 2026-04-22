@@ -207,7 +207,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     svg.setAttribute('width', String(elev.dispW))
     svg.setAttribute('height', String(elev.dispH))
     svg.style.display = ''
-    svg.style.pointerEvents = adjustMode ? 'none' : 'none' // lines never capture
+    svg.style.pointerEvents = adjustMode ? 'all' : 'none'
 
     // Connecting lines
     const len = Math.min(corners.length, 4)
@@ -1074,7 +1074,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       supabase.from('elevation_options').update({
         image_path: path, orig_w: img.naturalWidth, orig_h: img.naturalHeight,
         scale_px_per_cm: null, zoom: 1, foreground_masks: null,
-      }).eq('id', optionId).then(() => {})
+      }).eq('id', optionId).then(({ error }) => {
+        if (error) onStatus('Elevation saved to storage but DB update failed — reload to retry')
+      })
       scheduleThumbnailRegen()
 
       requestAnimationFrame(() => {
@@ -1456,7 +1458,16 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   useEffect(() => {
+    const flush = () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        persistOption(stateRef.current)
+      }
+    }
+    window.addEventListener('beforeunload', flush)
     return () => {
+      window.removeEventListener('beforeunload', flush)
       if (saveTimer.current) clearTimeout(saveTimer.current)
       if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
       if (thumbnailRegenTimer.current) clearTimeout(thumbnailRegenTimer.current)
@@ -1662,15 +1673,20 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       ctx.restore()
     }
 
-    const a = document.createElement('a')
-    a.href = c.toDataURL('image/png')
     const sanitise = (s: string) => s.replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
     const filename = [projectNameRef.current, elevationNameRef.current, `Option-${optionKeyRef.current}`]
       .map(sanitise).filter(Boolean).join('_') || 'elevation-artwork'
-    a.download = `${filename}.png`
-    a.click()
-    onStatus('PNG exported')
-    setBusy(false)
+    c.toBlob(blob => {
+      if (!blob) { onStatus('PNG export failed'); setBusy(false); return }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${filename}.png`
+      a.click()
+      URL.revokeObjectURL(url)
+      onStatus('PNG exported')
+      setBusy(false)
+    }, 'image/png')
   }
 
   // ─── BOX SELECT (rubber-band drag on canvas background) ──────────

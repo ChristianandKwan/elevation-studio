@@ -23,7 +23,7 @@
 
 html, body { height: 100%; }
 body {
-  font-family: 'Karla', sans-serif;
+  font-family: var(--font-karla, 'Karla'), sans-serif;
   background: var(--cream);
   color: var(--charcoal);
   min-height: 100vh;
@@ -37,7 +37,7 @@ body {
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px;
-  font-family: 'Karla', sans-serif; font-size: 12px; font-weight: 500;
+  font-family: var(--font-karla, 'Karla'), sans-serif; font-size: 12px; font-weight: 500;
   letter-spacing: .02em; cursor: pointer;
   border: 1px solid var(--charcoal); background: transparent;
   color: var(--charcoal); transition: all .15s; white-space: nowrap; text-decoration: none;
@@ -74,7 +74,7 @@ body {
   to   { opacity: 1; transform: none; }
 }
 .modal-title {
-  font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 400; margin-bottom: 4px;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 22px; font-weight: 400; margin-bottom: 4px;
 }
 .modal-sub { font-size: 12px; color: var(--mid); margin-bottom: 22px; line-height: 1.5; }
 .field { margin-bottom: 15px; }
@@ -83,7 +83,7 @@ body {
   letter-spacing: .07em; text-transform: uppercase; color: var(--mid); margin-bottom: 5px;
 }
 .field-input {
-  width: 100%; padding: 9px 11px; font-family: 'Karla'; font-size: 13px;
+  width: 100%; padding: 9px 11px; font-family: var(--font-karla, 'Karla'); font-size: 13px;
   border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
   outline: none; transition: border-color .15s;
 }
@@ -118,7 +118,7 @@ body {
 }
 .dash-body { padding: 40px; }
 .dash-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.dash-section-title { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 400; }
+.dash-section-title { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 24px; font-weight: 400; }
 .dash-kicker { font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--mid); margin-bottom: 6px; }
 
 .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
@@ -138,7 +138,7 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 .project-card-thumb-placeholder span {
-  font-family: 'Cormorant Garamond', serif;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
   font-size: 72px; font-style: italic;
   color: var(--charcoal); opacity: 0.1;
   line-height: 1; user-select: none;
@@ -177,7 +177,7 @@ body {
 }
 .project-card-dropdown button {
   display: block; width: 100%; text-align: left;
-  padding: 9px 14px; font-size: 13px; font-family: 'Karla', sans-serif;
+  padding: 9px 14px; font-size: 13px; font-family: var(--font-karla, 'Karla'), sans-serif;
   background: none; border: none; cursor: pointer; color: var(--charcoal);
 }
 .project-card-dropdown button:hover { background: var(--cream); }
@@ -219,14 +219,14 @@ body {
 .studio-header-left { display: flex; align-items: center; gap: 16px; }
 .studio-back {
   display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mid);
-  cursor: pointer; padding: 5px 0; background: none; border: none; font-family: 'Karla';
+  cursor: pointer; padding: 5px 0; background: none; border: none; font-family: var(--font-karla, 'Karla');
 }
 .studio-back:hover { color: var(--charcoal); }
 .studio-project-name { font-size: 12px; color: var(--mid); }
 .studio-project-name strong { color: var(--charcoal); }
 
 .save-status {
-  font-size: 11px; font-family: 'Karla', sans-serif;
+  font-size: 11px; font-family: var(--font-karla, 'Karla'), sans-serif;
   transition: opacity 0.4s ease;
 }
 .save-status--saving { color: var(--mid); }
@@ -234,7 +234,7 @@ body {
 
 .header-app-title {
   position: absolute; left: 50%; transform: translateX(-50%);
-  font-family: 'Cormorant Garamond', serif; font-size: 15px; font-weight: 400;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 15px; font-weight: 400;
   letter-spacing: .12em; color: var(--charcoal); pointer-events: none;
   white-space: nowrap;
 }
@@ -257,7 +257,7 @@ body {
 }
 .studio-tab {
   padding: 10px 16px; font-size: 12px; font-weight: 500; cursor: pointer;
-  border: none; background: none; font-family: 'Karla'; color: var(--mid);
+  border: none; background: none; font-family: var(--font-karla, 'Karla'); color: var(--mid);
   border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s;
   white-space: nowrap; flex-shrink: 0;
 }
@@ -267,13 +267,13 @@ body {
 .studio-tab-add {
   padding: 8px 12px; font-size: 11px; cursor: pointer;
   border: 1px dashed var(--border); background: var(--warm-white);
-  font-family: 'Karla'; color: var(--mid);
+  font-family: var(--font-karla, 'Karla'); color: var(--mid);
   transition: all .15s; margin-left: auto; flex-shrink: 0; white-space: nowrap;
 }
 .studio-tab-add:hover { border-color: var(--accent); color: var(--accent); }
 .studio-tab-add-option {
   width: 22px; height: 22px; padding: 0; font-size: 14px; cursor: pointer; line-height: 1;
-  border: 1px dashed var(--border); background: none; font-family: 'Karla'; color: var(--mid);
+  border: 1px dashed var(--border); background: none; font-family: var(--font-karla, 'Karla'); color: var(--mid);
   transition: all .15s; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
   margin-left: 2px;
 }
@@ -313,13 +313,13 @@ body {
 .sidebar-section { padding: 16px 18px; border-bottom: 1px solid var(--border); }
 .sidebar-section:last-child { border-bottom: none; }
 .s-title {
-  font-family: 'Cormorant Garamond', serif; font-size: 10.5px; font-weight: 500;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 10.5px; font-weight: 500;
   letter-spacing: .18em; text-transform: uppercase; color: var(--mid);
   margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
 }
 .step-badge {
   width: var(--badge-size); height: var(--badge-size); border-radius: 50%;
-  background: var(--charcoal); color: white; font-size: 10px; font-family: 'Karla';
+  background: var(--charcoal); color: white; font-size: 10px; font-family: var(--font-karla, 'Karla');
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   line-height: 1; text-align: center; letter-spacing: 0;
 }
@@ -394,7 +394,7 @@ body {
   width: 62px; flex-shrink: 0; padding-right: 8px; white-space: nowrap;
 }
 .aw-f-input {
-  flex: 1; padding: 5px 8px; font-family: 'Karla'; font-size: 11.5px;
+  flex: 1; padding: 5px 8px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px;
   border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
   outline: none; transition: border-color .15s;
 }
@@ -412,10 +412,10 @@ body {
 }
 .aw-price-wrap:focus-within { border-color: var(--charcoal); }
 .aw-price-prefix {
-  padding: 5px 0 5px 8px; font-size: 11.5px; color: var(--mid); font-family: 'Karla'; flex-shrink: 0;
+  padding: 5px 0 5px 8px; font-size: 11.5px; color: var(--mid); font-family: var(--font-karla, 'Karla'); flex-shrink: 0;
 }
 .aw-price-input {
-  flex: 1; padding: 5px 8px 5px 4px; font-family: 'Karla'; font-size: 11.5px;
+  flex: 1; padding: 5px 8px 5px 4px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px;
   border: none; background: transparent; color: var(--charcoal); outline: none;
   -moz-appearance: textfield;
 }
@@ -424,7 +424,7 @@ body {
 
 /* Frame select */
 .aw-frame-select {
-  flex: 1; padding: 5px 6px; font-family: 'Karla'; font-size: 11px;
+  flex: 1; padding: 5px 6px; font-family: var(--font-karla, 'Karla'); font-size: 11px;
   border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
   outline: none; cursor: pointer;
 }
@@ -459,13 +459,13 @@ body {
 .aw-shadow-label { font-size: 10px; color: var(--mid); letter-spacing: .05em; flex: 1; }
 .aw-apply-all {
   font-size: 10px; color: var(--accent); cursor: pointer;
-  font-family: 'Karla'; background: none; border: none; padding: 0;
+  font-family: var(--font-karla, 'Karla'); background: none; border: none; padding: 0;
   text-decoration: underline; text-underline-offset: 2px; letter-spacing: 0;
 }
 .aw-apply-all:hover { color: var(--charcoal); }
 .aw-apply-all:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
 .dim-input {
-  width: 52px; padding: 4px 6px; font-family: 'Karla'; font-size: 11px;
+  width: 52px; padding: 4px 6px; font-family: var(--font-karla, 'Karla'); font-size: 11px;
   border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
   outline: none; transition: border-color .15s;
   -moz-appearance: textfield;
@@ -475,12 +475,12 @@ body {
 .dim-input:focus { border-color: var(--charcoal); background: white; }
 .dim-sep { color: var(--mid); font-size: 11px; }
 .price-input {
-  flex: 1; min-width: 60px; padding: 4px 6px; font-family: 'Karla'; font-size: 11px;
+  flex: 1; min-width: 60px; padding: 4px 6px; font-family: var(--font-karla, 'Karla'); font-size: 11px;
   border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal); outline: none;
 }
 .price-input:focus { border-color: var(--charcoal); }
 .name-input {
-  width: 100%; padding: 4px 6px; font-family: 'Karla'; font-size: 11px;
+  width: 100%; padding: 4px 6px; font-family: var(--font-karla, 'Karla'); font-size: 11px;
   border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
   outline: none; box-sizing: border-box;
 }
@@ -503,7 +503,7 @@ body {
 }
 .canvas-empty { text-align: center; color: var(--mid); pointer-events: none; }
 .canvas-empty .empty-icon { font-size: 52px; opacity: .18; margin-bottom: 10px; }
-.canvas-empty p { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 15px; }
+.canvas-empty p { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-style: italic; font-size: 15px; }
 .zoom-controls {
   position: absolute; bottom: 20px; right: 20px; display: flex; align-items: center;
   gap: 0; background: var(--warm-white); border: 1px solid var(--border);
@@ -516,7 +516,7 @@ body {
 }
 .zoom-btn:hover { background: var(--cream); }
 .zoom-label {
-  padding: 0 10px; font-size: 11px; color: var(--mid); font-family: 'Karla'; letter-spacing: .04em;
+  padding: 0 10px; font-size: 11px; color: var(--mid); font-family: var(--font-karla, 'Karla'); letter-spacing: .04em;
   border-left: 1px solid var(--border); border-right: 1px solid var(--border);
   height: 32px; display: flex; align-items: center; min-width: 52px; justify-content: center;
 }
@@ -541,7 +541,7 @@ body {
   position: absolute; bottom: calc(100% + 5px); left: 0; font-size: 10px;
   background: var(--charcoal); color: white; padding: 3px 7px; white-space: nowrap;
   max-width: 220px; overflow: hidden; text-overflow: ellipsis;
-  opacity: 0; transition: opacity .15s; font-family: 'Karla'; pointer-events: none;
+  opacity: 0; transition: opacity .15s; font-family: var(--font-karla, 'Karla'); pointer-events: none;
 }
 .aw-overlay:hover .aw-tag, .aw-overlay.selected .aw-tag { opacity: 1; }
 .aw-resize-hint {
@@ -591,7 +591,7 @@ body {
 .output-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .share-link-wrap {
   flex: 1; padding: 7px 10px; background: var(--cream); border: 1px solid var(--border);
-  font-size: 11px; color: var(--mid); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: 'Karla';
+  font-size: 11px; color: var(--mid); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--font-karla, 'Karla');
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -605,10 +605,10 @@ body {
 .client-logo { height: 44px; width: auto; position: absolute; left: 40px; }
 .client-header-brand {
   position: absolute; left: 50%; transform: translateX(-50%);
-  font-size: 22px; font-weight: 400; color: #fff; font-family: 'Cormorant Garamond', serif; letter-spacing: .12em;
+  font-size: 22px; font-weight: 400; color: #fff; font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; letter-spacing: .12em;
 }
-.client-project-label { font-size: 11px; color: rgba(255,255,255,.5); font-family: 'Karla'; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.client-prepared-by { font-size: 10px; color: rgba(255,255,255,.35); font-family: 'Karla'; }
+.client-project-label { font-size: 11px; color: rgba(255,255,255,.5); font-family: var(--font-karla, 'Karla'); display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.client-prepared-by { font-size: 10px; color: rgba(255,255,255,.35); font-family: var(--font-karla, 'Karla'); }
 
 /* Top-level Elevations / Budget toggle */
 .client-view-toggle {
@@ -617,7 +617,7 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .client-view-tab {
-  padding: 0 14px; height: 30px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+  padding: 0 14px; height: 30px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
   background: transparent; border: none; color: rgba(255,255,255,0.45); cursor: pointer;
   transition: color .15s; letter-spacing: .02em;
 }
@@ -637,7 +637,7 @@ body {
   display: flex; align-items: center; gap: 5px;
   padding: 0 14px; height: 42px; font-size: 11.5px; font-weight: 500;
   border: none; border-bottom: 2px solid transparent; background: none;
-  cursor: pointer; color: var(--mid); white-space: nowrap; font-family: 'Karla';
+  cursor: pointer; color: var(--mid); white-space: nowrap; font-family: var(--font-karla, 'Karla');
   transition: color .15s; flex-shrink: 0;
 }
 .client-tab-btn.active { color: var(--charcoal); border-bottom-color: var(--charcoal); }
@@ -666,7 +666,7 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 .client-zoom-btn:hover { background: var(--bg-hover, #f0ede8); }
-.client-zoom-label { font-size: 11px; font-family: 'Karla', sans-serif; color: var(--muted); min-width: 32px; text-align: center; }
+.client-zoom-label { font-size: 11px; font-family: var(--font-karla, 'Karla'), sans-serif; color: var(--muted); min-width: 32px; text-align: center; }
 .client-elev-wrap { position: relative; display: inline-block; box-shadow: 0 4px 24px rgba(0,0,0,.15); flex-shrink: 0; }
 .client-elev-img { display: block; }
 
@@ -678,7 +678,7 @@ body {
 .client-sidebar-scroll { flex: 1; overflow-y: auto; }
 .client-sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .client-sidebar-kicker { font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--mid); margin-bottom: 8px; }
-.client-sidebar-elev-name { font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 400; color: var(--charcoal); }
+.client-sidebar-elev-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 19px; font-weight: 400; color: var(--charcoal); }
 
 .client-art-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .client-art-row:last-child { border-bottom: none; }
@@ -696,7 +696,7 @@ body {
 
 .client-notes-textarea {
   width: 100%; resize: none; height: 80px; box-sizing: border-box;
-  font-family: 'Karla'; font-size: 12px; padding: 8px 10px; line-height: 1.5;
+  font-family: var(--font-karla, 'Karla'); font-size: 12px; padding: 8px 10px; line-height: 1.5;
   border: 1px solid var(--border); background: var(--cream);
   outline: none; color: var(--charcoal);
 }
@@ -757,18 +757,18 @@ body {
 /* ── LOGIN ─────────────────────────────────────────────── */
 .login-box { width: 340px; }
 .login-logo { width: 100%; max-width: 340px; height: auto; margin: 0 auto 36px; display: block; }
-.login-title { font-family: 'Cormorant Garamond', serif; font-size: 24px; color: white; font-weight: 300; margin-bottom: 4px; }
+.login-title { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 24px; color: white; font-weight: 300; margin-bottom: 4px; }
 .login-sub { font-size: 12px; color: rgba(255,255,255,.45); margin-bottom: 28px; }
 .login-field { margin-bottom: 14px; }
 .login-label { display: block; font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.4); margin-bottom: 5px; }
 .login-input {
-  width: 100%; padding: 10px 13px; font-family: 'Karla'; font-size: 13px;
+  width: 100%; padding: 10px 13px; font-family: var(--font-karla, 'Karla'); font-size: 13px;
   border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.06);
   color: white; outline: none; transition: border-color .15s;
 }
 .login-input:focus { border-color: rgba(255,255,255,.4); }
 .login-btn {
-  width: 100%; padding: 11px; font-family: 'Karla'; font-size: 13px; font-weight: 500;
+  width: 100%; padding: 11px; font-family: var(--font-karla, 'Karla'); font-size: 13px; font-weight: 500;
   background: white; color: var(--charcoal); border: none; cursor: pointer; margin-top: 8px; transition: background .15s;
 }
 .login-btn:hover { background: #eee; }
@@ -776,7 +776,7 @@ body {
 .login-error { font-size: 12px; color: #e88; margin-top: 8px; }
 
 /* Elevation name label on client portal */
-.elevation-name { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 400; }
+.elevation-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 17px; font-weight: 400; }
 
 /* ══════════════════════════════════════════════════════════
    BUDGET VIEW
@@ -785,7 +785,7 @@ body {
 /* View toggle in studio header */
 .budget-view-toggle { display: flex; gap: 2px; }
 .budget-view-tab {
-  padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: 'Karla';
+  padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: var(--font-karla, 'Karla');
   border: 1px solid var(--border); background: transparent; color: var(--mid);
   cursor: pointer; transition: all .15s;
 }
@@ -811,7 +811,7 @@ body {
 /* VAT toggle */
 .budget-vat-toggle { display: flex; border: 1px solid rgba(255,255,255,0.2); }
 .budget-vat-btn {
-  padding: 5px 14px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+  padding: 5px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
   background: transparent; border: none; color: rgba(255,255,255,0.45); cursor: pointer;
   transition: all .15s; letter-spacing: .02em;
 }
@@ -823,7 +823,7 @@ body {
 
 /* Preview as client button */
 .budget-preview-btn {
-  padding: 6px 14px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+  padding: 6px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
   border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.6);
   cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
 }
@@ -832,7 +832,7 @@ body {
 
 /* Export PDF button */
 .budget-export-btn {
-  padding: 6px 14px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+  padding: 6px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
   border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.8);
   cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
 }
@@ -843,7 +843,7 @@ body {
 
 /* Project header */
 .budget-project-header { margin-bottom: 36px; }
-.budget-project-name { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 400; margin-bottom: 3px; }
+.budget-project-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 28px; font-weight: 400; margin-bottom: 3px; }
 .budget-project-client { font-size: 13px; color: var(--mid); }
 .budget-client-view-badge {
   display: inline-block; margin-top: 8px; padding: 2px 9px;
@@ -854,7 +854,7 @@ body {
 /* Section kicker */
 .budget-section { margin-bottom: 44px; }
 .budget-section-kicker {
-  font-family: 'Karla', sans-serif; font-size: 11px; font-weight: 700;
+  font-family: var(--font-karla, 'Karla'), sans-serif; font-size: 11px; font-weight: 700;
   letter-spacing: .14em; text-transform: uppercase; color: var(--mid);
   padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 0;
 }
@@ -879,7 +879,7 @@ body {
 .budget-elev-header--pending { margin-bottom: 12px; }
 
 .budget-elev-name {
-  font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 20px; font-weight: 600;
   color: var(--charcoal);
 }
 .budget-elev-pick-badge {
@@ -893,7 +893,7 @@ body {
   padding: 2px 8px; letter-spacing: .02em;
 }
 .budget-elev-total {
-  margin-left: auto; font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 400;
+  margin-left: auto; font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 20px; font-weight: 400;
 }
 
 /* Picked elevation artwork list */
@@ -905,14 +905,14 @@ body {
 .budget-option-header {
   display: flex; align-items: baseline; justify-content: space-between;
   padding: 11px 14px; background: var(--cream); border-bottom: 1px solid var(--border);
-  width: 100%; text-align: left; font-family: 'Karla'; gap: 8px;
+  width: 100%; text-align: left; font-family: var(--font-karla, 'Karla'); gap: 8px;
 }
 .budget-option-key {
   font-size: 13px; font-weight: 600; letter-spacing: .08em;
   text-transform: uppercase; color: var(--charcoal);
 }
 .budget-option-subtotal {
-  font-family: 'Cormorant Garamond', serif;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
   font-size: 20px; font-weight: 500; color: var(--charcoal); margin-left: auto;
 }
 .budget-option-artworks { padding: 0 14px 12px; border-top: 1px solid var(--border); }
@@ -922,7 +922,7 @@ body {
 .budget-artwork-line:first-child { border-top: none; }
 .budget-artwork-main-row { display: flex; align-items: flex-start; gap: 10px; }
 .budget-artwork-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.budget-artwork-title { font-family: 'Cormorant Garamond', serif; font-size: 15px; color: var(--charcoal); }
+.budget-artwork-title { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 15px; color: var(--charcoal); }
 .budget-artwork-artist { font-size: 12px; color: var(--mid); }
 .budget-artwork-dims { font-size: 12px; color: var(--mid); white-space: nowrap; flex-shrink: 0; }
 .budget-artwork-price { font-size: 14px; font-weight: 500; text-align: right; min-width: 80px; flex-shrink: 0; }
@@ -946,7 +946,7 @@ body {
 .budget-cost-value { font-size: 14px; font-weight: 500; }
 .budget-cost-edit {
   font-size: 11px; color: var(--accent); text-decoration: underline;
-  cursor: pointer; background: none; border: none; font-family: 'Karla'; padding: 0;
+  cursor: pointer; background: none; border: none; font-family: var(--font-karla, 'Karla'); padding: 0;
 }
 .budget-cost-edit:hover { color: var(--charcoal); }
 .budget-cost-edit--danger { color: var(--red); }
@@ -970,7 +970,7 @@ body {
 .budget-inline-edit--budget { margin-top: 12px; }
 .budget-inline-prefix { font-size: 13px; color: var(--mid); flex-shrink: 0; }
 .budget-inline-input {
-  padding: 5px 8px; font-family: 'Karla'; font-size: 12px;
+  padding: 5px 8px; font-family: var(--font-karla, 'Karla'); font-size: 12px;
   border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
   outline: none; width: 90px;
   -moz-appearance: textfield;
@@ -983,7 +983,7 @@ body {
 /* Consultant fee mode toggle */
 .budget-fee-mode-toggle { display: flex; border: 1px solid var(--border); }
 .budget-fee-mode-btn {
-  padding: 4px 10px; font-family: 'Karla'; font-size: 11px; font-weight: 500;
+  padding: 4px 10px; font-family: var(--font-karla, 'Karla'); font-size: 11px; font-weight: 500;
   background: transparent; border: none; color: var(--mid); cursor: pointer; transition: all .15s;
 }
 .budget-fee-mode-btn.active { background: var(--charcoal); color: white; }
@@ -996,14 +996,14 @@ body {
 /* Custom line items */
 .budget-custom-items { }
 .budget-custom-name-input {
-  padding: 3px 6px; font-family: 'Karla'; font-size: 13px; color: var(--charcoal);
+  padding: 3px 6px; font-family: var(--font-karla, 'Karla'); font-size: 13px; color: var(--charcoal);
   border: 1px solid var(--border); background: var(--cream); outline: none; width: 100%; max-width: 240px;
 }
 .budget-custom-name-input:focus { border-color: var(--charcoal); }
 .budget-custom-item-controls { display: flex; gap: 16px; padding-left: 0; }
 .budget-add-item {
   font-size: 12px; color: var(--accent); background: none; border: none;
-  cursor: pointer; font-family: 'Karla'; padding: 11px 0; display: flex; align-items: center; gap: 6px;
+  cursor: pointer; font-family: var(--font-karla, 'Karla'); padding: 11px 0; display: flex; align-items: center; gap: 6px;
   text-decoration: none;
 }
 .budget-add-item:hover { color: var(--charcoal); }
@@ -1027,11 +1027,11 @@ body {
   padding: 14px 0 0; border-top: 2px solid var(--charcoal); margin-top: 4px;
 }
 .budget-grand-total-label {
-  font-family: 'Karla', sans-serif; font-size: 15px; font-weight: 700;
+  font-family: var(--font-karla, 'Karla'), sans-serif; font-size: 15px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em; color: var(--charcoal);
 }
 .budget-grand-total-value {
-  font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 500; color: var(--charcoal);
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 19px; font-weight: 500; color: var(--charcoal);
 }
 
 /* Client budget section */

@@ -168,6 +168,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         price: a.price,
         framingStatus: (a.framingStatus === 'requires_framing' ? 'requires_framing' : 'framed') as 'framed' | 'requires_framing',
         framingCost: a.framingCost ?? null,
+        visible: a.visible,
       })),
     })),
   }))

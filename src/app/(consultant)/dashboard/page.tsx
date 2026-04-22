@@ -20,7 +20,7 @@ import DashboardClient from '@/components/dashboard/DashboardClient'
  */
 export default async function DashboardPage() {
   const supabase = await createClient()
-  const supabaseService = await createServiceClient()
+  const supabaseService = createServiceClient()
 
   const user = await getCurrentUser()
 
