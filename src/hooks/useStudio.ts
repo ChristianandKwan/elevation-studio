@@ -267,7 +267,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const cx = corner[0] * elev.dispW, cy = corner[1] * elev.dispH
       const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
       c.setAttribute('cx', String(cx)); c.setAttribute('cy', String(cy)); c.setAttribute('r', '8')
-      c.setAttribute('fill', 'var(--accent)'); c.setAttribute('fill-opacity', '0.85')
+      c.setAttribute('fill', '#000'); c.setAttribute('fill-opacity', '0.85')
       c.setAttribute('stroke', 'white'); c.setAttribute('stroke-width', '1.5')
       c.setAttribute('data-skew-handle', 'true')
       if (adjustMode) {
@@ -309,7 +309,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       svg.appendChild(c)
       const t = document.createElementNS('http://www.w3.org/2000/svg', 'text')
       t.setAttribute('x', String(cx + 10)); t.setAttribute('y', String(cy - 10))
-      t.setAttribute('font-size', '10'); t.setAttribute('fill', 'var(--accent)')
+      t.setAttribute('font-size', '10'); t.setAttribute('fill', '#000')
       t.setAttribute('font-weight', '600')
       t.style.pointerEvents = 'none'
       t.textContent = labels[idx] ?? ''
@@ -406,6 +406,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const layer = document.getElementById('artwork-layer') as HTMLElement | null
     if (layer) layer.style.transform = ''
     setState(s => ({ ...s, skewDefMode: true }))
+  }
+
+  function startSkewAdjust() {
+    const s = stateRef.current
+    if (!s.skewCorners) return
+    skewDefCornersRef.current = [...s.skewCorners]
+    renderSkewHandles([...s.skewCorners], s.elev, true)
+    setState(st => ({ ...st, skewAdjustMode: true }))
   }
 
   function cancelSkewDef() {
@@ -1924,6 +1932,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     onWrapMouseMove,
     boxSelectedRef,
     startSkewDef,
+    startSkewAdjust,
     cancelSkewDef,
     setSkewActive,
     clearSkew,

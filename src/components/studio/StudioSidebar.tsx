@@ -297,7 +297,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
               <button
                 className="btn btn-sm btn-full"
                 style={{ marginTop: 8 }}
-                onClick={studio.startSkewDef}
+                onClick={studio.startSkewAdjust}
               >
                 Adjust corners
               </button>
