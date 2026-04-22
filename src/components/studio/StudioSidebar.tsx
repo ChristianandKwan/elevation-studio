@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, memo } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 import type { ActivityLog } from '@/types'
-import { framingLabel, formatPrice } from '@/lib/utils'
+import { framingLabel, formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 
 type StudioHook = ReturnType<typeof useStudio>
 
@@ -341,7 +341,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
             {approvalStatus.approved ? (
               <>
                 <div className="studio-approval-chip approved">
-                  ✓ Approved {approvalStatus.approvedAt ? `· ${approvalStatus.approvedAt}` : ''}
+                  ✓ Approved {approvalStatus.approvedAt ? `· ${formatApprovalTimestamp(approvalStatus.approvedAt)}` : ''}
                 </div>
                 {onUnapprove && (
                   <button

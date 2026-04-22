@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import { formatPrice } from '@/lib/utils'
+import { formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
 import { ArcSpinner } from '@/components/ui/Spinner'
 
@@ -190,7 +190,7 @@ export default function ClientElevation({
                 <div className="approval-status-text" style={{ color: 'var(--green)' }}>
                   Option {activeOpt} approved
                 </div>
-                <div className="approval-status-sub">Approved {optData.approved_at}</div>
+                <div className="approval-status-sub">Approved {formatApprovalTimestamp(optData.approved_at)}</div>
               </div>
             </div>
           ) : !isPicked ? (

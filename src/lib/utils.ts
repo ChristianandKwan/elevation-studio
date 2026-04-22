@@ -13,6 +13,28 @@ export function timeNow(): string {
   })
 }
 
+export function formatApprovalTimestamp(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const ampm = d.getHours() >= 12 ? 'pm' : 'am'
+  const weekday = d.toLocaleDateString('en-GB', { weekday: 'long' })
+  const month = d.toLocaleDateString('en-GB', { month: 'long' })
+  const day = d.getDate()
+  const suffix = ((): string => {
+    if (day >= 11 && day <= 13) return 'th'
+    switch (day % 10) {
+      case 1: return 'st'
+      case 2: return 'nd'
+      case 3: return 'rd'
+      default: return 'th'
+    }
+  })()
+  return `${hh}:${mm} ${ampm} - ${weekday} ${day}${suffix} ${month} ${d.getFullYear()}`
+}
+
 export function framingLabel(v: string): string {
   return ({ framed: 'framed', requires_framing: 'requires framing' } as Record<string, string>)[v] ?? v
 }
