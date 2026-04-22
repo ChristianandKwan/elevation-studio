@@ -34,7 +34,7 @@ export function DrawLoader({ label }: { label?: string }) {
               cx="40" cy="40" r="38"
               fill="none"
               stroke="rgba(253,251,249,0.85)"
-              strokeWidth="1.5"
+              strokeWidth="0.6"
               strokeLinecap="round"
               style={{ animation: 'ck-draw-circle 2.2s ease-in-out infinite' }}
             />
@@ -81,8 +81,8 @@ const drawStyles: Record<string, React.CSSProperties> = {
     gap: 20,
   },
   wrap: {
-    width: 80,
-    height: 80,
+    width: 240,
+    height: 240,
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
@@ -97,7 +97,7 @@ const drawStyles: Record<string, React.CSSProperties> = {
   },
   label: {
     fontFamily: "'Cormorant Garamond', serif",
-    fontSize: 19,
+    fontSize: 57,
     fontWeight: 400,
     color: '#FDFBF9',
     letterSpacing: '0.03em',
@@ -108,7 +108,7 @@ const drawStyles: Record<string, React.CSSProperties> = {
   },
   caption: {
     fontFamily: "'Karla', sans-serif",
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: 500,
     letterSpacing: '0.14em',
     textTransform: 'uppercase' as const,
@@ -160,7 +160,7 @@ function sampleCentreLuminance(img: HTMLImageElement): 'light' | 'dark' {
 }
 
 export function ArcSpinner({
-  size = 168,
+  size = 56,
   imageRef,
 }: {
   size?: number
@@ -183,7 +183,6 @@ export function ArcSpinner({
     ? ['rgba(28,26,24,0.18)', 'rgba(28,26,24,0.08)']
     : ['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.10)']
   const halo = size * 1.7
-  const labelSize = Math.round(size * 0.232)
 
   return (
     <div style={arcStyles.overlay}>
@@ -200,7 +199,7 @@ export function ArcSpinner({
               strokeLinecap="round" transform="rotate(-90 42 42)"
               style={{ animation: 'ck-arc-dash 1.6s ease-in-out infinite' }} />
           </svg>
-          <span style={{ ...arcStyles.label, color: stroke, fontSize: labelSize }}>C&amp;K</span>
+          <span style={{ ...arcStyles.label, color: stroke }}>C&amp;K</span>
         </div>
       </div>
 
@@ -240,6 +239,7 @@ const arcStyles: Record<string, React.CSSProperties> = {
   },
   label: {
     fontFamily: "'Cormorant Garamond', serif",
+    fontSize: 13,
     fontWeight: 400,
     letterSpacing: '0.03em',
     userSelect: 'none' as const,
