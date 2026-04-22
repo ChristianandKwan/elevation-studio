@@ -160,7 +160,7 @@ function sampleCentreLuminance(img: HTMLImageElement): 'light' | 'dark' {
 }
 
 export function ArcSpinner({
-  size = 56,
+  size = 168,
   imageRef,
 }: {
   size?: number
@@ -183,6 +183,7 @@ export function ArcSpinner({
     ? ['rgba(28,26,24,0.18)', 'rgba(28,26,24,0.08)']
     : ['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.10)']
   const halo = size * 1.7
+  const labelSize = Math.round(size * 0.232)
 
   return (
     <div style={arcStyles.overlay}>
@@ -199,7 +200,7 @@ export function ArcSpinner({
               strokeLinecap="round" transform="rotate(-90 42 42)"
               style={{ animation: 'ck-arc-dash 1.6s ease-in-out infinite' }} />
           </svg>
-          <span style={{ ...arcStyles.label, color: stroke }}>C&amp;K</span>
+          <span style={{ ...arcStyles.label, color: stroke, fontSize: labelSize }}>C&amp;K</span>
         </div>
       </div>
 
@@ -239,7 +240,6 @@ const arcStyles: Record<string, React.CSSProperties> = {
   },
   label: {
     fontFamily: "'Cormorant Garamond', serif",
-    fontSize: 13,
     fontWeight: 400,
     letterSpacing: '0.03em',
     userSelect: 'none' as const,
