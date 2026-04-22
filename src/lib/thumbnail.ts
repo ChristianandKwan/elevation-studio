@@ -43,6 +43,8 @@ export interface ArtworkEntry {
   shadowOpacity?: number | null
 }
 
+type MaskPolygon = Array<{ x: number; y: number }>
+
 async function fetchBuffer(url: string): Promise<Buffer | null> {
   try {
     const res = await fetch(url)
@@ -62,7 +64,8 @@ export async function buildThumbnailBuffer(
   artworks: ArtworkEntry[],
   origW: number,
   origH: number,
-  scalePxPerCm: number | null
+  scalePxPerCm: number | null,
+  foregroundMasks: MaskPolygon[] | null = null
 ): Promise<Buffer | null> {
   try {
     const elevBuf = await fetchBuffer(elevUrl)
@@ -70,8 +73,9 @@ export async function buildThumbnailBuffer(
 
     const scale = THUMB_W / origW
     const thumbH = Math.round(origH * scale)
+    const hasMasks = (foregroundMasks ?? []).some(p => p && p.length >= 3)
 
-    // No scale or no artworks — plain elevation thumbnail
+    // No scale or no artworks — plain elevation thumbnail (no foreground to apply)
     if (!scalePxPerCm || artworks.length === 0) {
       return await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
     }
@@ -165,6 +169,32 @@ export async function buildThumbnailBuffer(
     }
 
     const elevResized = await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
+
+    // If any foreground masks exist, overlay a masked copy of the elevation on top so
+    // foreground shapes hide artworks behind them (mirrors the studio PNG export pipeline).
+    if (hasMasks) {
+      const polys = (foregroundMasks ?? []).filter(p => p && p.length >= 3)
+      const pathD = polys
+        .map(poly => {
+          const pts = poly
+            .map((pt, i) => `${i === 0 ? 'M' : 'L'}${(pt.x * THUMB_W).toFixed(2)} ${(pt.y * thumbH).toFixed(2)}`)
+            .join(' ')
+          return `${pts} Z`
+        })
+        .join(' ')
+      const maskSvg = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${THUMB_W}" height="${thumbH}" viewBox="0 0 ${THUMB_W} ${thumbH}"><path d="${pathD}" fill="#fff"/></svg>`
+      )
+      try {
+        const fgLayer = await sharp(elevResized)
+          .ensureAlpha()
+          .composite([{ input: maskSvg, blend: 'dest-in' }])
+          .png()
+          .toBuffer()
+        compositeInputs.push({ input: fgLayer, left: 0, top: 0, blend: 'over' })
+      } catch { /* skip foreground */ }
+    }
+
     return await sharp(elevResized).composite(compositeInputs).png().toBuffer()
   } catch {
     return null
@@ -182,6 +212,7 @@ interface OptionRowForThumbnail {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
+  foreground_masks: unknown
   artworks: Array<{
     image_path: string
     x_fraction: number
@@ -205,7 +236,7 @@ async function fetchOptionForThumbnail(
   const { data } = await supabase
     .from('elevation_options')
     .select(`
-      id, image_path, orig_w, orig_h, scale_px_per_cm,
+      id, image_path, orig_w, orig_h, scale_px_per_cm, foreground_masks,
       artworks(
         image_path, x_fraction, y_fraction, w_cm, h_cm, visible,
         brightness, frame_type, frame_width_mm,
@@ -273,18 +304,20 @@ export async function regenerateOptionThumbnail(
     artworkEntries,
     row.orig_w,
     row.orig_h,
-    row.scale_px_per_cm
+    row.scale_px_per_cm,
+    (row.foreground_masks as MaskPolygon[] | null) ?? null
   )
   if (!buf) return false
 
   // Upload (overwrite prior PNG). We key by optionId so regens are idempotent.
+  // `cacheControl: 0` so the dashboard always picks up the newest regen.
   const thumbPath = `${optionId}.png`
   const { error: uploadErr } = await supabase.storage
     .from('thumbnails')
     .upload(thumbPath, buf, {
       contentType: 'image/png',
       upsert: true,
-      cacheControl: '3600',
+      cacheControl: '0',
     })
   if (uploadErr) return false
 

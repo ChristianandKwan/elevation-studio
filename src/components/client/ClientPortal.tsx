@@ -482,6 +482,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
             projectId={project.id}
             rerenderKey={rerenderKey}
             approvalActivity={approvalActivity}
+            clientBudget={clientBudget}
             isPicked={!activeElev ? true : !needsPick(activeElev) || pickedOptions[activeElevId] != null}
             artworksLocked={optData.approved || (!!activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null)}
             onPick={(opt) => handlePick(activeElevId, opt)}

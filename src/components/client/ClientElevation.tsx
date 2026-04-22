@@ -54,6 +54,7 @@ interface Props {
   projectId: string
   rerenderKey: number
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
+  clientBudget: number | null
   /** Whether the client has already picked an option for this elevation */
   isPicked: boolean
   /** Whether artwork dragging should be locked (approved, or already picked on a multi-option elevation) */
@@ -71,7 +72,7 @@ interface Props {
 
 export default function ClientElevation({
   optData, elevationName, activeOpt, rerenderKey,
-  approvalActivity, isPicked, artworksLocked, onPick, onClearPick,
+  approvalActivity, clientBudget, isPicked, artworksLocked, onPick, onClearPick,
   zoom, onZoom,
   onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
@@ -79,6 +80,9 @@ export default function ClientElevation({
 
   const visibleArts = optData.artworks.filter(a => a.visible)
   const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
+  const budgetPct = clientBudget && clientBudget > 0 && totalCost > 0
+    ? (totalCost / clientBudget) * 100
+    : null
 
   function handleApproveClick() {
     setShowApproveWarning(true)
@@ -203,6 +207,12 @@ export default function ClientElevation({
                     <span>Total</span>
                     <span className="amount">{formatPrice(totalCost)}</span>
                   </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Prices exclude VAT.</div>
+                  {budgetPct !== null && (
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                      {budgetPct.toFixed(1)}% of project budget
+                    </div>
+                  )}
                 </div>
               )}
               <button
@@ -236,6 +246,12 @@ export default function ClientElevation({
                     <span>Total</span>
                     <span className="amount">{formatPrice(totalCost)}</span>
                   </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Prices exclude VAT.</div>
+                  {budgetPct !== null && (
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                      {budgetPct.toFixed(1)}% of project budget
+                    </div>
+                  )}
                 </div>
               )}
 

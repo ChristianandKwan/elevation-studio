@@ -139,6 +139,24 @@ export function computeProjectTotals(elevations: BudgetElevationData[]): Project
   return { artMin, artMax, framingMin, framingMax, artCountMin: countMin, artCountMax: countMax, isRange, hasFraming }
 }
 
+// ── Frozen-entry VAT display ──────────────────────────────────────────────────
+// Confirmed installation, flat consultant fees, and custom line items store the
+// literal value the consultant typed. `amountIncludesVat` records the view the
+// value was entered in. This helper converts it into the current view only when
+// VAT applies and the views differ.
+
+export function displayFrozenAmount(
+  stored: number,
+  amountIncludesVat: boolean | undefined,
+  vatApplies: boolean,
+  viewWantsIncVat: boolean,
+): number {
+  if (!vatApplies) return Math.round(stored)
+  const storedIsIncVat = !!amountIncludesVat
+  if (storedIsIncVat === viewWantsIncVat) return Math.round(stored)
+  return viewWantsIncVat ? Math.round(stored * 1.2) : Math.round(stored / 1.2)
+}
+
 // ── Consultant fee ─────────────────────────────────────────────────────────────
 
 export function consultantFeeRange(

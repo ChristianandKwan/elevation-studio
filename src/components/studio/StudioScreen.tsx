@@ -81,6 +81,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [budget, setBudget] = useState<number | null>(project.budget)
   const [view, setView] = useState<'studio' | 'budget'>('studio')
   const [isPreviewingClientView, setIsPreviewingClientView] = useState(false)
+  const [returningToDashboard, setReturningToDashboard] = useState(false)
 
   function onStatus(msg: string) {
     setToast(msg)
@@ -148,30 +149,32 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       }))
     },
     onForegroundSaved: (masks) => {
-      // If sibling options share the same elevation image, mirror the foreground masks to them
+      // Mirror saved masks into local state for the current option and any sibling options sharing the same image
       setElevations(prev => {
         const elev = prev.find(e => e.id === activeElevId)
         if (!elev) return prev
         const currentOpt = elev.elevation_options.find(o => o.option === activeOption)
-        if (!currentOpt?.imagePath) return prev
-        const siblingIds = elev.elevation_options
-          .filter(o => o.option !== activeOption && o.imagePath === currentOpt.imagePath)
-          .map(o => o.id)
-        if (siblingIds.length === 0) return prev
-        // Persist to DB
-        const supabase = createClient()
-        supabase.from('elevation_options')
-          .update({ foreground_masks: masks.length > 0 ? masks : null })
-          .in('id', siblingIds)
-          .then(() => {})
-        // Update local state
+        const siblingIds = currentOpt?.imagePath
+          ? elev.elevation_options
+              .filter(o => o.option !== activeOption && o.imagePath === currentOpt.imagePath)
+              .map(o => o.id)
+          : []
+        const masksValue = masks.length > 0 ? masks : null
+        if (siblingIds.length > 0) {
+          const supabase = createClient()
+          supabase.from('elevation_options')
+            .update({ foreground_masks: masksValue })
+            .in('id', siblingIds)
+            .then(() => {})
+        }
         return prev.map(e => {
           if (e.id !== activeElevId) return e
           return {
             ...e,
             elevation_options: e.elevation_options.map(o => {
-              if (!siblingIds.includes(o.id)) return o
-              return { ...o, foreground_masks: masks.length > 0 ? masks : null }
+              if (o.option === activeOption) return { ...o, foreground_masks: masksValue }
+              if (siblingIds.includes(o.id)) return { ...o, foreground_masks: masksValue }
+              return o
             }),
           }
         })
@@ -256,9 +259,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [studio])
 
   async function handleSwitch(elevId: string, opt: string) {
-    // Before switching: sync current artwork positions and zoom from studio state back into elevations
+    // Before switching: sync current artwork positions, zoom, and foreground masks from studio state back into elevations
     const currentArts = studio.state.artworks
     const currentZoom = studio.state.zoom
+    const currentMasks = studio.state.masks
     if (activeElevId && activeOption) {
       setElevations(prev => prev.map(e => {
         if (e.id !== activeElevId) return e
@@ -269,6 +273,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             return {
               ...o,
               zoom: currentZoom,
+              foreground_masks: currentMasks.length > 0 ? currentMasks : null,
               artworks: o.artworks.map(a => {
                 const cur = currentArts.find(ca => ca.id === a.id)
                 if (!cur) return a
@@ -586,8 +591,16 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       {/* Header */}
       <div className="studio-header">
         <div className="studio-header-left">
-          <button className="studio-back" onClick={() => router.push('/dashboard')}>
-            ← Dashboard
+          <button
+            className="studio-back"
+            disabled={returningToDashboard}
+            onClick={async () => {
+              setReturningToDashboard(true)
+              try { await studio.flushPendingAndRegen() } catch { /* best-effort */ }
+              router.push('/dashboard')
+            }}
+          >
+            {returningToDashboard ? 'Saving…' : '← Dashboard'}
           </button>
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
           <div className="studio-project-name">

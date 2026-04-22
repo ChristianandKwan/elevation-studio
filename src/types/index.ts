@@ -128,13 +128,23 @@ export type ForegroundMasks = MaskPoint[][]
 export interface BudgetInstallation {
   indicative: boolean
   confirmedAmount: number | null
+  /** Whether VAT applies in inc-VAT views. Indicative installation is always treated as VAT-applicable. */
+  vatApplies?: boolean
+  /** True if `confirmedAmount` was entered in the inc-VAT view (value is frozen in that mode). */
+  amountIncludesVat?: boolean
+  /** Show the installation line (and any confirmed amount) to the client. Defaults to true. */
+  shownToClient?: boolean
 }
 
 export interface BudgetConsultantFee {
   mode: 'flat' | 'percentage'
-  /** £ when flat; percentage as a number (e.g. 15 = 15%) when percentage */
+  /** £ when flat; percentage as a number (e.g. 15 = 15%) when percentage. */
   amount: number
   shownToClient: boolean
+  /** Whether VAT applies to the consultant fee. Defaults to true. */
+  vatApplies?: boolean
+  /** For flat fees: true if the amount was entered in the inc-VAT view (value is frozen in that mode). Ignored for percentage. */
+  amountIncludesVat?: boolean
 }
 
 export interface BudgetCustomLineItem {
@@ -145,6 +155,8 @@ export interface BudgetCustomLineItem {
   vatApplies: boolean
   /** Default true on creation */
   shownToClient: boolean
+  /** True if `amount` was entered in the inc-VAT view (value is frozen in that mode). */
+  amountIncludesVat?: boolean
 }
 
 export interface ProjectBudget {

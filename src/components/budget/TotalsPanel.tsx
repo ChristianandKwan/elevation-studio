@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import {
   fmtGbp, fmtRange,
-  computeProjectTotals, installCostDisplay, consultantFeeRange, customItemsSubtotal,
+  computeProjectTotals, installCostDisplay, consultantFeeRange,
+  displayFrozenAmount,
 } from './budgetCalc'
 import type { BudgetElevationData } from './budgetCalc'
 import type { BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem } from '@/types'
@@ -37,40 +38,66 @@ export default function TotalsPanel({
   const { artMin, artMax, framingMin, framingMax, artCountMin, artCountMax, isRange, hasFraming } = pt
 
   const install = installCostDisplay(installation, artCountMin, artCountMax)
-  const installMin = install.min
-  const installMax = install.max
-  const installIsRange = install.isIndicative && installMin !== installMax
-
-  const customTotal = customItemsSubtotal(customLineItems, isConsultant)
+  const installIsRange = install.isIndicative && install.min !== install.max
+  const installVatApplies = installation.vatApplies ?? true
+  const installShownToClient = installation.shownToClient ?? true
+  const showInstallLine = isConsultant || installShownToClient
 
   const showFee = !!consultantFee && (isConsultant || consultantFee.shownToClient)
-  let feeMin = 0, feeMax = 0
-  if (showFee && consultantFee) {
-    const fr = consultantFeeRange(consultantFee, artMin, artMax)
-    feeMin = fr.min; feeMax = fr.max
+  const feeVatApplies = consultantFee?.vatApplies ?? true
+
+  // Artworks and framing are stored ex-VAT; follow the toggle uniformly.
+  const baseVatMult = vatMode ? 1.2 : 1
+  const dispArtMin = Math.round(artMin * baseVatMult)
+  const dispArtMax = Math.round(artMax * baseVatMult)
+  const dispFramingMin = Math.round(framingMin * baseVatMult)
+  const dispFramingMax = Math.round(framingMax * baseVatMult)
+
+  // Installation: indicative is always VAT-applicable and stored ex-VAT;
+  // confirmed uses frozen-entry semantics.
+  let dispInstallMin: number
+  let dispInstallMax: number
+  if (install.isIndicative) {
+    const mult = vatMode ? 1.2 : 1
+    dispInstallMin = Math.round(install.min * mult)
+    dispInstallMax = Math.round(install.max * mult)
+  } else {
+    dispInstallMin = displayFrozenAmount(
+      install.min, installation.amountIncludesVat, installVatApplies, vatMode,
+    )
+    dispInstallMax = dispInstallMin
   }
 
-  // Ex-VAT subtotals
-  const subMin = artMin + framingMin + installMin + customTotal + feeMin
-  const subMax = artMax + framingMax + installMax + customTotal + feeMax
+  // Custom items: frozen-entry display per item.
+  const dispCustomTotal = customLineItems
+    .filter(item => isConsultant || item.shownToClient)
+    .reduce((sum, item) => sum + displayFrozenAmount(
+      item.amount, item.amountIncludesVat, item.vatApplies, vatMode,
+    ), 0)
 
-  const grandIsRange = isRange || installIsRange || (feeMin !== feeMax)
+  // Consultant fee: flat uses frozen-entry; percentage follows artwork VAT.
+  let dispFeeMin = 0, dispFeeMax = 0
+  if (showFee && consultantFee) {
+    if (consultantFee.mode === 'flat') {
+      const v = displayFrozenAmount(
+        consultantFee.amount, consultantFee.amountIncludesVat, feeVatApplies, vatMode,
+      )
+      dispFeeMin = v; dispFeeMax = v
+    } else {
+      const fr = consultantFeeRange(consultantFee, artMin, artMax)
+      const mult = vatMode && feeVatApplies ? 1.2 : 1
+      dispFeeMin = Math.round(fr.min * mult)
+      dispFeeMax = Math.round(fr.max * mult)
+    }
+  }
 
-  // Display values for each line item — inc-VAT in vatMode so they match the detail view
-  const vatMult = vatMode ? 1.2 : 1
-  const dispArtMin = Math.round(artMin * vatMult)
-  const dispArtMax = Math.round(artMax * vatMult)
-  const dispFramingMin = Math.round(framingMin * vatMult)
-  const dispFramingMax = Math.round(framingMax * vatMult)
-  const dispInstallMin = Math.round(installMin * vatMult)
-  const dispInstallMax = Math.round(installMax * vatMult)
-  const dispCustomTotal = Math.round(customTotal * vatMult)
-  const dispFeeMin = Math.round(feeMin * vatMult)
-  const dispFeeMax = Math.round(feeMax * vatMult)
+  const grandIsRange = isRange || installIsRange || (dispFeeMin !== dispFeeMax)
 
   // Grand totals derived from display line items so the column always adds up
-  const totalMin = dispArtMin + dispFramingMin + dispInstallMin + dispCustomTotal + dispFeeMin
-  const totalMax = dispArtMax + dispFramingMax + dispInstallMax + dispCustomTotal + dispFeeMax
+  const totalInstallMin = showInstallLine ? dispInstallMin : 0
+  const totalInstallMax = showInstallLine ? dispInstallMax : 0
+  const totalMin = dispArtMin + dispFramingMin + totalInstallMin + dispCustomTotal + dispFeeMin
+  const totalMax = dispArtMax + dispFramingMax + totalInstallMax + dispCustomTotal + dispFeeMax
 
   // ── Client budget variance ──────────────────────────────────────────────────
   const budgetDisplay = clientBudget != null && vatMode
@@ -142,17 +169,19 @@ export default function TotalsPanel({
         )}
 
         {/* Installation */}
-        <div className="budget-totals-row">
-          <span className="budget-totals-label">
-            Installation
-            {install.isIndicative && (
-              <span className="budget-badge budget-badge--indicative budget-badge--inline">Indicative</span>
-            )}
-          </span>
-          <span className="budget-totals-value">
-            {fmtRange(dispInstallMin, dispInstallMax)}
-          </span>
-        </div>
+        {showInstallLine && (
+          <div className="budget-totals-row">
+            <span className="budget-totals-label">
+              Installation
+              {install.isIndicative && (
+                <span className="budget-badge budget-badge--indicative budget-badge--inline">Indicative</span>
+              )}
+            </span>
+            <span className="budget-totals-value">
+              {fmtRange(dispInstallMin, dispInstallMax)}
+            </span>
+          </div>
+        )}
 
         {/* Custom items */}
         {dispCustomTotal > 0 && (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { fmtGbp, consultantFeeRange } from './budgetCalc'
+import { fmtGbp, consultantFeeRange, displayFrozenAmount } from './budgetCalc'
 import type { BudgetConsultantFee } from '@/types'
 
 interface Props {
@@ -9,28 +9,51 @@ interface Props {
   artMin: number
   artMax: number
   isConsultant: boolean
+  vatMode: boolean
   onChange: (v: BudgetConsultantFee | null) => void
 }
 
-export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, onChange }: Props) {
+export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, vatMode, onChange }: Props) {
   const [editing, setEditing] = useState(false)
   const [draftMode, setDraftMode] = useState<'flat' | 'percentage'>('flat')
   const [draftAmount, setDraftAmount] = useState('')
 
+  const vatApplies = fee?.vatApplies ?? true
+
   function openEdit() {
     setDraftMode(fee?.mode ?? 'flat')
-    setDraftAmount(fee?.amount != null ? String(fee.amount) : '')
+    if (fee?.amount != null) {
+      // Flat: show the stored value converted into the current VAT view.
+      // Percentage: not VAT-relevant.
+      const shown = fee.mode === 'flat'
+        ? displayFrozenAmount(fee.amount, fee.amountIncludesVat, vatApplies, vatMode)
+        : fee.amount
+      setDraftAmount(String(shown))
+    } else {
+      setDraftAmount('')
+    }
     setEditing(true)
   }
 
   function save() {
     const parsed = parseFloat(draftAmount)
     if (!isNaN(parsed) && parsed >= 0) {
-      const amount = draftMode === 'percentage' ? Math.min(100, parsed) : parsed
+      let storedAmount: number
+      let amountIncludesVat: boolean | undefined
+      if (draftMode === 'percentage') {
+        storedAmount = Math.min(100, parsed)
+        amountIncludesVat = undefined
+      } else {
+        // Freeze the entered value in the current VAT view.
+        storedAmount = Math.round(parsed)
+        amountIncludesVat = vatMode
+      }
       onChange({
         mode: draftMode,
-        amount,
+        amount: storedAmount,
         shownToClient: fee?.shownToClient ?? false,
+        vatApplies,
+        amountIncludesVat,
       })
     }
     setEditing(false)
@@ -45,22 +68,31 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, on
     onChange({ ...fee, shownToClient: !fee.shownToClient })
   }
 
+  function toggleVatApplies() {
+    if (!fee) return
+    onChange({ ...fee, vatApplies: !vatApplies })
+  }
+
   function removeFee() {
     onChange(null)
     setEditing(false)
   }
 
-  // Display value
+  // Display value — flat uses frozen-entry semantics; percentage applies
+  // VAT to the artwork-derived range (artMin/artMax are ex-VAT).
   let valueStr = '—'
   if (fee) {
-    const range = consultantFeeRange(fee, artMin, artMax)
     if (fee.mode === 'flat') {
-      valueStr = fmtGbp(range.min)
+      const disp = displayFrozenAmount(fee.amount, fee.amountIncludesVat, vatApplies, vatMode)
+      valueStr = fmtGbp(disp)
     } else {
-      // Percentage: show both the % and the £ range
-      const rangeStr = range.min === range.max
-        ? fmtGbp(range.min)
-        : `${fmtGbp(range.min)} – ${fmtGbp(range.max)}`
+      const range = consultantFeeRange(fee, artMin, artMax)
+      const displayVatMult = vatMode && vatApplies ? 1.2 : 1
+      const dispMin = Math.round(range.min * displayVatMult)
+      const dispMax = Math.round(range.max * displayVatMult)
+      const rangeStr = dispMin === dispMax
+        ? fmtGbp(dispMin)
+        : `${fmtGbp(dispMin)} – ${fmtGbp(dispMax)}`
       valueStr = `${fee.amount}% (${rangeStr})`
     }
   }
@@ -127,14 +159,24 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, on
       </div>
 
       {fee && !editing && (
-        <label className="budget-toggle">
-          <input
-            type="checkbox"
-            checked={fee.shownToClient}
-            onChange={toggleShownToClient}
-          />
-          <span>Shown to client</span>
-        </label>
+        <div className="budget-custom-item-controls">
+          <label className="budget-toggle">
+            <input
+              type="checkbox"
+              checked={vatApplies}
+              onChange={toggleVatApplies}
+            />
+            <span>VAT applies</span>
+          </label>
+          <label className="budget-toggle">
+            <input
+              type="checkbox"
+              checked={fee.shownToClient}
+              onChange={toggleShownToClient}
+            />
+            <span>Shown to client</span>
+          </label>
+        </div>
       )}
     </div>
   )

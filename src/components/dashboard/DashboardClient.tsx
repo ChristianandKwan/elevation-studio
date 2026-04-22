@@ -325,6 +325,12 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
           ) : (
 
           <div className="projects-grid">
+            {/* New Project card */}
+            <div className="project-card-new" onClick={() => setShowModal(true)}>
+              <div className="project-card-new-icon">+</div>
+              <div className="project-card-new-label">New Project</div>
+            </div>
+
             {projects.map(p => (
               <div
                 key={p.id}
@@ -364,12 +370,6 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                 </div>
               </div>
             ))}
-
-            {/* New Project card */}
-            <div className="project-card-new" onClick={() => setShowModal(true)}>
-              <div className="project-card-new-icon">+</div>
-              <div className="project-card-new-label">New Project</div>
-            </div>
           </div>
 
           )}

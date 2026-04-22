@@ -1468,11 +1468,50 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     window.addEventListener('beforeunload', flush)
     return () => {
       window.removeEventListener('beforeunload', flush)
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
-      if (thumbnailRegenTimer.current) clearTimeout(thumbnailRegenTimer.current)
+      // Fire-and-forget flush on unmount so SPA navigation doesn't drop a pending save or thumbnail regen.
+      // Pending zoom, option data, and then the thumbnail regen — all issued without awaiting so the route change isn't blocked.
+      const pendingId = optionId
+      const hadSave = !!saveTimer.current
+      const hadThumb = !!thumbnailRegenTimer.current
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+      if (zoomSaveTimer.current) { clearTimeout(zoomSaveTimer.current); zoomSaveTimer.current = null }
+      if (thumbnailRegenTimer.current) { clearTimeout(thumbnailRegenTimer.current); thumbnailRegenTimer.current = null }
+      if (hadSave && pendingId) persistOption(stateRef.current)
+      if ((hadSave || hadThumb) && pendingId) {
+        fetch(`/api/thumbnails/${pendingId}`, { method: 'POST' }).catch(() => {})
+      }
     }
   }, [])
+
+  // Flush any pending save + fire thumbnail regen and await the response.
+  // Callers (e.g. the Dashboard back button) await this so the dashboard never renders a stale preview.
+  async function flushPendingAndRegen(): Promise<void> {
+    if (!optionId) return
+    const currentId = optionId
+    // Zoom (best-effort, fire-and-forget)
+    if (zoomSaveTimer.current) {
+      clearTimeout(zoomSaveTimer.current)
+      zoomSaveTimer.current = null
+      try {
+        const supabase = createClient()
+        await supabase.from('elevation_options').update({ zoom: stateRef.current.zoom }).eq('id', currentId)
+      } catch { /* ignore */ }
+    }
+    // Option data (artworks + foreground masks)
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      await persistOption(stateRef.current)
+    }
+    // Thumbnail
+    if (thumbnailRegenTimer.current) {
+      clearTimeout(thumbnailRegenTimer.current)
+      thumbnailRegenTimer.current = null
+    }
+    try {
+      await fetch(`/api/thumbnails/${currentId}`, { method: 'POST' })
+    } catch { /* ignore */ }
+  }
 
   async function persistOption(s: StudioState) {
     const supabase = createClient()
@@ -1868,5 +1907,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     clearSkew,
     finaliseSkewAdjust,
     cancelSkewAdjust,
+    flushPendingAndRegen,
   }
 }

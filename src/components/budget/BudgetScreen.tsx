@@ -131,6 +131,7 @@ export default function BudgetScreen({
                   artCountMin={pt.artCountMin}
                   artCountMax={pt.artCountMax}
                   isConsultant={effectiveIsConsultant}
+                  vatMode={vatMode}
                   onChange={setInstallation}
                 />
 
@@ -139,12 +140,14 @@ export default function BudgetScreen({
                   artMin={pt.artMin}
                   artMax={pt.artMax}
                   isConsultant={effectiveIsConsultant}
+                  vatMode={vatMode}
                   onChange={setConsultantFee}
                 />
 
                 <CustomLineItems
                   items={budget.customLineItems}
                   isConsultant={effectiveIsConsultant}
+                  vatMode={vatMode}
                   onAdd={addCustomLineItem}
                   onUpdate={updateCustomLineItem}
                   onRemove={removeCustomLineItem}
