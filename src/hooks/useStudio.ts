@@ -1526,14 +1526,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       saveTimer.current = null
       await persistOption(stateRef.current)
     }
-    // Thumbnail
+    // Thumbnail — fire-and-forget so dashboard navigation isn't blocked on
+    // server-side sharp compositing. Dashboard refetches thumbnails on mount.
     if (thumbnailRegenTimer.current) {
       clearTimeout(thumbnailRegenTimer.current)
       thumbnailRegenTimer.current = null
     }
-    try {
-      await fetch(`/api/thumbnails/${currentId}`, { method: 'POST' })
-    } catch { /* ignore */ }
+    fetch(`/api/thumbnails/${currentId}`, { method: 'POST' }).catch(() => {})
   }
 
   async function persistOption(s: StudioState) {

@@ -11,6 +11,7 @@ import CalibrationModal from './CalibrationModal'
 import AddArtworkModal from './AddArtworkModal'
 import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
+import { ArcSpinner } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { timeNow } from '@/lib/utils'
 import type { Artwork, ActivityLog } from '@/types'
@@ -592,7 +593,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               router.push('/dashboard')
             }}
           >
-            {returningToDashboard ? 'Saving…' : '← Dashboard'}
+            {returningToDashboard ? (
+              <>
+                <span style={{ position: 'relative', display: 'inline-block', width: 16, height: 16 }}>
+                  <ArcSpinner size={14} />
+                </span>
+                Saving…
+              </>
+            ) : '← Dashboard'}
           </button>
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
           <div className="studio-project-name">
