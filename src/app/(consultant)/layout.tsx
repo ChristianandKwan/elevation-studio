@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/supabase/auth'
+import FeedbackButton from '@/components/feedback/FeedbackButton'
 
 export default async function ConsultantLayout({
   children,
@@ -12,5 +13,10 @@ export default async function ConsultantLayout({
     redirect('/login')
   }
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <FeedbackButton />
+    </>
+  )
 }
