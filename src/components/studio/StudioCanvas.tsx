@@ -173,9 +173,9 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
       {hasElev && (
         <div className="zoom-controls">
           <button className="zoom-btn" onClick={() => changeZoom(-0.1, state)} title="Zoom out">−</button>
-          <div className="zoom-label" id="zoom-label">{Math.round(state.zoom * 100)}%</div>
+          <div className="zoom-label" id="zoom-label">{Math.round((state.zoom / (state.fitZoom || 1)) * 100)}%</div>
           <button className="zoom-btn" onClick={() => changeZoom(0.1, state)} title="Zoom in">+</button>
-          <button className="zoom-btn" style={{ fontSize: 10, width: 40 }} onClick={() => setZoomFit(state)} title="Fit">Fit</button>
+          <button className="zoom-btn" style={{ fontSize: 10, width: 40 }} onClick={() => setZoomFit(state)} title="Fit to viewport">Fit</button>
         </div>
       )}
     </div>

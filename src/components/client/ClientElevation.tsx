@@ -30,7 +30,6 @@ interface ClientOption {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
-  zoom: number
   approved: boolean
   approved_at: string | null
   foreground_masks?: unknown
@@ -104,19 +103,25 @@ export default function ClientElevation({
           onArtworkMove={onArtworkMove}
           zoom={zoom}
         />
-        {/* Zoom controls */}
+        {/* Zoom controls — zoom is relative to fit (1.0 = fit to viewport) */}
         <div className="client-zoom-controls">
           <button
             className="client-zoom-btn"
-            onClick={() => onZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}
+            onClick={() => onZoom(z => Math.max(0.1, +(z - 0.1).toFixed(2)))}
             title="Zoom out"
           >−</button>
           <span className="client-zoom-label">{Math.round(zoom * 100)}%</span>
           <button
             className="client-zoom-btn"
-            onClick={() => onZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
+            onClick={() => onZoom(z => Math.min(5.0, +(z + 0.1).toFixed(2)))}
             title="Zoom in"
           >+</button>
+          <button
+            className="client-zoom-btn"
+            style={{ fontSize: 10, width: 32, letterSpacing: 0.5 }}
+            onClick={() => onZoom(1.0)}
+            title="Fit to viewport"
+          >Fit</button>
         </div>
       </div>
 
@@ -361,8 +366,14 @@ function ClientCanvas({
     const img = new Image()
     img.onerror = () => setIsLoading(false)
     img.onload = () => {
-      const maxW = Math.min((canvasRef.current?.clientWidth ?? 900) - 64, img.naturalWidth)
-      const s = maxW / img.naturalWidth
+      // Fit to the canvas-area on both dimensions (32px padding on each side).
+      // No upper cap: small elevation images are upscaled to fit, large ones are
+      // downscaled. The `zoom` prop is a relative multiplier on top (1.0 = fit).
+      const areaW = canvasRef.current?.clientWidth ?? 900
+      const areaH = canvasRef.current?.clientHeight ?? 600
+      const availW = Math.max(1, areaW - 64)
+      const availH = Math.max(1, areaH - 64)
+      const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight)
 
       const wrap = elevWrapRef.current!
       if (!wrap) return

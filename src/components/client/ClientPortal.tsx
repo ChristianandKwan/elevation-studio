@@ -31,7 +31,6 @@ interface ClientOption {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
-  zoom: number
   approved: boolean
   approved_at: string | null
   foreground_masks?: unknown
@@ -120,23 +119,34 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
 
   const [rerenderKey, setRerenderKey] = useState(0)
 
-  // Zoom persisted per elevation-option tab, seeded from DB zoom value
-  const [zoomMap, setZoomMap] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {}
-    elevations.forEach(elev => {
-      elev.elevation_options.forEach(opt => {
-        initial[`${elev.id}/${opt.option}`] = opt.zoom ?? 1.0
-      })
-    })
-    return initial
-  })
-  const zoomKey = `${activeElevId}/${activeOpt}`
-  const zoom = zoomMap[zoomKey] ?? 1.0
+  // Relative zoom (1.0 = fit) persisted to localStorage per option.id.
+  // Hydrates lazily after mount so SSR stays stable.
+  const activeOptId = optionsState[activeElevId]?.[activeOpt]?.id ?? ''
+  const [zoomMap, setZoomMap] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (!activeOptId || zoomMap[activeOptId] !== undefined) return
+    let stored = 1
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem(`elevZoom:${activeOptId}`) : null
+      if (raw) {
+        const n = parseFloat(raw)
+        if (Number.isFinite(n) && n > 0) stored = Math.max(0.1, Math.min(5.0, n))
+      }
+    } catch { /* ignore */ }
+    setZoomMap(prev => ({ ...prev, [activeOptId]: stored }))
+  }, [activeOptId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const zoom = zoomMap[activeOptId] ?? 1.0
   function setZoom(val: number | ((prev: number) => number)) {
-    setZoomMap(prev => ({
-      ...prev,
-      [zoomKey]: typeof val === 'function' ? val(prev[zoomKey] ?? 1.0) : val,
-    }))
+    setZoomMap(prev => {
+      const current = prev[activeOptId] ?? 1.0
+      const next = typeof val === 'function' ? val(current) : val
+      try {
+        if (typeof window !== 'undefined' && activeOptId) {
+          window.localStorage.setItem(`elevZoom:${activeOptId}`, String(next))
+        }
+      } catch { /* ignore */ }
+      return { ...prev, [activeOptId]: next }
+    })
   }
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 

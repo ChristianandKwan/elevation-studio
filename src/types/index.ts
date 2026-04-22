@@ -47,7 +47,6 @@ export interface ElevationOption {
   origW: number
   origH: number
   scalePxPerCm: number | null
-  zoom: number
   approved: boolean
   approvedAt: string | null
   artworks: Artwork[]

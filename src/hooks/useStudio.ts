@@ -23,7 +23,10 @@ export interface StudioState {
   artworks: Artwork[]
   selId: string | null       // last selected id (for single-select compat)
   selIds: Set<string>        // all selected ids
+  /** Absolute image-pixel multiplier actually used for rendering. */
   zoom: number
+  /** Absolute multiplier that sizes the elevation to fit the viewport. zoom / fitZoom = user-facing percentage. */
+  fitZoom: number
   calib: CalibState
   masks: ForegroundMasks
   maskDraw: MaskDrawState
@@ -33,8 +36,40 @@ export interface StudioState {
   skewAdjustMode: boolean
 }
 
-const MIN_ZOOM = 0.25
-const MAX_ZOOM = 4.0
+// UI-facing (relative-to-fit) bounds: 10% – 500%
+const MIN_REL_ZOOM = 0.1
+const MAX_REL_ZOOM = 5.0
+const FIT_PADDING = 64
+
+function computeFitZoom(origW: number, origH: number): number {
+  if (typeof document === 'undefined' || !origW || !origH) return 1
+  const area = document.getElementById('canvas-area')
+  if (!area) return 1
+  const w = Math.max(1, area.clientWidth - FIT_PADDING)
+  const h = Math.max(1, area.clientHeight - FIT_PADDING)
+  const fit = Math.min(w / origW, h / origH)
+  return fit > 0 && Number.isFinite(fit) ? fit : 1
+}
+
+function zoomStorageKey(optionId: string) {
+  return `elevZoom:${optionId}`
+}
+
+function loadRelativeZoom(optionId: string | undefined): number {
+  if (!optionId || typeof window === 'undefined') return 1
+  try {
+    const raw = window.localStorage.getItem(zoomStorageKey(optionId))
+    if (!raw) return 1
+    const n = parseFloat(raw)
+    if (!Number.isFinite(n) || n <= 0) return 1
+    return Math.max(MIN_REL_ZOOM, Math.min(MAX_REL_ZOOM, n))
+  } catch { return 1 }
+}
+
+function saveRelativeZoom(optionId: string | undefined, rel: number) {
+  if (!optionId || typeof window === 'undefined') return
+  try { window.localStorage.setItem(zoomStorageKey(optionId), String(rel)) } catch { /* ignore */ }
+}
 
 const DEFAULT_CALIB: CalibState = { active: false, drawing: false, start: null, lineDispPx: 0 }
 const DEFAULT_MASK_DRAW: MaskDrawState = { active: false, currentPoints: [] }
@@ -49,7 +84,7 @@ interface UseStudioOptions {
   /** When true, artwork drag is blocked (client has picked or approved this option) */
   artworkDragLocked?: boolean
   /** Called when an elevation image is successfully uploaded for the current option */
-  onElevationUploaded?: (data: { imagePath: string; imageUrl: string; origW: number; origH: number; zoom: number }) => void
+  onElevationUploaded?: (data: { imagePath: string; imageUrl: string; origW: number; origH: number }) => void
   /** Called when the scale calibration is confirmed for the current option */
   onScaleSet?: (scalePxPerCm: number) => void
   /** Called when artworks are successfully added to the current option */
@@ -68,6 +103,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     selId: null,
     selIds: new Set<string>(),
     zoom: 1.0,
+    fitZoom: 1.0,
     calib: DEFAULT_CALIB,
     masks: [],
     maskDraw: DEFAULT_MASK_DRAW,
@@ -128,7 +164,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   const [busy, setBusy] = useState(false)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const zoomSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // ─── DASHBOARD THUMBNAIL REGEN (debounced) ────────────────────────
@@ -524,7 +559,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     elev: StudioElev,
     scale: Scale | null,
     artworks: Artwork[],
-    masks?: ForegroundMasks
+    masks?: ForegroundMasks,
+    fitZoom?: number
   ) => {
     const dW = Math.round(elev.origW * zoom)
     const dH = Math.round(elev.origH * zoom)
@@ -537,7 +573,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     if (wrap) { wrap.style.width = dW + 'px'; wrap.style.height = dH + 'px' }
 
     const label = document.getElementById('zoom-label')
-    if (label) label.textContent = Math.round(zoom * 100) + '%'
+    const fz = fitZoom && fitZoom > 0 ? fitZoom : (stateRef.current.fitZoom || 1)
+    if (label) label.textContent = Math.round((zoom / fz) * 100) + '%'
 
     const newScale = scale ? { ...scale, dispPxPerCm: scale.origPxPerCm * zoom } : null
     renderArtworksDOM(artworks, elev, newScale)
@@ -570,16 +607,20 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     return newScale
   }, []) // eslint-disable-line
 
+  // +/- step is applied to the *relative* (fit-based) zoom: 10 percentage points per click.
   function changeZoom(delta: number, currentState: StudioState) {
     if (!currentState.elev) return
     const vp = vpRef.current
     const xf = vp ? (vp.scrollLeft + vp.clientWidth / 2) / vp.scrollWidth : 0.5
     const yf = vp ? (vp.scrollTop + vp.clientHeight / 2) / vp.scrollHeight : 0.5
-    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((currentState.zoom + delta) * 10) / 10))
+    const fitZoom = currentState.fitZoom > 0 ? currentState.fitZoom : 1
+    const currentRel = currentState.zoom / fitZoom
+    const newRel = Math.max(MIN_REL_ZOOM, Math.min(MAX_REL_ZOOM, Math.round((currentRel + delta) * 10) / 10))
+    const newZoom = newRel * fitZoom
     const newElev = { ...currentState.elev }
-    const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
+    const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks, fitZoom)
     setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
-    persistZoom(newZoom)
+    saveRelativeZoom(optionId, newRel)
     requestAnimationFrame(() => {
       if (vp) {
         vp.scrollLeft = vp.scrollWidth * xf - vp.clientWidth / 2
@@ -588,21 +629,15 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  // Snap back to fit (relative zoom = 1.0). Also recomputes fitZoom from the current viewport
+  // so a window resize since load is accounted for.
   function setZoomFit(currentState: StudioState) {
     if (!currentState.elev) return
-    const area = document.getElementById('canvas-area')
-    if (!area) return
-    const pad = 64
-    const fit = Math.min(
-      (area.clientWidth - pad) / currentState.elev.origW,
-      (area.clientHeight - pad) / currentState.elev.origH,
-      1
-    )
-    const newZoom = Math.round(fit * 10) / 10 || 1
+    const newFit = computeFitZoom(currentState.elev.origW, currentState.elev.origH)
     const newElev = { ...currentState.elev }
-    const newScale = applyZoom(newZoom, newElev, currentState.scale, currentState.artworks, currentState.masks)
-    setState(s => ({ ...s, zoom: newZoom, elev: newElev, scale: newScale }))
-    persistZoom(newZoom)
+    const newScale = applyZoom(newFit, newElev, currentState.scale, currentState.artworks, currentState.masks, newFit)
+    setState(s => ({ ...s, zoom: newFit, fitZoom: newFit, elev: newElev, scale: newScale }))
+    saveRelativeZoom(optionId, 1)
     requestAnimationFrame(() => {
       const vp = vpRef.current
       if (vp) {
@@ -920,13 +955,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function loadOption(opts: {
     imageUrl: string | null; imagePath: string | null;
     origW: number; origH: number; scalePxPerCm: number | null;
-    zoom: number; artworks: Array<Artwork & { imageUrl: string | null }>;
+    artworks: Array<Artwork & { imageUrl: string | null }>;
     foregroundMasks: ForegroundMasks | null;
     skewCorners?: SkewCorners | null;
     skewActive?: boolean;
   }) {
     if (!opts.imageUrl) {
-      setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
+      setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
       setBusy(false)
@@ -938,18 +973,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     img.crossOrigin = 'anonymous'
     img.onerror = () => setBusy(false)
     img.onload = () => {
+      const origW = opts.origW || img.naturalWidth
+      const origH = opts.origH || img.naturalHeight
       const elev: StudioElev = {
         imagePath: opts.imagePath ?? '',
         imageUrl: opts.imageUrl!,
         img,
-        origW: opts.origW || img.naturalWidth,
-        origH: opts.origH || img.naturalHeight,
+        origW,
+        origH,
         dispW: 0,
         dispH: 0,
       }
-      const scale: Scale | null = opts.scalePxPerCm
-        ? { origPxPerCm: opts.scalePxPerCm, dispPxPerCm: opts.scalePxPerCm * opts.zoom }
-        : null
 
       const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
       if (elevImg) elevImg.src = opts.imageUrl!
@@ -960,8 +994,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const skewCorners = opts.skewCorners ?? null
       const skewActive = opts.skewActive ?? false
 
-      // On first load elev-wrap isn't in the DOM yet; retry up to 60 frames before bailing.
-      const finalize = (arts: typeof newArts) => {
+      // fitZoom depends on canvas-area layout, which may not be measured yet.
+      // Capture during finalize, at the same frame we apply the zoom.
+      const finalize = (arts: typeof newArts, commit: (fit: number, zoom: number, scale: Scale | null) => void) => {
         let frames = 0
         const run = () => {
           if (!elevWrapRef.current) {
@@ -972,7 +1007,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             requestAnimationFrame(run)
             return
           }
-          applyZoom(opts.zoom, elev, scale, arts, masks)
+          const fit = computeFitZoom(origW, origH)
+          const rel = loadRelativeZoom(optionId)
+          const zoom = Math.max(MIN_REL_ZOOM * fit, Math.min(MAX_REL_ZOOM * fit, rel * fit))
+          const scale: Scale | null = opts.scalePxPerCm
+            ? { origPxPerCm: opts.scalePxPerCm, dispPxPerCm: opts.scalePxPerCm * zoom }
+            : null
+          commit(fit, zoom, scale)
+          applyZoom(zoom, elev, scale, arts, masks, fit)
           applySkewTransform()
           if (skewCorners) renderSkewHandles([...skewCorners], elev)
           else renderSkewHandles([], elev)
@@ -984,12 +1026,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       let loaded = 0
       function tryFinish() {
         if (++loaded >= newArts.length) {
-          setState({
-            elev, scale, artworks: newArts, selId: null, selIds: new Set(), zoom: opts.zoom,
-            calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
-            skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
+          finalize(newArts, (fit, zoom, scale) => {
+            setState({
+              elev, scale, artworks: newArts, selId: null, selIds: new Set(), zoom, fitZoom: fit,
+              calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
+              skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
+            })
           })
-          finalize(newArts)
           // Surface a warning if any artwork images failed to load
           const failed = newArts.filter(a => a.loadFailed)
           if (failed.length > 0) {
@@ -1001,12 +1044,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       }
 
       if (newArts.length === 0) {
-        setState({
-          elev, scale, artworks: [], selId: null, selIds: new Set(), zoom: opts.zoom,
-          calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
-          skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
+        finalize([], (fit, zoom, scale) => {
+          setState({
+            elev, scale, artworks: [], selId: null, selIds: new Set(), zoom, fitZoom: fit,
+            calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
+            skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
+          })
         })
-        finalize([])
         setBusy(false)
         return
       }
@@ -1066,14 +1110,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         imagePath: path, imageUrl: url, img,
         origW: img.naturalWidth, origH: img.naturalHeight, dispW: 0, dispH: 0,
       }
-      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false }))
+      setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false }))
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
+
+      // A fresh upload starts at fit — clear any prior per-user zoom preference for this option
+      saveRelativeZoom(optionId, 1)
 
       // Persist to DB
       supabase.from('elevation_options').update({
         image_path: path, orig_w: img.naturalWidth, orig_h: img.naturalHeight,
-        scale_px_per_cm: null, zoom: 1, foreground_masks: null,
+        scale_px_per_cm: null, foreground_masks: null,
       }).eq('id', optionId).then(({ error }) => {
         if (error) onStatus('Elevation saved to storage but DB update failed — reload to retry')
       })
@@ -1082,10 +1129,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       requestAnimationFrame(() => {
         const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
         if (elevImg) elevImg.src = url
-        setZoomFit({ elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
+        setZoomFit({ elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
       })
 
-      onElevationUploadedRef.current?.({ imagePath: path, imageUrl: url, origW: img.naturalWidth, origH: img.naturalHeight, zoom: 1 })
+      onElevationUploadedRef.current?.({ imagePath: path, imageUrl: url, origW: img.naturalWidth, origH: img.naturalHeight })
       onStatus('Elevation loaded — draw a scale line to continue')
       setBusy(false)
     }
@@ -1130,14 +1177,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     hideCalibLine()
     onScaleSetRef.current?.(origPxPerCm)
 
-    // Persist scale AND zoom together so they are always in sync.
-    // uploadElevation hard-codes zoom:1 in the DB and relies on a debounced
-    // persistZoom() call to correct it — but if the user calibrates before that
-    // debounce fires, the saved zoom will be wrong, making artwork sizes
-    // incorrect on the next page load.  Saving both here atomically fixes that.
     const supabase = createClient()
     supabase.from('elevation_options')
-      .update({ scale_px_per_cm: origPxPerCm, zoom: currentZoom })
+      .update({ scale_px_per_cm: origPxPerCm })
       .eq('id', optionId)
       .then(() => {})
     scheduleThumbnailRegen()
@@ -1447,16 +1489,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     saveTimer.current = setTimeout(() => persistOption(currentState), 1500)
   }
 
-  function persistZoom(zoom: number) {
-    if (!optionId) return
-    if (zoomSaveTimer.current) clearTimeout(zoomSaveTimer.current)
-    zoomSaveTimer.current = setTimeout(async () => {
-      const supabase = createClient()
-      const { error } = await supabase.from('elevation_options').update({ zoom }).eq('id', optionId)
-      if (error) { setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 5000) }
-    }, 2000)
-  }
-
   useEffect(() => {
     const flush = () => {
       if (saveTimer.current) {
@@ -1469,12 +1501,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     return () => {
       window.removeEventListener('beforeunload', flush)
       // Fire-and-forget flush on unmount so SPA navigation doesn't drop a pending save or thumbnail regen.
-      // Pending zoom, option data, and then the thumbnail regen — all issued without awaiting so the route change isn't blocked.
       const pendingId = optionId
       const hadSave = !!saveTimer.current
       const hadThumb = !!thumbnailRegenTimer.current
       if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-      if (zoomSaveTimer.current) { clearTimeout(zoomSaveTimer.current); zoomSaveTimer.current = null }
       if (thumbnailRegenTimer.current) { clearTimeout(thumbnailRegenTimer.current); thumbnailRegenTimer.current = null }
       if (hadSave && pendingId) persistOption(stateRef.current)
       if ((hadSave || hadThumb) && pendingId) {
@@ -1488,15 +1518,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   async function flushPendingAndRegen(): Promise<void> {
     if (!optionId) return
     const currentId = optionId
-    // Zoom (best-effort, fire-and-forget)
-    if (zoomSaveTimer.current) {
-      clearTimeout(zoomSaveTimer.current)
-      zoomSaveTimer.current = null
-      try {
-        const supabase = createClient()
-        await supabase.from('elevation_options').update({ zoom: stateRef.current.zoom }).eq('id', currentId)
-      } catch { /* ignore */ }
-    }
     // Option data (artworks + foreground masks)
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
@@ -1516,7 +1537,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   async function persistOption(s: StudioState) {
     const supabase = createClient()
     try {
-      // Update option foreground masks (zoom saved separately via persistZoom)
+      // Update option foreground masks
       const masksValue = s.masks.length > 0 ? s.masks : null
       const { error: maskErr } = await supabase.from('elevation_options').update({
         foreground_masks: masksValue,

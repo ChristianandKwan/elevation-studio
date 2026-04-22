@@ -29,7 +29,6 @@ interface DbElevation {
     orig_w: number
     orig_h: number
     scale_px_per_cm: number | null
-    zoom: number
     approved: boolean
     approved_at: string | null
     foreground_masks: unknown
@@ -100,14 +99,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     elevationName: activeElev?.name ?? '',
     optionKey: activeOption,
     artworkDragLocked: !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption) || (activeOptData?.approved ?? false),
-    onElevationUploaded: ({ imagePath, imageUrl, origW, origH, zoom }) => {
+    onElevationUploaded: ({ imagePath, imageUrl, origW, origH }) => {
       setElevations(prev => prev.map(e => {
         if (e.id !== activeElevId) return e
         return {
           ...e,
           elevation_options: e.elevation_options.map(o => {
             if (o.option !== activeOption) return o
-            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH, zoom }
+            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH }
           }),
         }
       }))
@@ -202,7 +201,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       origW: activeOptData.orig_w,
       origH: activeOptData.orig_h,
       scalePxPerCm: activeOptData.scale_px_per_cm,
-      zoom: activeOptData.zoom,
       artworks: activeOptData.artworks ?? [],
       foregroundMasks: (activeOptData.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
       skewCorners,
@@ -259,9 +257,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [studio])
 
   async function handleSwitch(elevId: string, opt: string) {
-    // Before switching: sync current artwork positions, zoom, and foreground masks from studio state back into elevations
+    // Before switching: sync current artwork positions and foreground masks from studio state back into elevations
     const currentArts = studio.state.artworks
-    const currentZoom = studio.state.zoom
     const currentMasks = studio.state.masks
     if (activeElevId && activeOption) {
       setElevations(prev => prev.map(e => {
@@ -272,7 +269,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             if (o.option !== activeOption) return o
             return {
               ...o,
-              zoom: currentZoom,
               foreground_masks: currentMasks.length > 0 ? currentMasks : null,
               artworks: o.artworks.map(a => {
                 const cur = currentArts.find(ca => ca.id === a.id)
@@ -306,7 +302,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         orig_w: sourceOpt.orig_w,
         orig_h: sourceOpt.orig_h,
         scale_px_per_cm: sourceOpt.scale_px_per_cm,
-        zoom: sourceOpt.zoom,
       }).eq('id', targetOpt.id)
       setElevations(prev => prev.map(e => {
         if (e.id !== elevId) return e
@@ -314,7 +309,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           ...e,
           elevation_options: e.elevation_options.map(o => {
             if (o.option !== opt) return o
-            return { ...o, imagePath: sourceOpt.imagePath, imageUrl: sourceOpt.imageUrl, orig_w: sourceOpt.orig_w, orig_h: sourceOpt.orig_h, scale_px_per_cm: sourceOpt.scale_px_per_cm, zoom: sourceOpt.zoom }
+            return { ...o, imagePath: sourceOpt.imagePath, imageUrl: sourceOpt.imageUrl, orig_w: sourceOpt.orig_w, orig_h: sourceOpt.orig_h, scale_px_per_cm: sourceOpt.scale_px_per_cm }
           }),
         }
       }))
@@ -325,7 +320,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         origW: sourceOpt.orig_w,
         origH: sourceOpt.orig_h,
         scalePxPerCm: sourceOpt.scale_px_per_cm,
-        zoom: sourceOpt.zoom,
         artworks: targetOpt.artworks ?? [],
         foregroundMasks: (targetOpt.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
         skewCorners: buildSkewCorners(targetOpt),
@@ -421,7 +415,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null,
       elevation_options: [
-        { id: optRow?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, zoom: 1, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
+        { id: optRow?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
@@ -441,7 +435,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const inheritedOrigW = srcOpt?.orig_w ?? 0
     const inheritedOrigH = srcOpt?.orig_h ?? 0
     const inheritedScale = srcOpt?.scale_px_per_cm ?? null
-    const inheritedZoom = srcOpt?.zoom ?? 1
     const supabase = createClient()
     const insertPayload: Record<string, unknown> = { elevation_id: elevId, option: nextKey }
     if (inheritedImagePath) {
@@ -449,7 +442,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       insertPayload.orig_w = inheritedOrigW
       insertPayload.orig_h = inheritedOrigH
       insertPayload.scale_px_per_cm = inheritedScale
-      insertPayload.zoom = inheritedZoom
     }
     if (inheritedMasks && inheritedMasks.length > 0) {
       insertPayload.foreground_masks = inheritedMasks
@@ -468,7 +460,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           imageUrl: srcOpt?.imageUrl ?? null,
           imagePath: inheritedImagePath,
           orig_w: inheritedOrigW, orig_h: inheritedOrigH,
-          scale_px_per_cm: inheritedScale, zoom: inheritedZoom,
+          scale_px_per_cm: inheritedScale,
           approved: false, approved_at: null,
           foreground_masks: inheritedMasks,
           clientNotes: '', artworks: [],
