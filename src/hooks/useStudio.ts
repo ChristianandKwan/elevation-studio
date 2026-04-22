@@ -994,9 +994,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const skewCorners = opts.skewCorners ?? null
       const skewActive = opts.skewActive ?? false
 
-      // fitZoom depends on canvas-area layout, which may not be measured yet.
-      // Capture during finalize, at the same frame we apply the zoom.
+      // computeFitZoom reads canvas-area (always mounted). commit() sets state.elev,
+      // which is what causes elev-wrap to render and elevWrapRef to attach — so we
+      // must commit *before* waiting for the ref, then run applyZoom once it's live.
       const finalize = (arts: typeof newArts, commit: (fit: number, zoom: number, scale: Scale | null) => void) => {
+        const fit = computeFitZoom(origW, origH)
+        const rel = loadRelativeZoom(optionId)
+        const zoom = Math.max(MIN_REL_ZOOM * fit, Math.min(MAX_REL_ZOOM * fit, rel * fit))
+        const scale: Scale | null = opts.scalePxPerCm
+          ? { origPxPerCm: opts.scalePxPerCm, dispPxPerCm: opts.scalePxPerCm * zoom }
+          : null
+        commit(fit, zoom, scale)
+
         let frames = 0
         const run = () => {
           if (!elevWrapRef.current) {
@@ -1007,13 +1016,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             requestAnimationFrame(run)
             return
           }
-          const fit = computeFitZoom(origW, origH)
-          const rel = loadRelativeZoom(optionId)
-          const zoom = Math.max(MIN_REL_ZOOM * fit, Math.min(MAX_REL_ZOOM * fit, rel * fit))
-          const scale: Scale | null = opts.scalePxPerCm
-            ? { origPxPerCm: opts.scalePxPerCm, dispPxPerCm: opts.scalePxPerCm * zoom }
-            : null
-          commit(fit, zoom, scale)
           applyZoom(zoom, elev, scale, arts, masks, fit)
           applySkewTransform()
           if (skewCorners) renderSkewHandles([...skewCorners], elev)
