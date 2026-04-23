@@ -77,6 +77,9 @@ export default function ClientElevation({
   onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
   const [showApproveWarning, setShowApproveWarning] = useState(false)
+  // Bumped on Fit click to re-measure the viewport and re-fit the elevation
+  // (parity with consultant `setZoomFit`, which recomputes fit on every click).
+  const [refitKey, setRefitKey] = useState(0)
 
   const visibleArts = optData.artworks.filter(a => a.visible)
   const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
@@ -101,6 +104,7 @@ export default function ClientElevation({
           <ClientCanvas
             optData={optData}
             rerenderKey={rerenderKey}
+            refitKey={refitKey}
             locked={artworksLocked}
             onArtworkMove={onArtworkMove}
             zoom={zoom}
@@ -122,7 +126,7 @@ export default function ClientElevation({
           <button
             className="client-zoom-btn"
             style={{ fontSize: 10, width: 32, letterSpacing: 0.5 }}
-            onClick={() => onZoom(1.0)}
+            onClick={() => { setRefitKey(k => k + 1); onZoom(1.0) }}
             title="Fit to viewport"
           >Fit</button>
         </div>
@@ -348,12 +352,14 @@ export default function ClientElevation({
 function ClientCanvas({
   optData,
   rerenderKey,
+  refitKey,
   locked,
   onArtworkMove,
   zoom,
 }: {
   optData: ClientOption
   rerenderKey: number
+  refitKey: number
   locked: boolean
   onArtworkMove: (artId: string, xF: number, yF: number) => void
   zoom: number
@@ -369,11 +375,15 @@ function ClientCanvas({
     const img = new Image()
     img.onerror = () => setIsLoading(false)
     img.onload = () => {
-      // Fit to the canvas-area on both dimensions (32px padding on each side).
+      // Fit to the visible canvas frame (.client-canvas-area) on both dimensions
+      // with 32 px padding per side. Measuring canvas-area — not canvas-inner —
+      // matters because canvas-inner grows with its own content (the wrap we size
+      // below), so reading it would feed stale dimensions back on re-fit.
       // No upper cap: small elevation images are upscaled to fit, large ones are
       // downscaled. The `zoom` prop is a relative multiplier on top (1.0 = fit).
-      const areaW = canvasRef.current?.clientWidth ?? 900
-      const areaH = canvasRef.current?.clientHeight ?? 600
+      const area = canvasRef.current?.closest('.client-canvas-area') as HTMLElement | null
+      const areaW = area?.clientWidth ?? canvasRef.current?.clientWidth ?? 900
+      const areaH = area?.clientHeight ?? canvasRef.current?.clientHeight ?? 600
       const availW = Math.max(1, areaW - 64)
       const availH = Math.max(1, areaH - 64)
       const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight)
@@ -630,7 +640,7 @@ function ClientCanvas({
       setIsLoading(false)
     }
     img.src = optData.imageUrl
-  }, [optData.id, optData.imageUrl, locked, rerenderKey]) // eslint-disable-line
+  }, [optData.id, optData.imageUrl, locked, rerenderKey, refitKey]) // eslint-disable-line
 
   return (
     <div className="client-canvas-inner" ref={canvasRef} style={{ position: 'relative', minHeight: isLoading ? 200 : undefined }}>
