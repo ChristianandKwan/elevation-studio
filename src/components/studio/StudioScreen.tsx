@@ -592,7 +592,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             disabled={returningToDashboard}
             onClick={async () => {
               setReturningToDashboard(true)
-              try { await studio.flushPendingAndRegen() } catch { /* best-effort */ }
+              const minCycle = new Promise(r => setTimeout(r, 2200))
+              const flush = studio.flushPendingAndRegen().catch(() => { /* best-effort */ })
+              await Promise.all([flush, minCycle])
               router.push('/dashboard')
             }}
           >
