@@ -646,6 +646,7 @@ body {
 /* Main two-column layout */
 .client-main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
+.client-canvas-wrap { flex: 1; position: relative; display: flex; min-width: 0; overflow: hidden; }
 .client-canvas-area {
   flex: 1; overflow: auto; min-width: 0;
   background: #E5E0D8;
@@ -704,7 +705,7 @@ body {
 .client-notes-textarea:disabled { opacity: .6; cursor: not-allowed; }
 .client-notes-hint { font-size: 10.5px; color: var(--mid); margin-top: 5px; }
 
-.client-approval-section { padding: 14px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.client-approval-section { padding: 14px 16px; border-top: 1px solid var(--border); }
 
 .client-empty-state {
   flex: 1; display: flex; align-items: center; justify-content: center;

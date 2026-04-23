@@ -450,7 +450,13 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       </div>
 
       {/* Elevations view — kept mounted so pick state is always in sync */}
-      <div style={{ display: portalView === 'elevations' ? '' : 'none' }}>
+      <div
+        style={
+          portalView === 'elevations'
+            ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }
+            : { display: 'none' }
+        }
+      >
         {/* Elevation tab bar */}
         <div className="client-tab-bar">
           {elevations.map((elev, i) => {

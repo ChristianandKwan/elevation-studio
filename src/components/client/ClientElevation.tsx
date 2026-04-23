@@ -96,15 +96,17 @@ export default function ClientElevation({
   return (
     <div className="client-main">
       {/* Canvas */}
-      <div className="client-canvas-area" style={{ position: 'relative' }}>
-        <ClientCanvas
-          optData={optData}
-          rerenderKey={rerenderKey}
-          locked={artworksLocked}
-          onArtworkMove={onArtworkMove}
-          zoom={zoom}
-        />
-        {/* Zoom controls — zoom is relative to fit (1.0 = fit to viewport) */}
+      <div className="client-canvas-wrap">
+        <div className="client-canvas-area">
+          <ClientCanvas
+            optData={optData}
+            rerenderKey={rerenderKey}
+            locked={artworksLocked}
+            onArtworkMove={onArtworkMove}
+            zoom={zoom}
+          />
+        </div>
+        {/* Zoom controls — pinned to bottom-right of visible canvas frame */}
         <div className="client-zoom-controls">
           <button
             className="client-zoom-btn"
@@ -179,10 +181,9 @@ export default function ClientElevation({
               <div className="client-notes-hint">This elevation is approved and locked</div>
             )}
           </div>
-        </div>
 
-        {/* Approval section — pinned to bottom */}
-        <div className="client-approval-section">
+          {/* Approval section — scrolls with the rest of the sidebar */}
+          <div className="client-approval-section">
           {optData.approved ? (
             /* ── Stage 3: Approved ── */
             <div className="approval-status-bar approved" style={{ margin: '0 0 12px' }}>
@@ -314,6 +315,7 @@ export default function ClientElevation({
               ))}
             </div>
           )}
+          </div>
         </div>
       </div>
 
