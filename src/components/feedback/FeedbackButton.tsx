@@ -6,7 +6,17 @@ import { installFeedbackLogger, snapshotFeedback } from '@/lib/feedback/logger'
 type Kind = 'bug' | 'feature' | 'other'
 type Status = 'idle' | 'sending' | 'sent' | 'error'
 
-export default function FeedbackButton() {
+// Marks every feedback UI element so html2canvas can exclude them from
+// the page capture (see `ignoreElements` below). Without this the
+// screenshot would show the modal itself, which is useless.
+const FEEDBACK_UI_ATTR = 'data-feedback-ui'
+
+interface Props {
+  // 'dark' is for the budget header, which sits on a charcoal background.
+  variant?: 'light' | 'dark'
+}
+
+export default function FeedbackButton({ variant = 'light' }: Props = {}) {
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<Kind>('bug')
   const [description, setDescription] = useState('')
@@ -35,6 +45,7 @@ export default function FeedbackButton() {
         useCORS: true,
         logging: false,
         scale: Math.min(window.devicePixelRatio || 1, 1.5),
+        ignoreElements: (el) => el.hasAttribute?.(FEEDBACK_UI_ATTR),
       })
       // JPEG at 0.75 keeps emails under the Resend 40MB hard limit comfortably.
       return canvas.toDataURL('image/jpeg', 0.75)
@@ -80,52 +91,73 @@ export default function FeedbackButton() {
     }
   }
 
+  const uiProps = { [FEEDBACK_UI_ATTR]: '' }
+
+  const palette = variant === 'dark'
+    ? {
+        borderIdle: 'rgba(255,255,255,0.3)',
+        colorIdle: 'rgba(255,255,255,0.6)',
+        borderHover: 'rgba(255,255,255,0.6)',
+        colorHover: 'rgba(255,255,255,0.95)',
+        bgHover: 'rgba(255,255,255,0.08)',
+      }
+    : {
+        borderIdle: 'var(--border)',
+        colorIdle: 'var(--mid)',
+        borderHover: 'var(--charcoal)',
+        colorHover: 'var(--charcoal)',
+        bgHover: 'var(--cream)',
+      }
+
   return (
     <>
       <button
+        {...uiProps}
         type="button"
         onClick={() => setOpen(true)}
         title="Send feedback"
         aria-label="Send feedback"
         style={{
-          position: 'fixed',
-          right: 18,
-          bottom: 18,
-          width: 40,
-          height: 40,
-          borderRadius: '50%',
-          border: '1px solid var(--charcoal)',
-          background: 'var(--warm-white)',
-          color: 'var(--charcoal)',
+          width: 28,
+          height: 28,
+          borderRadius: 0,
+          border: `1px solid ${palette.borderIdle}`,
+          background: 'transparent',
+          color: palette.colorIdle,
           cursor: 'pointer',
-          display: 'flex',
+          display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 2px 8px rgba(28,26,24,0.15)',
-          zIndex: 8500,
           transition: 'all .15s',
+          padding: 0,
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--charcoal)'
-          e.currentTarget.style.color = 'white'
+          e.currentTarget.style.background = palette.bgHover
+          e.currentTarget.style.color = palette.colorHover
+          e.currentTarget.style.borderColor = palette.borderHover
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'var(--warm-white)'
-          e.currentTarget.style.color = 'var(--charcoal)'
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = palette.colorIdle
+          e.currentTarget.style.borderColor = palette.borderIdle
         }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
         </svg>
       </button>
 
       {open && (
-        <div className="modal-bg open" onMouseDown={(e) => {
-          if (e.target === e.currentTarget && status !== 'sending') {
-            setOpen(false)
-            reset()
-          }
-        }}>
+        <div
+          {...uiProps}
+          className="modal-bg open"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && status !== 'sending') {
+              setOpen(false)
+              reset()
+            }
+          }}
+        >
           <div className="modal" style={{ maxWidth: 440 }}>
             <div className="modal-title">Send feedback</div>
             <div className="modal-sub">

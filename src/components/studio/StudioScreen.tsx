@@ -13,6 +13,7 @@ import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
 import { ArcSpinner } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
+import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow } from '@/lib/utils'
 import type { Artwork, ActivityLog } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
@@ -653,6 +654,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               </button>
             </>
           )}
+          <FeedbackButton />
         </div>
       </div>
 

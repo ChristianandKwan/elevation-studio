@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { timeNow } from '@/lib/utils'
 import StatusToast from '@/components/ui/StatusToast'
 import { ArcSpinner } from '@/components/ui/Spinner'
+import FeedbackButton from '@/components/feedback/FeedbackButton'
 
 interface DashProfile {
   id: string
@@ -251,9 +252,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
           />
           <div className="header-app-title">Elevation Studio</div>
           <div className="dash-user">
-            <span>Signed in as</span>
-            <span className="dash-user-name">{profile.name}</span>
-            <div className="dash-avatar">{profile.initials}</div>
+            <FeedbackButton />
             <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Sign out</button>
           </div>
         </div>
