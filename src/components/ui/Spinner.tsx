@@ -21,9 +21,14 @@ import React from 'react'
    Full-page overlay. Use for page transitions.
    Mount it, then unmount once data is ready.
 ───────────────────────────────────────── */
-export function DrawLoader({ label }: { label?: string }) {
+export function DrawLoader({ label, variant = 'dark' }: { label?: string; variant?: 'dark' | 'cream' }) {
+  const isCream = variant === 'cream'
+  const bg = isCream ? '#F7F4EF' : '#1C1A18'
+  const markColor = isCream ? '#1C1A18' : '#FDFBF9'
+  const strokeColor = isCream ? 'rgba(28,26,24,0.85)' : 'rgba(253,251,249,0.85)'
+  const captionColor = isCream ? 'rgba(28,26,24,0.3)' : 'rgba(255,255,255,0.3)'
   return (
-    <div style={drawStyles.overlay}>
+    <div style={{ ...drawStyles.overlay, background: bg }}>
       <div style={drawStyles.inner}>
         <div style={drawStyles.wrap}>
           <svg
@@ -33,17 +38,17 @@ export function DrawLoader({ label }: { label?: string }) {
             <circle
               cx="40" cy="40" r="38"
               fill="none"
-              stroke="rgba(253,251,249,0.85)"
+              stroke={strokeColor}
               strokeWidth="0.6"
               strokeLinecap="round"
               style={{ animation: 'ck-draw-circle 2.2s ease-in-out infinite' }}
             />
           </svg>
-          <span style={{ ...drawStyles.label, animation: 'ck-draw-label 2.2s ease-in-out infinite' }}>
+          <span style={{ ...drawStyles.label, color: markColor, animation: 'ck-draw-label 2.2s ease-in-out infinite' }}>
             C&amp;K
           </span>
         </div>
-        {label && <p style={drawStyles.caption}>{label}</p>}
+        {label && <p style={{ ...drawStyles.caption, color: captionColor }}>{label}</p>}
       </div>
 
       <style>{`

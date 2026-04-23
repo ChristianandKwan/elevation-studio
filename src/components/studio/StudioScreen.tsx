@@ -11,7 +11,7 @@ import CalibrationModal from './CalibrationModal'
 import AddArtworkModal from './AddArtworkModal'
 import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
-import { ArcSpinner } from '@/components/ui/Spinner'
+import { ArcSpinner, DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow } from '@/lib/utils'
@@ -583,6 +583,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      {returningToDashboard && <DrawLoader variant="cream" />}
       {/* Header */}
       <div className="studio-header">
         <div className="studio-header-left">
