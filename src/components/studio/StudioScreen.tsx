@@ -83,6 +83,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [view, setView] = useState<'studio' | 'budget'>('studio')
   const [isPreviewingClientView, setIsPreviewingClientView] = useState(false)
   const [returningToDashboard, setReturningToDashboard] = useState(false)
+  const [showIntroLoader, setShowIntroLoader] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowIntroLoader(false), 2200)
+    return () => clearTimeout(t)
+  }, [])
 
   function onStatus(msg: string) {
     setToast(msg)
@@ -583,7 +589,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      {returningToDashboard && <DrawLoader variant="cream" />}
+      {(returningToDashboard || showIntroLoader) && <DrawLoader variant="cream" />}
       {/* Header */}
       <div className="studio-header">
         <div className="studio-header-left">
