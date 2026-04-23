@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import ClientElevation from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
 import BudgetScreen from '@/components/budget/BudgetScreen'
+import { DrawLoader } from '@/components/ui/Spinner'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 
 interface ClientArtwork {
@@ -75,6 +76,12 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   const inFlightRef = useRef(new Set<string>())
   const [toast, setToast] = useState('')
   const [portalView, setPortalView] = useState<'elevations' | 'budget'>('elevations')
+  const [showIntroLoader, setShowIntroLoader] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowIntroLoader(false), 2200)
+    return () => clearTimeout(t)
+  }, [])
 
   // Track which option the client has picked per elevation (persisted to DB)
   const [pickedOptions, setPickedOptions] = useState<Record<string, string | null>>(() => {
@@ -408,6 +415,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
 
   return (
     <div className="client-layout">
+      {showIntroLoader && <DrawLoader variant="dark" />}
       {/* Header */}
       <div className="client-header">
         <Image
