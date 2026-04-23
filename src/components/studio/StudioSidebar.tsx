@@ -155,6 +155,8 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
                   onFrameChange={(ft, fw) => studio.updateArtworkFrame(art.id, ft, fw)}
                   onBrightnessChange={(b) => studio.updateArtworkBrightness(art.id, b)}
                   onBrightnessApplyAll={(b) => studio.updateAllArtworksBrightness(b)}
+                  onFadeChange={(f) => studio.updateArtworkFade(art.id, f)}
+                  onFadeApplyAll={(f) => studio.updateAllArtworksFade(f)}
                   onShadowChange={(a, bl, op) => studio.updateArtworkShadow(art.id, a, bl, op)}
                   onShadowApplyAll={(a, bl, op) => studio.updateAllArtworksShadow(a, bl, op)}
                 />
@@ -481,7 +483,7 @@ const FRAME_COLORS: Record<string, string> = {
 }
 
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; framingStatus: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; framingStatus: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null }
   isSelected: boolean
   isExpanded: boolean
   hasScale: boolean
@@ -498,16 +500,19 @@ interface ArtworkItemProps {
   onFrameChange: (frameType: string | null, frameWidthMm: number | null) => void
   onBrightnessChange: (b: number) => void
   onBrightnessApplyAll: (b: number) => void
+  onFadeChange: (f: number) => void
+  onFadeApplyAll: (f: number) => void
   onShadowChange: (angle: number | null, blur: number | null, opacity: number | null) => void
   onShadowApplyAll: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
+const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onFadeChange, onFadeApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
   const [artistValue, setArtistValue] = useState(art.artist ?? '')
   const [brightnessVal, setBrightnessVal] = useState(art.brightness ?? 1)
+  const [fadeVal, setFadeVal] = useState(art.fade ?? 0)
   const [shadowAngle, setShadowAngle] = useState(art.shadowAngle ?? 225)
   const [shadowBlur, setShadowBlur] = useState(art.shadowBlur ?? 0)
   const [shadowOpacity, setShadowOpacity] = useState(art.shadowOpacity ?? 0)
@@ -515,6 +520,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
   useEffect(() => { setNameValue(art.name) }, [art.name])
   useEffect(() => { setArtistValue(art.artist ?? '') }, [art.artist])
   useEffect(() => { setBrightnessVal(art.brightness ?? 1) }, [art.brightness])
+  useEffect(() => { setFadeVal(art.fade ?? 0) }, [art.fade])
   useEffect(() => { setShadowAngle(art.shadowAngle ?? 225) }, [art.shadowAngle])
   useEffect(() => { setShadowBlur(art.shadowBlur ?? 0) }, [art.shadowBlur])
   useEffect(() => { setShadowOpacity(art.shadowOpacity ?? 0) }, [art.shadowOpacity])
@@ -704,6 +710,21 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
             />
             <span className="aw-slider-val">{brightnessVal.toFixed(2)}</span>
           </div>
+          <div className="aw-slider-row">
+            <label className="aw-f-label">Fade</label>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={fadeVal}
+              disabled={isLocked}
+              onClick={e => e.stopPropagation()}
+              onChange={e => {
+                const v = parseFloat(e.target.value)
+                setFadeVal(v)
+                onFadeChange(v)
+              }}
+            />
+            <span className="aw-slider-val">{fadeVal.toFixed(2)}</span>
+          </div>
           <div className="aw-shadow-section" onClick={e => e.stopPropagation()}>
             <div className="aw-shadow-header">
               <label className="aw-shadow-label">Shadow</label>
@@ -722,17 +743,17 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
                 <div className="aw-slider-row">
                   <label style={{ fontSize: 10, color: 'var(--mid)', width: 42, flexShrink: 0 }}>Spread</label>
                   <input
-                    type="range" min={0} max={20} step={1}
-                    value={shadowBlur}
+                    type="range" min={0} max={1} step={0.05}
+                    value={shadowBlur / 20}
                     disabled={isLocked}
-                    onChange={e => handleShadowBlur(parseFloat(e.target.value))}
+                    onChange={e => handleShadowBlur(parseFloat(e.target.value) * 20)}
                   />
-                  <span className="aw-slider-val">{shadowBlur}</span>
+                  <span className="aw-slider-val">{(shadowBlur / 20).toFixed(2)}</span>
                 </div>
                 <div className="aw-slider-row">
                   <label style={{ fontSize: 10, color: 'var(--mid)', width: 42, flexShrink: 0 }}>Opacity</label>
                   <input
-                    type="range" min={0} max={0.8} step={0.05}
+                    type="range" min={0} max={1} step={0.05}
                     value={shadowOpacity}
                     disabled={isLocked}
                     onChange={e => handleShadowOpacity(parseFloat(e.target.value))}

@@ -22,6 +22,7 @@ interface ClientArtwork {
   framingStatus: string
   framingCost: number | null
   brightness?: number | null
+  fade?: number | null
 }
 
 interface ClientOption {

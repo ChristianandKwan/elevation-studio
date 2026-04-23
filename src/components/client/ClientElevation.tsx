@@ -21,6 +21,7 @@ interface ClientArtwork {
   frameType?: string | null
   frameWidthMm?: number | null
   brightness?: number | null
+  fade?: number | null
 }
 
 interface ClientOption {
@@ -443,6 +444,9 @@ function ClientCanvas({
           awFilters.push(`drop-shadow(${oX}px ${oY}px ${(art as any).shadowBlur.toFixed(1)}px rgba(0,0,0,${(art as any).shadowOpacity.toFixed(2)}))`)
         }
         if (awFilters.length > 0) aw.style.filter = awFilters.join(' ')
+        if (art.fade != null && art.fade > 0) {
+          aw.style.opacity = (1 - art.fade * 0.25).toFixed(3)
+        }
 
         aw.appendChild(ai)
 

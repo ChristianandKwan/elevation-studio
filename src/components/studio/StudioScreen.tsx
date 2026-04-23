@@ -283,6 +283,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   price: cur.price, artist: cur.artist, framingStatus: cur.framingStatus, framingCost: cur.framingCost,
                   frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
                   brightness: cur.brightness,
+                  fade: cur.fade,
                   shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
                   visible: cur.visible,
                 }

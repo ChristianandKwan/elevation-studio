@@ -36,6 +36,7 @@ export interface ArtworkEntry {
   wCm: number
   hCm: number
   brightness?: number | null
+  fade?: number | null
   frameType?: string | null
   frameWidthMm?: number | null
   shadowAngle?: number | null
@@ -157,6 +158,13 @@ export async function buildThumbnailBuffer(
           artThumbH   += framePxThumb * 2
         }
 
+        // Fade: multiply alpha so the elevation behind shows through (slider 0–1 → up to 25 % reduction)
+        const fade = art.fade ?? 0
+        if (fade > 0) {
+          const alphaMul = 1 - fade * 0.25
+          pipeline = pipeline.ensureAlpha().linear([1, 1, 1, alphaMul], [0, 0, 0, 0])
+        }
+
         const artFinal = await pipeline.png().toBuffer()
 
         compositeInputs.push({
@@ -221,6 +229,7 @@ interface OptionRowForThumbnail {
     h_cm: number
     visible: boolean
     brightness: number | null
+    fade: number | null
     frame_type: string | null
     frame_width_mm: number | null
     shadow_angle: number | null
@@ -239,7 +248,7 @@ async function fetchOptionForThumbnail(
       id, image_path, orig_w, orig_h, scale_px_per_cm, foreground_masks,
       artworks(
         image_path, x_fraction, y_fraction, w_cm, h_cm, visible,
-        brightness, frame_type, frame_width_mm,
+        brightness, fade, frame_type, frame_width_mm,
         shadow_angle, shadow_blur, shadow_opacity
       )
     `)
@@ -289,6 +298,7 @@ export async function regenerateOptionThumbnail(
         wCm:           a.w_cm,
         hCm:           a.h_cm,
         brightness:    a.brightness ?? 1,
+        fade:          a.fade ?? null,
         frameType:     a.frame_type,
         frameWidthMm:  a.frame_width_mm,
         shadowAngle:   a.shadow_angle,

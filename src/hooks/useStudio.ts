@@ -720,6 +720,11 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         divFilters.push(`drop-shadow(${oX}px ${oY}px ${art.shadowBlur.toFixed(1)}px rgba(0,0,0,${art.shadowOpacity.toFixed(2)}))`)
       }
       if (divFilters.length > 0) div.style.filter = divFilters.join(' ')
+      // Fade: slider 0–1 maps to up to 25 % reduction in artwork opacity,
+      // letting the elevation image behind show through.
+      if (art.fade != null && art.fade > 0) {
+        div.style.opacity = (1 - art.fade * 0.25).toFixed(3)
+      }
 
       const tag = document.createElement('div')
       tag.className = 'aw-tag'
@@ -1567,6 +1572,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
             framing_status: art.framingStatus,
             framing_cost: art.framingCost,
             brightness: art.brightness ?? 1,
+            fade: art.fade ?? null,
             name: art.name,
             frame_type: art.frameType ?? null,
             frame_width_mm: art.frameWidthMm ?? null,
@@ -1673,6 +1679,24 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function updateAllArtworksBrightness(brightness: number) {
     setState(s => {
       const newArts = s.artworks.map(a => ({ ...a, brightness }))
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  function updateArtworkFade(artId: string, fade: number) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, fade } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  function updateAllArtworksFade(fade: number) {
+    setState(s => {
+      const newArts = s.artworks.map(a => ({ ...a, fade }))
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
@@ -1910,6 +1934,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkFrame,
     updateArtworkBrightness,
     updateAllArtworksBrightness,
+    updateArtworkFade,
+    updateAllArtworksFade,
     updateArtworkShadow,
     updateAllArtworksShadow,
     selectArtwork,
