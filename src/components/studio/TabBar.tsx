@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 interface ElevationTab {
   id: string
@@ -31,6 +31,27 @@ export default function TabBar({
   onAddElevation, onRenameElevation, onDeleteElevation,
   onAddOption, onDeleteOption,
 }: Props) {
+  const barRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const checkScroll = useCallback(() => {
+    const el = barRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 0)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    const el = barRef.current
+    if (!el) return
+    checkScroll()
+    el.addEventListener('scroll', checkScroll, { passive: true })
+    const ro = new ResizeObserver(checkScroll)
+    ro.observe(el)
+    return () => { el.removeEventListener('scroll', checkScroll); ro.disconnect() }
+  }, [checkScroll])
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [newName, setNewName] = useState('')
   const [renameElevId, setRenameElevId] = useState<string | null>(null)
@@ -58,7 +79,9 @@ export default function TabBar({
 
   return (
     <>
-      <div className="studio-tab-bar">
+      <div className="studio-tab-bar" ref={barRef}>
+        <div className={`studio-tab-bar-fade studio-tab-bar-fade--left${canScrollLeft ? ' visible' : ''}`} />
+        <div className={`studio-tab-bar-fade studio-tab-bar-fade--right${canScrollRight ? ' visible' : ''}`} />
         {elevations.map((elev, i) => {
           const multiOption = elev.options.length > 1
           return (

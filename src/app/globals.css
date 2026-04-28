@@ -244,17 +244,16 @@ body {
   display: flex; align-items: center; gap: 0;
   border-bottom: 1px solid var(--border); background: var(--warm-white);
   padding: 0 20px; flex-shrink: 0; overflow-x: auto; position: relative;
+  scrollbar-width: none;
 }
-.studio-tab-bar::after {
-  content: '';
-  position: sticky;
-  right: 0;
-  width: 48px;
-  flex-shrink: 0;
-  background: linear-gradient(to right, transparent, var(--warm-white));
-  pointer-events: none;
-  align-self: stretch;
+.studio-tab-bar::-webkit-scrollbar { display: none; }
+.studio-tab-bar-fade {
+  position: absolute; top: 0; bottom: 0; width: 48px; pointer-events: none;
+  opacity: 0; transition: opacity .2s;
 }
+.studio-tab-bar-fade.visible { opacity: 1; }
+.studio-tab-bar-fade--left { left: 0; background: linear-gradient(to right, var(--warm-white), transparent); }
+.studio-tab-bar-fade--right { right: 0; background: linear-gradient(to left, var(--warm-white), transparent); }
 .studio-tab {
   padding: 10px 16px; font-size: 12px; font-weight: 500; cursor: pointer;
   border: none; background: none; font-family: var(--font-karla, 'Karla'); color: var(--mid);
