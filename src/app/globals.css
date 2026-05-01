@@ -308,12 +308,13 @@ body {
 .studio-sidebar {
   width: var(--sidebar-w); border-right: 1px solid var(--border);
   background: var(--warm-white); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
-  scrollbar-width: thin; scrollbar-color: rgba(139,111,71,.5) var(--border);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin; scrollbar-color: rgba(139,111,71,.4) transparent;
 }
-.studio-sidebar::-webkit-scrollbar { width: 3px; }
-.studio-sidebar::-webkit-scrollbar-track { background: var(--border); }
-.studio-sidebar::-webkit-scrollbar-thumb { background: rgba(139,111,71,.5); }
-.studio-sidebar::-webkit-scrollbar-thumb:hover { background: rgba(139,111,71,1); }
+.studio-sidebar::-webkit-scrollbar { width: 6px; }
+.studio-sidebar::-webkit-scrollbar-track { background: transparent; }
+.studio-sidebar::-webkit-scrollbar-thumb { background: rgba(139,111,71,.4); border-radius: 3px; }
+.studio-sidebar::-webkit-scrollbar-thumb:hover { background: rgba(139,111,71,.7); }
 .sidebar-section { padding: 16px 18px; border-bottom: 1px solid var(--border); }
 .sidebar-section:last-child { border-bottom: none; }
 .s-title {
@@ -683,12 +684,13 @@ body {
 }
 .client-sidebar-scroll {
   flex: 1; overflow-y: auto;
-  scrollbar-width: thin; scrollbar-color: rgba(139,111,71,.5) var(--border);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin; scrollbar-color: rgba(139,111,71,.4) transparent;
 }
-.client-sidebar-scroll::-webkit-scrollbar { width: 3px; }
-.client-sidebar-scroll::-webkit-scrollbar-track { background: var(--border); }
-.client-sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(139,111,71,.5); }
-.client-sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(139,111,71,1); }
+.client-sidebar-scroll::-webkit-scrollbar { width: 6px; }
+.client-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.client-sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(139,111,71,.4); border-radius: 3px; }
+.client-sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(139,111,71,.7); }
 .client-sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .client-sidebar-kicker { font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--mid); margin-bottom: 8px; }
 .client-sidebar-elev-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 19px; font-weight: 400; color: var(--charcoal); }
