@@ -1,6 +1,6 @@
 export type ProjectStatus = 'draft' | 'sent' | 'approved'
 export type OptionKey = 'A' | 'B'
-export type PriceIncludes = 'artwork' | 'all'
+export type FramingStatus = 'framed' | 'requires_framing'
 
 export interface Scale {
   origPxPerCm: number
@@ -21,9 +21,24 @@ export interface Artwork {
   yF: number
   visible: boolean
   price: number
-  priceIncludes: PriceIncludes
+  artist: string
+  framingStatus: FramingStatus
+  framingCost: number | null
+  /** Optional frame: type and width in mm (requires scale to be set) */
+  frameType?: string | null
+  frameWidthMm?: number | null
+  /** Per-artwork brightness effect via CSS filter (1.0 = unchanged) */
+  brightness?: number | null
+  /** Per-artwork fade: slider 0–1, rendered as up to 25 % opacity reduction so the wall shows through */
+  fade?: number | null
+  /** Drop shadow: angle in degrees (0 = sun at top, clockwise), blur radius in px, opacity 0–1 */
+  shadowAngle?: number | null
+  shadowBlur?: number | null
+  shadowOpacity?: number | null
   /** Loaded Image element for canvas rendering */
   img?: HTMLImageElement | null
+  /** Set to true when image failed to load (onerror or 10 s timeout) */
+  loadFailed?: boolean
 }
 
 export interface ElevationOption {
@@ -34,11 +49,17 @@ export interface ElevationOption {
   origW: number
   origH: number
   scalePxPerCm: number | null
-  zoom: number
   approved: boolean
   approvedAt: string | null
   artworks: Artwork[]
   foregroundMasks: ForegroundMasks | null
+  /** Perspective correction corners (fractional 0-1 relative to display dimensions) */
+  skewTL?: [number, number] | null
+  skewTR?: [number, number] | null
+  skewBR?: [number, number] | null
+  skewBL?: [number, number] | null
+  /** Whether perspective skew is applied to artwork overlays */
+  skewActive?: boolean
 }
 
 export interface Elevation {
@@ -65,6 +86,8 @@ export interface Project {
   createdAt: string
   elevations: Elevation[]
   activity: ActivityLog[]
+  /** Optional client-stated budget (ex-VAT, £). null means no budget set. */
+  clientBudget: number | null
   /** Thumbnail URL from first elevation option A */
   thumbnailUrl?: string | null
 }
@@ -100,6 +123,54 @@ export interface MaskPoint {
 }
 
 export type ForegroundMasks = MaskPoint[][]
+
+// ─── Budget types ──────────────────────────────────────────────────────────────
+
+export interface BudgetInstallation {
+  indicative: boolean
+  confirmedAmount: number | null
+  /** Whether VAT applies in inc-VAT views. Indicative installation is always treated as VAT-applicable. */
+  vatApplies?: boolean
+  /** True if `confirmedAmount` was entered in the inc-VAT view (value is frozen in that mode). */
+  amountIncludesVat?: boolean
+  /** Show the installation line (and any confirmed amount) to the client. Defaults to true. */
+  shownToClient?: boolean
+}
+
+export interface BudgetConsultantFee {
+  mode: 'flat' | 'percentage'
+  /** £ when flat; percentage as a number (e.g. 15 = 15%) when percentage. */
+  amount: number
+  shownToClient: boolean
+  /** Whether VAT applies to the consultant fee. Defaults to true. */
+  vatApplies?: boolean
+  /** For flat fees: true if the amount was entered in the inc-VAT view (value is frozen in that mode). Ignored for percentage. */
+  amountIncludesVat?: boolean
+}
+
+export interface BudgetCustomLineItem {
+  id: string
+  name: string
+  amount: number
+  /** Default true on creation */
+  vatApplies: boolean
+  /** Default true on creation */
+  shownToClient: boolean
+  /** True if `amount` was entered in the inc-VAT view (value is frozen in that mode). */
+  amountIncludesVat?: boolean
+}
+
+export interface ProjectBudget {
+  id: string
+  projectId: string
+  installation: BudgetInstallation
+  consultantFee: BudgetConsultantFee | null
+  customLineItems: BudgetCustomLineItem[]
+  /** Consultant-set VAT default for the client view */
+  vatIncludedDefault: boolean
+  createdAt: string
+  updatedAt: string
+}
 
 export interface MaskDrawState {
   active: boolean

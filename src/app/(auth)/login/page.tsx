@@ -2,7 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { DrawLoader } from '@/components/ui/Spinner'
+
+const DRAW_CYCLE_MS = 2200
 
 export default function LoginPage() {
   const router = useRouter()
@@ -10,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [navigating, setNavigating] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -25,11 +30,15 @@ export default function LoginPage() {
       return
     }
 
+    setNavigating(true)
+    await new Promise(r => setTimeout(r, DRAW_CYCLE_MS))
     router.push('/dashboard')
     router.refresh()
   }
 
   return (
+    <>
+      {navigating && <DrawLoader variant="dark" />}
     <div
       style={{
         minHeight: '100vh',
@@ -41,20 +50,14 @@ export default function LoginPage() {
       }}
     >
       <div className="login-box">
-        {/* Logo placeholder — replace with <img src="/logo.svg" /> once assets exist */}
-        <div
-          style={{
-            textAlign: 'center',
-            marginBottom: 36,
-            fontFamily: "'Cormorant Garant', serif",
-            fontSize: 28,
-            color: 'white',
-            fontWeight: 300,
-            letterSpacing: '0.12em',
-          }}
-        >
-          ELEVATION STUDIO
-        </div>
+        <Image
+          src="/ck-wordmark-white.png"
+          alt="Christian & Kwan"
+          className="login-logo"
+          width={680}
+          height={340}
+          preload
+        />
 
         <div className="login-title">Welcome back</div>
         <div className="login-sub">Sign in to your consultant account</div>
@@ -98,5 +101,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

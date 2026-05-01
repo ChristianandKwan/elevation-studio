@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Artwork Panel — Design Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Karla:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+
+/* ── DESIGN TOKENS (from globals.css) ───────────────────── */
+:root {
+  --cream: #F7F4EF;
+  --warm-white: #FDFBF9;
+  --charcoal: #1C1A18;
+  --mid: #7A746E;
+  --accent: #8B6F47;
+  --accent-light: rgba(139,111,71,0.12);
+  --border: #E3DED7;
+  --sidebar-w: 272px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Karla', sans-serif;
+  background: #E5E0D8;
+  background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,.06) 1px, transparent 0);
+  background-size: 20px 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 40px;
+  padding: 40px;
+  min-height: 100vh;
+  color: var(--charcoal);
+}
+
+/* ── LAYOUT ─────────────────────────────────────────────── */
+.col { display: flex; flex-direction: column; gap: 12px; }
+.label-tag {
+  font-family: 'Karla', sans-serif;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: white; background: var(--charcoal);
+  padding: 4px 10px; align-self: flex-start;
+}
+.label-tag.improved { background: var(--accent); }
+
+/* ── SHARED PANEL SHELL ─────────────────────────────────── */
+.panel {
+  width: var(--sidebar-w);
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   BEFORE — current design reproduced faithfully
+══════════════════════════════════════════════════════════ */
+
+/* Artworks header */
+.before .s-title {
+  font-family: 'Cormorant Garamond', serif; font-size: 10.5px; font-weight: 500;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--mid);
+  padding: 16px 18px 12px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.before .step-badge {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--accent);
+  color: white; font-size: 10px; font-family: 'Karla';
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.before .add-btn {
+  width: 100%; padding: 8px 14px; margin: 12px 0 0;
+  font-family: 'Karla'; font-size: 12px; font-weight: 500; letter-spacing: .02em;
+  background: var(--charcoal); color: white; border: 1px solid var(--charcoal); cursor: pointer;
+}
+.before .section-pad { padding: 0 18px 12px; }
+
+/* Before: artwork card */
+.before .aw-item {
+  border: 1px solid var(--charcoal); background: white;
+  margin: 0 18px 0;
+}
+.before .aw-item-top {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px; cursor: pointer;
+}
+.before .aw-thumb {
+  width: 34px; height: 34px; object-fit: contain; background: white;
+  border: 1px solid var(--border); flex-shrink: 0;
+  background: linear-gradient(135deg, #d4c5a9 0%, #c4b08a 100%);
+}
+.before .aw-info { flex: 1; min-width: 0; }
+.before .aw-name { font-weight: 500; font-size: 11px; }
+.before .aw-price { font-size: 10px; color: var(--mid); margin-top: 2px; }
+.before .aw-btns { display: flex; gap: 2px; flex-shrink: 0; }
+.before .icon-btn {
+  width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border: none; background: none; color: var(--mid); padding: 0;
+}
+.before .icon-btn.edit-active { color: var(--accent); background: var(--accent-light); }
+
+/* Before: dims row */
+.before .aw-dims-row {
+  padding: 8px 9px; border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+}
+.before .aw-dims-row label {
+  font-size: 10px; color: var(--mid); letter-spacing: .04em; white-space: nowrap;
+}
+.before input[type="text"],
+.before input[type="number"],
+.before select {
+  padding: 4px 6px; font-family: 'Karla'; font-size: 11px;
+  border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
+  outline: none;
+}
+.before .name-input { width: 100%; margin-bottom: 4px; }
+.before .dim-input { width: 52px; }
+.before .frame-row { width: 100%; display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.before .frame-select { flex: 1; height: 24px; font-size: 11px; font-family: 'Karla'; }
+.before .brightness-row { width: 100%; display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.before .shadow-section { width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.before .shadow-header { display: flex; align-items: center; margin-bottom: 6px; }
+.before .shadow-label { font-size: 10px; color: var(--mid); flex: 1; }
+.before .all-btn {
+  font-size: 10px; padding: 1px 5px; height: 20px; border: 1px solid var(--border);
+  background: white; color: var(--mid); cursor: pointer; font-family: 'Karla';
+}
+.before .shadow-body { display: flex; gap: 10px; align-items: center; }
+.before .sun-circle-before {
+  width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
+  border: 1.5px solid var(--border); position: relative; background: var(--cream);
+}
+.before .slider-rows { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.before .slider-row { display: flex; gap: 6px; align-items: center; }
+.before input[type="range"] {
+  flex: 1; min-width: 0; accent-color: var(--charcoal);
+}
+.before .val { font-size: 10px; color: var(--mid); min-width: 20px; text-align: right; }
+
+
+/* ══════════════════════════════════════════════════════════
+   AFTER — proposed improvements
+══════════════════════════════════════════════════════════ */
+
+.after .s-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.after .step-badge {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--accent);
+  color: white; font-size: 10px; font-family: 'Karla';
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.after .s-title-text {
+  font-family: 'Cormorant Garamond', serif; font-size: 10.5px; font-weight: 500;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--mid);
+}
+.after .add-btn {
+  display: block; width: calc(100% - 32px); margin: 12px 16px 0;
+  padding: 8px 14px;
+  font-family: 'Karla'; font-size: 12px; font-weight: 500; letter-spacing: .03em;
+  background: var(--charcoal); color: white; border: 1px solid var(--charcoal);
+  cursor: pointer; text-align: center;
+  /* Slightly tighter than before — same bold anchor */
+}
+
+/* After: artwork card */
+.after .aw-item {
+  margin: 10px 16px 0;
+  border: 1px solid var(--charcoal); background: white;
+}
+.after .aw-item-top {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px; cursor: pointer;
+}
+
+/* Thumbnail: slightly smaller, cleaner */
+.after .aw-thumb {
+  width: 30px; height: 30px; object-fit: contain; flex-shrink: 0;
+  background: linear-gradient(135deg, #d4c5a9 0%, #c4b08a 100%);
+  border: 1px solid var(--border);
+}
+.after .aw-info { flex: 1; min-width: 0; }
+.after .aw-name { font-weight: 500; font-size: 11.5px; }
+.after .aw-sub { font-size: 10px; color: var(--mid); margin-top: 1px; }
+
+/* Icon buttons: slightly smaller, better spaced */
+.after .aw-btns { display: flex; gap: 1px; flex-shrink: 0; }
+.after .icon-btn {
+  width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border: none; background: none; color: var(--mid); padding: 0; border-radius: 3px;
+  transition: all .12s;
+}
+.after .icon-btn.edit-active {
+  color: var(--accent); background: var(--accent-light);
+}
+
+/* After: edit panel */
+.after .aw-edit-panel {
+  border-top: 1px solid var(--border);
+  padding: 12px 12px 14px;
+  background: #faf8f5; /* warm tint on inputs, not pure white */
+  display: flex; flex-direction: column; gap: 0;
+}
+
+/* Grouped section dividers */
+.after .field-group {
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.after .field-group:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: none; }
+
+/* Consistent label+input rows */
+.after .field-row {
+  display: flex; align-items: center; gap: 0; margin-bottom: 6px;
+}
+.after .field-row:last-child { margin-bottom: 0; }
+.after .f-label {
+  font-size: 10px; color: var(--mid); letter-spacing: .05em;
+  width: 58px; flex-shrink: 0; /* fixed column — everything lines up */
+  padding-right: 8px;
+}
+.after .f-input {
+  flex: 1; padding: 5px 8px; font-family: 'Karla'; font-size: 11.5px;
+  border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
+  outline: none; transition: border-color .15s;
+}
+.after .f-input:focus { border-color: var(--charcoal); background: white; }
+
+/* Dimensions row */
+.after .dims-group { display: flex; align-items: center; gap: 5px; flex: 1; }
+.after .dim-input {
+  width: 48px; padding: 5px 6px; font-family: 'Karla'; font-size: 11.5px;
+  border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
+  outline: none; text-align: center;
+}
+.after .dim-sep { font-size: 11px; color: var(--mid); }
+.after .dim-unit { font-size: 10px; color: var(--mid); margin-left: 2px; }
+
+/* Price input: £ inside */
+.after .price-wrap {
+  flex: 1; display: flex; align-items: center;
+  border: 1px solid var(--border); background: var(--warm-white);
+  transition: border-color .15s;
+}
+.after .price-wrap:focus-within { border-color: var(--charcoal); }
+.after .price-prefix {
+  padding: 5px 0 5px 8px; font-size: 11.5px; color: var(--mid); font-family: 'Karla';
+}
+.after .price-input {
+  flex: 1; padding: 5px 8px 5px 4px; font-family: 'Karla'; font-size: 11.5px;
+  border: none; background: transparent; color: var(--charcoal); outline: none;
+}
+
+/* Frame select */
+.after .frame-select {
+  flex: 1; padding: 5px 8px; font-family: 'Karla'; font-size: 11.5px;
+  border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
+  outline: none; cursor: pointer; appearance: auto;
+}
+.after .frame-mm-input {
+  width: 44px; padding: 5px 6px; font-family: 'Karla'; font-size: 11.5px;
+  border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
+  outline: none; text-align: center;
+}
+.after .mm-unit { font-size: 10px; color: var(--mid); }
+
+/* Custom range sliders */
+.after .slider-row {
+  display: flex; align-items: center; gap: 0; margin-bottom: 6px;
+}
+.after .slider-row:last-child { margin-bottom: 0; }
+.after input[type="range"] {
+  flex: 1; min-width: 0; height: 3px;
+  -webkit-appearance: none; appearance: none;
+  background: var(--border); border-radius: 2px; outline: none; cursor: pointer;
+}
+.after input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(139,111,71,.4);
+  cursor: grab;
+}
+.after .slider-val {
+  font-size: 10px; color: var(--mid); min-width: 28px; text-align: right; flex-shrink: 0;
+}
+
+/* Shadow section */
+.after .shadow-header {
+  display: flex; align-items: center; margin-bottom: 8px;
+}
+.after .shadow-label { font-size: 10px; color: var(--mid); flex: 1; letter-spacing: .05em; }
+
+/* "Apply to all" — now a more refined ghost link */
+.after .apply-all-link {
+  font-size: 10px; color: var(--accent); cursor: pointer;
+  font-family: 'Karla'; background: none; border: none; padding: 0;
+  letter-spacing: 0;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.after .apply-all-link:hover { color: var(--charcoal); }
+
+/* Sun dial: clearer circle */
+.after .sun-dial {
+  width: 66px; height: 66px; border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--cream);
+  flex-shrink: 0;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.06);
+}
+
+/* SVG sun picker sits inside */
+
+
+/* ── PAGE LABELS ──────────────────────────────────────────── */
+h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px; font-weight: 400;
+  color: var(--charcoal); margin-bottom: 4px;
+}
+.sub { font-size: 11px; color: rgba(255,255,255,.6); margin-bottom: 20px; font-family: 'Karla'; }
+</style>
+</head>
+<body>
+
+<!-- ─── BEFORE ─────────────────────────────────────────── -->
+<div class="col">
+  <span class="label-tag">Before</span>
+
+  <div class="panel before">
+
+    <!-- Section header -->
+    <div class="s-title">
+      <span class="step-badge">3</span>
+      Artworks
+    </div>
+
+    <div class="section-pad">
+      <button class="add-btn">+ Add Artwork</button>
+
+      <!-- Artwork card (selected + expanded) -->
+      <div style="margin-top: 12px;">
+        <div class="aw-item">
+          <div class="aw-item-top">
+            <div class="aw-thumb"></div>
+            <div class="aw-info">
+              <div class="aw-name">Nathan1</div>
+              <div class="aw-price">£200 (framed)</div>
+            </div>
+            <div class="aw-btns">
+              <button class="icon-btn edit-active">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="icon-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button class="icon-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dims panel -->
+          <div class="aw-dims-row">
+            <input type="text" class="name-input" value="Nathan1" style="width:100%;margin-bottom:4px;">
+
+            <!-- Artist row — the awkward "W" placement bug reproduced -->
+            <div style="grid-column:1/-1;display:flex;align-items:center;gap:6px;margin-bottom:6px;width:100%;">
+              <label style="font-size:10px;color:var(--mid);min-width:34px;">Artist</label>
+              <input type="text" style="flex:1;padding:4px 6px;font-family:Karla;font-size:11px;border:1px solid var(--border);background:var(--warm-white);" placeholder="Artist name">
+              <!-- The floating W — this is actually the W label for dimensions that renders out of position -->
+              <span style="font-size:10px;color:var(--mid);">W</span>
+            </div>
+
+            <!-- Dimensions — broken layout -->
+            <input type="number" class="dim-input" value="40">
+            <span style="font-size:11px;color:var(--mid);">× H</span>
+            <input type="number" class="dim-input" value="60">
+            <label style="font-size:10px;color:var(--mid);">cm</label>
+
+            <!-- Price -->
+            <div style="width:100%;display:flex;align-items:center;gap:6px;margin-top:4px;">
+              <label style="font-size:10px;color:var(--mid);min-width:34px;">£</label>
+              <input type="number" style="flex:1;padding:4px 6px;font-family:Karla;font-size:11px;border:1px solid var(--border);background:var(--warm-white);" value="200">
+            </div>
+
+            <!-- Frame -->
+            <div class="frame-row">
+              <label style="font-size:10px;color:var(--mid);min-width:34px;">Frame</label>
+              <select class="frame-select dim-input">
+                <option>dark wood</option>
+                <option>black</option>
+                <option>white</option>
+              </select>
+              <input type="number" class="dim-input" style="width:46px;font-size:11px;" value="20">
+              <label style="font-size:10px;color:var(--mid);">mm</label>
+            </div>
+
+            <!-- Brightness -->
+            <div class="brightness-row">
+              <label style="font-size:10px;color:var(--mid);min-width:54px;">Brightness</label>
+              <input type="range" min="0.5" max="1.5" step="0.05" value="0.8" style="flex:1;accent-color:var(--charcoal);">
+              <span class="val">0.80</span>
+            </div>
+
+            <!-- Shadow -->
+            <div class="shadow-section">
+              <div class="shadow-header">
+                <span class="shadow-label">Shadow</span>
+                <button class="all-btn">All</button>
+              </div>
+              <div class="shadow-body">
+                <!-- Barely visible circle -->
+                <div class="sun-circle-before">
+                  <svg width="72" height="72" style="position:absolute;top:0;left:0;">
+                    <circle cx="36" cy="36" r="24" fill="none" stroke="var(--border)" stroke-width="1.5"/>
+                    <circle cx="36" cy="36" r="2" fill="var(--mid)"/>
+                    <line x1="36" y1="36" x2="36" y2="50" stroke="var(--mid)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+                    <circle cx="36" cy="13" r="7" fill="#F5C518" stroke="white" stroke-width="1.5"/>
+                    <line x1="36" y1="4" x2="36" y2="2" stroke="#E8A800" stroke-width="1.5"/>
+                    <line x1="44" y1="6" x2="46" y2="4" stroke="#E8A800" stroke-width="1.5"/>
+                    <line x1="28" y1="6" x2="26" y2="4" stroke="#E8A800" stroke-width="1.5"/>
+                    <line x1="47" y1="13" x2="50" y2="13" stroke="#E8A800" stroke-width="1.5"/>
+                    <line x1="25" y1="13" x2="22" y2="13" stroke="#E8A800" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="slider-rows">
+                  <div class="slider-row">
+                    <label style="font-size:10px;color:var(--mid);min-width:42px;flex-shrink:0;">Spread</label>
+                    <input type="range" min="0" max="20" value="5" style="accent-color:var(--charcoal);">
+                    <span class="val">5</span>
+                  </div>
+                  <div class="slider-row">
+                    <label style="font-size:10px;color:var(--mid);min-width:42px;flex-shrink:0;">Opacity</label>
+                    <input type="range" min="0" max="0.8" step="0.05" value="0.45" style="accent-color:var(--charcoal);">
+                    <span class="val">0.45</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ─── AFTER ──────────────────────────────────────────── -->
+<div class="col">
+  <span class="label-tag improved">After</span>
+
+  <div class="panel after">
+
+    <!-- Section header -->
+    <div class="s-header">
+      <span class="step-badge">3</span>
+      <span class="s-title-text">Artworks</span>
+    </div>
+
+    <button class="add-btn">+ Add Artwork</button>
+
+    <!-- Artwork card -->
+    <div class="aw-item" style="margin-bottom: 14px;">
+      <div class="aw-item-top">
+        <div class="aw-thumb"></div>
+        <div class="aw-info">
+          <div class="aw-name">Nathan1</div>
+          <div class="aw-sub">£200 · framed</div>
+        </div>
+        <div class="aw-btns">
+          <button class="icon-btn edit-active">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="icon-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+          <button class="icon-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Edit panel: grouped, aligned, warm bg -->
+      <div class="aw-edit-panel">
+
+        <!-- Group 1: Identity -->
+        <div class="field-group">
+          <!-- Title: no label, full width -->
+          <div style="margin-bottom: 6px;">
+            <input type="text" class="f-input" value="Nathan1" style="width:100%;font-size:12px;font-weight:500;">
+          </div>
+          <!-- Artist: labelled -->
+          <div class="field-row">
+            <span class="f-label">Artist</span>
+            <input type="text" class="f-input" placeholder="Artist name">
+          </div>
+        </div>
+
+        <!-- Group 2: Size & Price -->
+        <div class="field-group">
+          <!-- Dimensions: clean label, inline group -->
+          <div class="field-row">
+            <span class="f-label">Size</span>
+            <div class="dims-group">
+              <input type="number" class="dim-input" value="40">
+              <span class="dim-sep">×</span>
+              <input type="number" class="dim-input" value="60">
+              <span class="dim-unit">cm</span>
+            </div>
+          </div>
+          <!-- Price: £ as inline prefix -->
+          <div class="field-row">
+            <span class="f-label">Price</span>
+            <div class="price-wrap">
+              <span class="price-prefix">£</span>
+              <input type="number" class="price-input" value="200" placeholder="ex-VAT">
+            </div>
+          </div>
+        </div>
+
+        <!-- Group 3: Frame -->
+        <div class="field-group">
+          <div class="field-row">
+            <span class="f-label">Frame</span>
+            <select class="frame-select">
+              <option value="">None</option>
+              <option selected>dark wood</option>
+              <option>mid wood</option>
+              <option>pale wood</option>
+              <option>black</option>
+              <option>white</option>
+            </select>
+            <input type="number" class="frame-mm-input" value="20" style="margin-left:5px;">
+            <span class="mm-unit" style="margin-left:3px;">mm</span>
+          </div>
+        </div>
+
+        <!-- Group 4: Lighting -->
+        <div class="field-group">
+          <!-- Brightness -->
+          <div class="slider-row">
+            <span class="f-label">Brightness</span>
+            <input type="range" min="0.5" max="1.5" step="0.05" value="0.8">
+            <span class="slider-val">0.80</span>
+          </div>
+
+          <!-- Shadow -->
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+            <div class="shadow-header">
+              <span class="shadow-label">Shadow</span>
+              <button class="apply-all-link">Apply to all</button>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+
+              <!-- Sun dial: clearer, warmer -->
+              <div class="sun-dial">
+                <svg width="66" height="66">
+                  <!-- Track -->
+                  <circle cx="33" cy="33" r="22" fill="none" stroke="var(--border)" stroke-width="1.5"/>
+                  <!-- Subtle tick marks -->
+                  <line x1="33" y1="12" x2="33" y2="16" stroke="var(--border)" stroke-width="1" opacity="0.7"/>
+                  <line x1="33" y1="50" x2="33" y2="54" stroke="var(--border)" stroke-width="1" opacity="0.7"/>
+                  <line x1="12" y1="33" x2="16" y2="33" stroke="var(--border)" stroke-width="1" opacity="0.7"/>
+                  <line x1="50" y1="33" x2="54" y2="33" stroke="var(--border)" stroke-width="1" opacity="0.7"/>
+                  <!-- Centre dot -->
+                  <circle cx="33" cy="33" r="2.5" fill="var(--mid)"/>
+                  <!-- Shadow direction -->
+                  <line x1="33" y1="33" x2="33" y2="43" stroke="var(--mid)" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+                  <!-- Sun rays -->
+                  <line x1="33" y1="3" x2="33" y2="0" stroke="#E8A800" stroke-width="1.5"/>
+                  <line x1="42" y1="5.5" x2="44" y2="3.5" stroke="#E8A800" stroke-width="1.5"/>
+                  <line x1="24" y1="5.5" x2="22" y2="3.5" stroke="#E8A800" stroke-width="1.5"/>
+                  <!-- Sun body: accent colour to match design system -->
+                  <circle cx="33" cy="11" r="7" fill="#F5C518" stroke="white" stroke-width="1.5"/>
+                </svg>
+              </div>
+
+              <!-- Sliders -->
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;">
+                <div class="slider-row">
+                  <span style="font-size:10px;color:var(--mid);width:42px;flex-shrink:0;">Spread</span>
+                  <input type="range" min="0" max="20" value="5">
+                  <span class="slider-val">5</span>
+                </div>
+                <div class="slider-row">
+                  <span style="font-size:10px;color:var(--mid);width:42px;flex-shrink:0;">Opacity</span>
+                  <input type="range" min="0" max="0.8" step="0.05" value="0.45">
+                  <span class="slider-val">0.45</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /aw-edit-panel -->
+    </div><!-- /aw-item -->
+
+  </div><!-- /panel -->
+</div>
+
+<!-- ─── CHANGE NOTES ───────────────────────────────────── -->
+<div class="col" style="max-width:220px;">
+  <span class="label-tag" style="background:rgba(255,255,255,.15);color:var(--charcoal);">Changes</span>
+  <div style="background:var(--warm-white);border:1px solid var(--border);padding:16px;font-size:11px;color:var(--mid);line-height:1.7;display:flex;flex-direction:column;gap:12px;">
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">Labels fixed</div>
+      "W" no longer floats beside Artist. "Size" label replaces broken W/H pair.
+    </div>
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">Aligned label column</div>
+      All labels share a fixed 58px column — inputs line up cleanly.
+    </div>
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">£ inside the field</div>
+      Price prefix is now inline, matching the mm suffix pattern.
+    </div>
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">Grouped sections</div>
+      Identity / Size·Price / Frame / Lighting — each separated by a hairline.
+    </div>
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">Accent sliders</div>
+      Custom thumb in --accent brown. Replaces grey system default.
+    </div>
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">Shadow dial</div>
+      Tick marks + warm background make the circle feel intentional.
+    </div>
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">"Apply to all" not "All"</div>
+      Clearer intent, styled as a refined text link not a mismatched button.
+    </div>
+    <div>
+      <div style="font-weight:600;color:var(--charcoal);margin-bottom:2px;">Warm input bg</div>
+      Edit panel uses #faf8f5 (not pure white) to harmonise with the cream palette.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

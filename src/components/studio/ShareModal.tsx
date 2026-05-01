@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface Props {
   projectName: string
@@ -22,6 +23,12 @@ export default function ShareModal({ projectName, onGetToken, onClose, onStatus 
     })
   }, []) // eslint-disable-line
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
   function copyLink() {
     navigator.clipboard?.writeText(url)
     onStatus('Link copied to clipboard')
@@ -40,16 +47,15 @@ export default function ShareModal({ projectName, onGetToken, onClose, onStatus 
           Share this link with your client. No login required — they see all elevations and all options, with full approval controls.
         </div>
 
-        <div style={{ padding: 12, background: 'var(--cream)', border: '1px solid var(--border)', fontSize: 12, fontFamily: "'Karla'", wordBreak: 'break-all', color: 'var(--mid)', marginBottom: 16 }}>
-          {loading ? 'Generating link…' : url}
+        <div style={{ position: 'relative', padding: 12, background: 'var(--cream)', border: '1px solid var(--border)', fontSize: 12, fontFamily: "'Karla'", wordBreak: 'break-all', color: 'var(--mid)', marginBottom: 16, minHeight: loading ? 56 : undefined }}>
+          {loading ? <ArcSpinner size={36} /> : url}
         </div>
 
         <div style={{ fontSize: 11.5, color: 'var(--mid)', lineHeight: 1.7 }}>
           <strong style={{ color: 'var(--charcoal)' }}>What clients can do:</strong><br />
           ✓ View all elevations &amp; options<br />
           ✓ See artwork details and pricing<br />
-          ✓ Approve (locks artwork positions)<br />
-          ✓ Unapprove if they change their mind
+          ✓ Approve (locks artwork positions)
         </div>
 
         <div className="modal-footer">
