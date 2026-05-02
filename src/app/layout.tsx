@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
 import { Cormorant_Garamond, Karla } from 'next/font/google'
 import './globals.css'
+import './dashboard.css'
+import './studio.css'
+import './client-portal.css'
+import './budget.css'
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],

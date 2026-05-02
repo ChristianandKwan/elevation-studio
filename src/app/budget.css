@@ -1,0 +1,288 @@
+/* ══════════════════════════════════════════════════════════
+   BUDGET VIEW
+══════════════════════════════════════════════════════════ */
+
+/* Scrollable budget container */
+.budget-view { flex: 1; overflow-y: auto; background: var(--cream); display: flex; flex-direction: column; }
+
+/* Sticky dark header bar */
+.budget-header {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 32px; height: 52px;
+  background: var(--charcoal); flex-shrink: 0;
+  gap: 16px;
+}
+.budget-header-left { display: flex; align-items: center; gap: 12px; flex: 1; }
+.budget-header-left .save-status { color: rgba(255,255,255,0.7); }
+.budget-header-left .save-status--saved { color: rgba(100,200,140,0.9); }
+.budget-header-left .save-status--error { color: rgba(220,100,100,0.9); }
+
+/* VAT toggle */
+.budget-vat-toggle { display: flex; border: 1px solid rgba(255,255,255,0.2); }
+.budget-vat-btn {
+  padding: 5px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
+  background: transparent; border: none; color: rgba(255,255,255,0.45); cursor: pointer;
+  transition: all .15s; letter-spacing: .02em;
+}
+.budget-vat-btn.active { background: rgba(255,255,255,0.15); color: white; }
+.budget-vat-btn:hover:not(.active) { color: rgba(255,255,255,0.75); }
+
+/* Header right group (preview btn + export btn) */
+.budget-header-right { display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end; }
+
+/* Preview as client button */
+.budget-preview-btn {
+  padding: 6px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
+  border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.6);
+  cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
+}
+.budget-preview-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+.budget-preview-btn.active { background: rgba(255,255,255,0.15); color: white; border-color: rgba(255,255,255,0.5); }
+
+/* Export PDF button */
+.budget-export-btn {
+  padding: 6px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
+  border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.8);
+  cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
+}
+.budget-export-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+
+/* Content area */
+.budget-content { max-width: 780px; margin: 0 auto; padding: 40px 24px 64px; width: 100%; }
+
+/* Project header */
+.budget-project-header { margin-bottom: 36px; }
+.budget-project-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 28px; font-weight: 400; margin-bottom: 3px; }
+.budget-project-client { font-size: 13px; color: var(--mid); }
+.budget-client-view-badge {
+  display: inline-block; margin-top: 8px; padding: 2px 9px;
+  font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--accent-light); color: var(--accent); border: 1px solid rgba(139,111,71,.25);
+}
+
+/* Section kicker */
+.budget-section { margin-bottom: 44px; }
+.budget-section-kicker {
+  font-family: var(--font-karla, 'Karla'), sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--mid);
+  padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 0;
+}
+
+/* ── Elevation blocks ──────────────────────────────────── */
+.budget-elev-block { margin-top: 24px; }
+.budget-elev-block:first-of-type { margin-top: 0; }
+
+/* Picked elevation: white card matching Additional Costs / Totals panel */
+.budget-elev-block--picked {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  margin-top: 12px;
+}
+.budget-elev-block--picked:first-of-type { margin-top: 16px; }
+
+.budget-elev-header {
+  display: flex; align-items: baseline; gap: 10px;
+  padding-bottom: 11px; border-bottom: 1px solid var(--border);
+}
+.budget-elev-header--picked { padding: 14px 20px 13px; }
+.budget-elev-header--pending { margin-bottom: 12px; }
+
+.budget-elev-name {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 20px; font-weight: 600;
+  color: var(--charcoal);
+}
+.budget-elev-pick-badge {
+  font-size: 11px; font-weight: 500; color: var(--green);
+  background: var(--green-light); border: 1px solid rgba(46,107,79,.2);
+  padding: 2px 8px; letter-spacing: .02em;
+}
+.budget-elev-pending-badge {
+  font-size: 11px; font-weight: 500; color: var(--red);
+  background: rgba(185,64,64,.07); border: 1px solid rgba(185,64,64,.2);
+  padding: 2px 8px; letter-spacing: .02em;
+}
+.budget-elev-total {
+  margin-left: auto; font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 20px; font-weight: 400;
+}
+
+/* Picked elevation artwork list */
+.budget-picked-artworks { padding: 0 20px; }
+
+/* Pending elevation: two option blocks side by side */
+.budget-options-row { display: flex; gap: 14px; }
+.budget-option-block { flex: 1; border: 1px solid var(--border); background: var(--warm-white); }
+.budget-option-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 11px 14px; background: var(--cream); border-bottom: 1px solid var(--border);
+  width: 100%; text-align: left; font-family: var(--font-karla, 'Karla'); gap: 8px;
+}
+.budget-option-key {
+  font-size: 13px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--charcoal);
+}
+.budget-option-subtotal {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
+  font-size: 20px; font-weight: 500; color: var(--charcoal); margin-left: auto;
+}
+.budget-option-artworks { padding: 0 14px 12px; border-top: 1px solid var(--border); }
+
+/* ── Artwork lines ──────────────────────────────────────── */
+.budget-artwork-line { padding: 9px 0; border-top: 1px solid var(--border); }
+.budget-artwork-line:first-child { border-top: none; }
+.budget-artwork-main-row { display: flex; align-items: flex-start; gap: 10px; }
+.budget-artwork-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.budget-artwork-title { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 15px; color: var(--charcoal); }
+.budget-artwork-artist { font-size: 12px; color: var(--mid); }
+.budget-artwork-dims { font-size: 12px; color: var(--mid); white-space: nowrap; flex-shrink: 0; }
+.budget-artwork-price { font-size: 14px; font-weight: 500; text-align: right; min-width: 80px; flex-shrink: 0; }
+.budget-artwork-framing-row { display: flex; align-items: center; margin-top: 3px; }
+.budget-artwork-framing-label { flex: 1; font-size: 12px; color: var(--mid); font-style: italic; padding-left: 10px; }
+.budget-artwork-framing-cost { font-size: 12px; color: var(--mid); min-width: 80px; text-align: right; flex-shrink: 0; }
+
+.budget-costs-panel {
+  background: var(--warm-white); border: 1px solid var(--border); padding: 0 20px;
+}
+
+/* ── Additional costs rows ──────────────────────────────── */
+.budget-cost-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 0; border-bottom: 1px solid var(--border); gap: 12px;
+}
+.budget-cost-row--stacked { flex-direction: column; align-items: stretch; gap: 6px; }
+.budget-cost-row-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.budget-cost-label { font-size: 13px; color: var(--charcoal); display: flex; align-items: center; gap: 8px; flex: 1; }
+.budget-cost-value-group { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.budget-cost-value { font-size: 14px; font-weight: 500; }
+.budget-cost-edit {
+  font-size: 11px; color: var(--accent); text-decoration: underline;
+  cursor: pointer; background: none; border: none; font-family: var(--font-karla, 'Karla'); padding: 0;
+}
+.budget-cost-edit:hover { color: var(--charcoal); }
+.budget-cost-edit--danger { color: var(--red); }
+.budget-cost-edit--danger:hover { color: var(--red); text-decoration: none; }
+
+/* Badges */
+.budget-badge {
+  font-size: 10.5px; font-weight: 500; letter-spacing: .03em;
+  padding: 2px 7px; flex-shrink: 0;
+}
+.budget-badge--indicative {
+  background: rgba(139,111,71,.09); color: var(--accent); border: 1px solid rgba(139,111,71,.28);
+}
+.budget-badge--confirmed {
+  background: rgba(46,107,79,.08); color: var(--green); border: 1px solid rgba(46,107,79,.28);
+}
+.budget-badge--inline { margin-left: 6px; }
+
+/* Inline edit form */
+.budget-inline-edit { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
+.budget-inline-edit--budget { margin-top: 12px; }
+.budget-inline-prefix { font-size: 13px; color: var(--mid); flex-shrink: 0; }
+.budget-inline-input {
+  padding: 5px 8px; font-family: var(--font-karla, 'Karla'); font-size: 12px;
+  border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
+  outline: none; width: 90px;
+  -moz-appearance: textfield;
+}
+.budget-inline-input::-webkit-outer-spin-button,
+.budget-inline-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.budget-inline-input:focus { border-color: var(--charcoal); }
+.budget-inline-input--amount { width: 80px; }
+
+/* Consultant fee mode toggle */
+.budget-fee-mode-toggle { display: flex; border: 1px solid var(--border); }
+.budget-fee-mode-btn {
+  padding: 4px 10px; font-family: var(--font-karla, 'Karla'); font-size: 11px; font-weight: 500;
+  background: transparent; border: none; color: var(--mid); cursor: pointer; transition: all .15s;
+}
+.budget-fee-mode-btn.active { background: var(--charcoal); color: white; }
+.budget-fee-mode-btn:hover:not(.active) { color: var(--charcoal); }
+
+/* Toggle (shown to client / VAT applies) */
+.budget-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--mid); cursor: pointer; user-select: none; }
+.budget-toggle input { accent-color: var(--charcoal); cursor: pointer; }
+
+/* Custom line items */
+.budget-custom-items { }
+.budget-custom-name-input {
+  padding: 3px 6px; font-family: var(--font-karla, 'Karla'); font-size: 13px; color: var(--charcoal);
+  border: 1px solid var(--border); background: var(--cream); outline: none; width: 100%; max-width: 240px;
+}
+.budget-custom-name-input:focus { border-color: var(--charcoal); }
+.budget-custom-item-controls { display: flex; gap: 16px; padding-left: 0; }
+.budget-add-item {
+  font-size: 12px; color: var(--accent); background: none; border: none;
+  cursor: pointer; font-family: var(--font-karla, 'Karla'); padding: 11px 0; display: flex; align-items: center; gap: 6px;
+  text-decoration: none;
+}
+.budget-add-item:hover { color: var(--charcoal); }
+
+/* ── Totals panel ───────────────────────────────────────── */
+.budget-totals {
+  margin-top: 0; padding-top: 0;
+  background: var(--warm-white); border: 1px solid var(--border);
+  padding: 20px 24px; margin-top: 8px;
+}
+.budget-totals-rows { margin-top: 0; }
+.budget-totals-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.budget-totals-label { color: var(--mid); display: flex; align-items: center; }
+.budget-totals-value { font-weight: 500; white-space: nowrap; }
+
+.budget-grand-total {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 14px 0 0; border-top: 2px solid var(--charcoal); margin-top: 4px;
+}
+.budget-grand-total-label {
+  font-family: var(--font-karla, 'Karla'), sans-serif; font-size: 15px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--charcoal);
+}
+.budget-grand-total-value {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 19px; font-weight: 500; color: var(--charcoal);
+}
+
+/* Client budget section */
+.budget-client-budget-section { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 4px; }
+.budget-client-budget-row { border-bottom: none; padding-bottom: 4px; }
+.budget-variance-row { font-size: 14px; font-weight: 500; padding: 5px 0; }
+
+/* Empty / loading states */
+.budget-empty-note { font-size: 12px; color: var(--mid); padding: 12px 0; font-style: italic; }
+.budget-loading { padding: 40px 0; font-size: 13px; color: var(--mid); text-align: center; }
+
+/* ── Print styles ───────────────────────────────────────── */
+@media print {
+  /* Hide all interactive chrome */
+  .studio-header,
+  .studio-tab-bar,
+  .client-tab-bar,
+  .client-view-toggle,
+  .budget-header,
+  .budget-view-toggle,
+  .budget-export-btn,
+  .budget-preview-btn,
+  .budget-cost-edit,
+  .budget-add-item,
+  .budget-toggle,
+  .budget-inline-edit,
+  .budget-fee-mode-toggle,
+  .budget-option-chevron { display: none !important; }
+
+  /* Layout resets */
+  .budget-view { overflow: visible; }
+  .budget-content { max-width: 100%; padding: 20px; }
+
+  /* Page breaks */
+  .budget-elev-block { page-break-inside: avoid; }
+  .budget-option-block { page-break-inside: avoid; }
+
+  /* Force collapsed option panels open so all artworks print */
+  .budget-option-artworks--collapsed { display: block !important; }
+
+  /* Neutralise the option header button appearance */
+  .budget-option-header { cursor: default; pointer-events: none; }
+  .budget-option-header:hover { background: none; }
+}
