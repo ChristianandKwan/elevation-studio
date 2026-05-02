@@ -62,6 +62,20 @@ The prior senior code review (`docs/code-review-followups.md`, dated 2026-04-21)
 - **P2-5** — `--mid` contrast. `#7A746E` → `#6E6862`; contrast against cream ~3.96:1 → ~4.7:1 (passes WCAG AA).
 - **P2-6 (partial)** — `createProject` is now an atomic Postgres RPC (`create_project`, migration `020_create_project_rpc.sql`). **`deleteProject` still uses the client-side pattern** — still open, see finding below. **Migration must be applied to Supabase manually** before the new flow works in production.
 
+**PR 2 — Mobile polish** (shipped to `dev` 2026-05-02, commit `481b3b8`):
+
+- **P1-2** — Client portal touch targets. `.client-art-eye` and `.client-zoom-btn` bumped to 36×36px hit areas; visible glyphs unchanged via flex-centering. Inline `width: 32` override removed from the Fit zoom button.
+
+**PR 3 — Performance** (shipped to `dev` 2026-05-02, commit `cfea6ea`):
+
+- **P2-3** — Dashboard thumbnail signing batched. `dashboard/page.tsx` now makes two `createSignedUrls` RPCs (thumbnails bucket + elevation-images bucket) regardless of project count, replacing the per-project loop.
+- **P2-4 (partial)** — `next/image` on LCP surfaces. Dashboard project card thumbnails use `<Image fill unoptimized>`; client portal elevation uses `<NextImage width={orig_w} height={orig_h} unoptimized>`. Artwork sidebar thumbs (36×36) and studio upload previews left as raw `<img>` per the review recommendation.
+
+**Spinner fixes** (shipped to `dev` 2026-05-02, commits `40fccf9`, `47fdb0d`):
+
+- `ArcSpinner` and `DrawLoader` keyframes moved from inline JSX `<style>` tags to `globals.css`. Previously, any re-render of `ArcSpinner` (e.g. the luminance-sample `setVariant` call) replaced the `<style>` node and reset the animation clock, causing a stutter.
+- `ck-arc-dash` loop-boundary stutter fixed. The `100%` keyframe previously used `stroke-dashoffset: -224`, placing the arc at ~320° just before the loop reset to 0° — a visible ~40° jump each cycle. Changed to `dashoffset: 0` so start and end positions match exactly.
+
 If you spot any of the above and think it's open, double-check before editing.
 
 ---
@@ -74,15 +88,9 @@ If you spot any of the above and think it's open, double-check before editing.
 
 - **Shipped:** `layout.tsx` now loads Cormorant `['300','400','500','600']` and Karla `['300','400','500','700']`. (PR 1, 2026-05-02)
 
-#### P1-2 Client portal touch targets below 44×44
+#### ~~P1-2 Client portal touch targets below 44×44~~ ✓ SHIPPED
 
-- **Where:**
-  - `.client-art-eye` — visible artwork eye toggle, ~22×22 with 4px padding (`globals.css:702–708`, used in `ClientElevation.tsx`)
-  - `.client-zoom-btn` — 24×24 (`globals.css:669–673`)
-  - `.icon-btn` — 24×24 (`globals.css:368–372`, studio only — lower priority)
-- **Why it matters:** WCAG 2.5.5 AA wants 44×44; AAA accepts 24×24 if elements are spaced. The eye toggle is in stacked rows with no spacing — fails. Client portal is the customer-facing iPad-likely surface.
-- **Fix:** Bump the hit area to 36–44px. Keep the visible glyph small via padding, not size. Studio targets can be deferred until someone reports it.
-- **Command:** `$impeccable adapt`.
+- **Shipped:** `.client-art-eye` and `.client-zoom-btn` bumped to 36×36px. Inline `width: 32` override removed from the Fit zoom button. Studio `.icon-btn` (24px) intentionally left — deferred until reported. (PR 2, 2026-05-02)
 
 #### ~~P1-3 Dashboard form labels disconnected from inputs~~ ✓ SHIPPED
 
@@ -104,23 +112,14 @@ If you spot any of the above and think it's open, double-check before editing.
 
 - **Shipped:** `DashboardClient.tsx` "Your Work" → `<h1>`; `StudioScreen.tsx` project name → `<h2>` (subordinate to page nav, not a page title). `BudgetScreen.tsx` was already correct. CSS unchanged — visual appearance identical. (PR 1, 2026-05-02)
 
-#### P2-3 Dashboard thumbnail signing is still N+1
+#### ~~P2-3 Dashboard thumbnail signing is still N+1~~ ✓ SHIPPED
 
-- **Where:** `(consultant)/dashboard/page.tsx:67–78` — singular `createSignedUrl` per project, with a per-project fallback to `elevation-images`.
-- **Why it matters:** With 20 projects, 20 storage round trips before the dashboard renders, sometimes 40 if thumbnails aren't cached. Same shape as the old A4 issue, one tier in.
-- **Fix:** Apply the A4 pattern to the dashboard. Collect `thumbnail_path` and fallback `image_path` arrays once across all projects, do two batched `createSignedUrls` calls (thumbnails bucket + elevation-images bucket), build path → signed-URL maps, then assemble per-project URLs.
-- **Command:** `$impeccable optimize`.
+- **Shipped:** `dashboard/page.tsx` now makes two `createSignedUrls` RPCs (thumbnails + elevation-images buckets) replacing the per-project loop. (PR 3, 2026-05-02)
 
-#### P2-4 Raw `<img>` on dynamic surfaces
+#### ~~P2-4 Raw `<img>` on dynamic surfaces~~ ✓ SHIPPED (high-value surfaces)
 
-- **Where:**
-  - `DashboardClient.tsx:341` — project thumbnails (LCP candidates on the dashboard)
-  - `ClientElevation.tsx:154`, `:653` — artwork sidebar thumb + the elevation image itself on the client portal (the elevation is the LCP)
-  - `StudioSidebar.tsx:554` — artwork list thumbnails (lower priority — 34×34, mostly fine)
-  - `AddArtworkModal.tsx:177`, `:243` — upload previews (lowest priority)
-- **Why it matters:** No layout reservation = CLS. No optimisation = larger transfers. The logos were already moved to `next/image` (the A2 fix); these dynamic Supabase-signed URLs were left because `next/image` needs `unoptimized` or a custom loader for arbitrary signed URLs.
-- **Fix for the high-value ones:** Use `next/image` with `unoptimized` and explicit `width` / `height` on the dashboard thumbnails and the client portal elevation. Skip the small studio sidebar thumbs.
-- **Command:** `$impeccable optimize`.
+- **Shipped:** Dashboard thumbnails → `<Image fill unoptimized>`; client portal elevation → `<NextImage width={orig_w} height={orig_h} unoptimized>`. `globals.css` `.project-card-thumb` gains `position: relative`; `.client-elev-img` gains `width: 100%; height: auto`. (PR 3, 2026-05-02)
+- **Still open (low priority):** `StudioSidebar.tsx` artwork thumbs (34×34) and `AddArtworkModal.tsx` upload previews — intentionally left per the review recommendation.
 
 #### ~~P2-5 Mid-grey on cream is borderline AA~~ ✓ SHIPPED
 
@@ -220,9 +219,9 @@ This is the order to attack things in. Each item maps to one impeccable command.
 | 7 | P2-6 | `createProject` → Postgres RPC (migration 020) | `$impeccable harden` | ✓ PR 1 (apply migration in Supabase) |
 | 7b | P2-6 | `deleteProject` → Postgres RPC | `$impeccable harden` | **open** |
 | 8 | P2-9 | Token expiry 90 → 42 days | — | ✗ will not fix (user decision) |
-| 9 | P1-2 | Bump client portal touch targets to ≥36px | `$impeccable adapt` | open |
-| 10 | P2-3 | Batch dashboard thumbnail signing | `$impeccable optimize` | open |
-| 11 | P2-4 | `next/image` + `unoptimized` on dashboard thumbs and client elevation | `$impeccable optimize` | open |
+| 9 | P1-2 | Bump client portal touch targets to ≥36px | `$impeccable adapt` | ✓ PR 2 |
+| 10 | P2-3 | Batch dashboard thumbnail signing | `$impeccable optimize` | ✓ PR 3 |
+| 11 | P2-4 | `next/image` + `unoptimized` on dashboard thumbs and client elevation | `$impeccable optimize` | ✓ PR 3 (low-pri studio thumbs deferred) |
 | 12 | P2-7 | Regenerate Supabase types; remove `as any` casts | `$impeccable harden` | open |
 | 13 | P2-8 | Either split `globals.css` per surface or commit to Tailwind v4 + `@theme` | `$impeccable distill` or `$impeccable extract` | open |
 | 14 | P3-5 | Run `$impeccable document` to generate `DESIGN.md` from current tokens | `$impeccable document` | open |
@@ -234,12 +233,13 @@ This is the order to attack things in. Each item maps to one impeccable command.
 | 20 | — | Final pass | `$impeccable polish` | open |
 
 **Batches:**
-1. **PR 1 — A11y & correctness** ✓ shipped to `dev` 2026-05-02. **Pending:** apply migration 020 in Supabase SQL editor; `deleteProject` RPC (row 7b) still open.
-2. **PR 2 — Mobile polish** (row 9): touch targets only.
-3. **PR 3 — Performance** (rows 10–11): batched signing + `next/image`.
-4. **PR 4 — Type hygiene** (row 12): regen + remove casts. Test `npm run build` carefully.
-5. **PR 5 — CSS architecture** (row 13): bigger move; do alone.
-6. **PR 6 — Polish** (rows 14–20): can ship as smaller commits or one polish PR.
+1. **PR 1 — A11y & correctness** ✓ shipped to `main` 2026-05-02. **Pending:** apply migration 020 in Supabase SQL editor; `deleteProject` RPC (row 7b) still open.
+2. **PR 2 — Mobile polish** ✓ shipped to `main` 2026-05-02.
+3. **PR 3 — Performance** ✓ shipped to `main` 2026-05-02. Low-priority studio thumbs deferred.
+4. **Spinner fixes** ✓ shipped to `main` 2026-05-02 (keyframes to globals.css + loop-boundary dashoffset fix).
+5. **PR 4 — Type hygiene** (row 12): regen + remove casts. Test `npm run build` carefully.
+6. **PR 5 — CSS architecture** (row 13): bigger move; do alone.
+7. **PR 6 — Polish** (rows 14–20): can ship as smaller commits or one polish PR.
 
 ---
 
