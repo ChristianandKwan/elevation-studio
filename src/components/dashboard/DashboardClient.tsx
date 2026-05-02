@@ -328,7 +328,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               >
                 <div className="project-card-thumb">
                   {p.thumbnailUrl
-                    ? <img src={p.thumbnailUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    ? <Image src={p.thumbnailUrl} alt={p.name} fill unoptimized style={{ objectFit: 'cover' }} />
                     : <div className="project-card-thumb-placeholder"><span>{p.name.charAt(0)}</span></div>
                   }
                 </div>

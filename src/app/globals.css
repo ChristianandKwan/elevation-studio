@@ -128,7 +128,7 @@ body {
 }
 .project-card:hover { border-color: var(--accent); box-shadow: 0 4px 20px rgba(0,0,0,.08); }
 .project-card-thumb {
-  height: 160px; background: #E5E0D8;
+  position: relative; height: 160px; background: #E5E0D8;
   background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,.06) 1px, transparent 0);
   background-size: 20px 20px; display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
@@ -675,7 +675,7 @@ body {
 .client-zoom-btn:hover { background: var(--cream); }
 .client-zoom-label { font-size: 11px; font-family: var(--font-karla, 'Karla'), sans-serif; color: var(--mid); min-width: 32px; text-align: center; }
 .client-elev-wrap { position: relative; display: inline-block; box-shadow: 0 4px 24px rgba(0,0,0,.15); flex-shrink: 0; }
-.client-elev-img { display: block; }
+.client-elev-img { display: block; width: 100%; height: auto; }
 
 /* Sidebar */
 .client-sidebar {

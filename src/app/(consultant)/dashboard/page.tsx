@@ -49,56 +49,60 @@ export default async function DashboardPage() {
     .eq('archived', false)
     .order('created_at', { ascending: false })
 
-  const projectsWithThumbs = await Promise.all(
-    (projects ?? []).map(async (p) => { try {
-      const sortedElevations = [...(p.elevations ?? [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
-      const firstOption = sortedElevations[0]?.elevation_options?.find(
-        (o: { option: string }) => o.option === 'A'
-      )
+  // Extract first option per project (sorted by display_order, option A preferred)
+  const projectMeta = (projects ?? []).map(p => {
+    const sortedElevations = [...(p.elevations ?? [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+    const firstOption = sortedElevations[0]?.elevation_options?.find(
+      (o: { option: string }) => o.option === 'A'
+    )
+    const elevCount = p.elevations?.length ?? 0
+    const pickedCount = (p.elevations ?? []).filter((e: { client_picked_option: string | null }) => e.client_picked_option != null).length
+    const approvedCount = (p.elevations ?? []).filter((e: { elevation_options: Array<{ approved: boolean }> }) =>
+      e.elevation_options?.some(o => o.approved)
+    ).length
+    return { p, firstOption, elevCount, pickedCount, approvedCount }
+  })
 
-      const origW = firstOption?.orig_w ?? 0
-      const origH = firstOption?.orig_h ?? 0
-      const scalePxPerCm = firstOption?.scale_px_per_cm ?? null
+  // Collect paths for batch signing — two RPCs instead of N
+  const thumbPaths = projectMeta
+    .filter(m => m.firstOption?.thumbnail_path)
+    .map(m => m.firstOption!.thumbnail_path as string)
+  const fallbackPaths = projectMeta
+    .filter(m => !m.firstOption?.thumbnail_path && m.firstOption?.image_path)
+    .map(m => m.firstOption!.image_path as string)
 
-      let thumbnailUrl: string | null = null
+  const [thumbResult, fallbackResult] = await Promise.all([
+    thumbPaths.length > 0
+      ? supabaseService.storage.from('thumbnails').createSignedUrls(thumbPaths, 3600)
+      : Promise.resolve({ data: [] as Array<{ path: string; signedUrl: string }> }),
+    fallbackPaths.length > 0
+      ? supabaseService.storage.from('elevation-images').createSignedUrls(fallbackPaths, 3600)
+      : Promise.resolve({ data: [] as Array<{ path: string; signedUrl: string }> }),
+  ])
 
-      // Prefer the cached composited thumbnail
-      if (firstOption?.thumbnail_path) {
-        const { data: thumbSigned } = await supabaseService.storage
-          .from('thumbnails')
-          .createSignedUrl(firstOption.thumbnail_path, 3600)
-        thumbnailUrl = thumbSigned?.signedUrl ?? null
-      }
+  const thumbMap = new Map((thumbResult.data ?? []).map(r => [r.path, r.signedUrl]))
+  const fallbackMap = new Map((fallbackResult.data ?? []).map(r => [r.path, r.signedUrl]))
 
-      // Fallback: plain elevation image (no compositing on the hot path)
-      if (!thumbnailUrl && firstOption?.image_path) {
-        const { data: elevSigned } = await supabaseService.storage
-          .from('elevation-images')
-          .createSignedUrl(firstOption.image_path, 3600)
-        thumbnailUrl = elevSigned?.signedUrl ?? null
-      }
-
-      const elevCount = p.elevations?.length ?? 0
-      const pickedCount = (p.elevations ?? []).filter((e: { client_picked_option: string | null }) => e.client_picked_option != null).length
-      const approvedCount = (p.elevations ?? []).filter((e: { elevation_options: Array<{ approved: boolean }> }) =>
-        e.elevation_options?.some(o => o.approved)
-      ).length
-
-      return {
-        ...p,
-        thumbnailUrl,
-        elevCount,
-        artCount: 0,
-        artworks: [],
-        origW,
-        origH,
-        scalePxPerCm,
-        pickedCount,
-        approvedCount,
-      }
-    } catch { return { ...p, thumbnailUrl: null, elevCount: p.elevations?.length ?? 0, artCount: 0, artworks: [], origW: 0, origH: 0, scalePxPerCm: null, pickedCount: 0, approvedCount: 0 } }
-    })
-  )
+  const projectsWithThumbs = projectMeta.map(({ p, firstOption, elevCount, pickedCount, approvedCount }) => {
+    let thumbnailUrl: string | null = null
+    if (firstOption?.thumbnail_path) {
+      thumbnailUrl = thumbMap.get(firstOption.thumbnail_path) ?? null
+    } else if (firstOption?.image_path) {
+      thumbnailUrl = fallbackMap.get(firstOption.image_path) ?? null
+    }
+    return {
+      ...p,
+      thumbnailUrl,
+      elevCount,
+      artCount: 0,
+      artworks: [],
+      origW: firstOption?.orig_w ?? 0,
+      origH: firstOption?.orig_h ?? 0,
+      scalePxPerCm: firstOption?.scale_px_per_cm ?? null,
+      pickedCount,
+      approvedCount,
+    }
+  })
 
   return (
     <DashboardClient
