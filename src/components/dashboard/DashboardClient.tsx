@@ -179,9 +179,8 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
       setConfirmDeleteId(null)
       setMenuOpenId(null)
       showStatus('Project deleted')
-    } catch (err) {
-      const msg = (err as { message?: string })?.message ?? 'unknown'
-      showStatus(`Delete failed: ${msg}`)
+    } catch {
+      showStatus('Failed to delete project — please try again')
       setConfirmDeleteId(null)
     } finally {
       setDeleting(false)
