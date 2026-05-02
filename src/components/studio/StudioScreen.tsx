@@ -614,10 +614,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             ) : '← Dashboard'}
           </button>
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-          <div className="studio-project-name">
+          <h2 className="studio-project-name">
             <strong>{project.name}</strong>
             {project.client_name && <span> — {project.client_name}</span>}
-          </div>
+          </h2>
           {studio.saveStatus === 'saving' && (
             <span className="save-status save-status--saving">Saving…</span>
           )}

@@ -218,9 +218,9 @@ export default function ClientElevation({
                     <span>Total</span>
                     <span className="amount">{formatPrice(totalCost)}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Prices exclude VAT.</div>
+                  <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 6 }}>Prices exclude VAT.</div>
                   {budgetPct !== null && (
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 2 }}>
                       {budgetPct.toFixed(1)}% of project budget
                     </div>
                   )}
@@ -257,9 +257,9 @@ export default function ClientElevation({
                     <span>Total</span>
                     <span className="amount">{formatPrice(totalCost)}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Prices exclude VAT.</div>
+                  <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 6 }}>Prices exclude VAT.</div>
                   {budgetPct !== null && (
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 2 }}>
                       {budgetPct.toFixed(1)}% of project budget
                     </div>
                   )}
