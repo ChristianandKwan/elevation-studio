@@ -125,7 +125,7 @@ export default function ClientElevation({
           >+</button>
           <button
             className="client-zoom-btn"
-            style={{ fontSize: 10, width: 32, letterSpacing: 0.5 }}
+            style={{ fontSize: 10, letterSpacing: 0.5 }}
             onClick={() => { setRefitKey(k => k + 1); onZoom(1.0) }}
             title="Fit to viewport"
           >Fit</button>

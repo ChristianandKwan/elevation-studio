@@ -668,7 +668,7 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 .client-zoom-btn {
-  width: 24px; height: 24px; border: none; background: none; cursor: pointer;
+  min-width: 36px; height: 36px; border: none; background: none; cursor: pointer;
   font-size: 16px; line-height: 1; color: var(--charcoal); border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
 }
@@ -702,9 +702,9 @@ body {
 .client-art-name { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .client-art-dims { font-size: 11px; color: var(--mid); }
 .client-art-eye {
-  background: none; border: 1px solid var(--border); padding: 4px; cursor: pointer;
+  background: none; border: 1px solid var(--border); padding: 0; cursor: pointer;
   color: var(--mid); flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-  transition: border-color .15s, color .15s;
+  transition: border-color .15s, color .15s; width: 36px; height: 36px;
 }
 .client-art-eye:hover { color: var(--charcoal); border-color: var(--charcoal); }
 .client-art-eye.hidden-art { color: var(--border); }
