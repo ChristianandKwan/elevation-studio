@@ -158,33 +158,21 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     setDeleting(true)
     const supabase = createClient()
     try {
-      // Fetch all elevation image paths
-      const { data: elevOpts } = await supabase
-        .from('elevation_options')
-        .select('image_path, elevations!inner(project_id)')
-        .eq('elevations.project_id', id)
-
-      // Fetch all artwork image paths
-      const { data: artworks } = await supabase
-        .from('artworks')
-        .select('image_path, elevation_options!inner(elevations!inner(project_id))')
-        .eq('elevation_options.elevations.project_id', id)
-
-      // Delete elevation images from storage
-      const elevPaths = (elevOpts ?? []).map((o: { image_path: string | null }) => o.image_path).filter(Boolean) as string[]
-      if (elevPaths.length) {
-        await supabase.storage.from('elevation-images').remove(elevPaths)
-      }
-
-      // Delete artwork images from storage
-      const artPaths = (artworks ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
-      if (artPaths.length) {
-        await supabase.storage.from('artwork-images').remove(artPaths)
-      }
-
-      // Delete the project (cascades all DB records)
-      const { error } = await supabase.from('projects').delete().eq('id', id)
+      const { data, error } = await supabase.rpc('delete_project', { p_id: id })
       if (error) throw error
+
+      const { elev_paths, thumb_paths, art_paths } = data as {
+        elev_paths: string[]
+        thumb_paths: string[]
+        art_paths: string[]
+      }
+
+      // Storage removes are best-effort — DB row is already gone
+      await Promise.all([
+        elev_paths.length  ? supabase.storage.from('elevation-images').remove(elev_paths)  : Promise.resolve(),
+        thumb_paths.length ? supabase.storage.from('thumbnails').remove(thumb_paths)        : Promise.resolve(),
+        art_paths.length   ? supabase.storage.from('artwork-images').remove(art_paths)      : Promise.resolve(),
+      ])
 
       setProjects(prev => prev.filter(p => p.id !== id))
       setArchivedProjects(prev => prev.filter(p => p.id !== id))
