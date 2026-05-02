@@ -21,12 +21,12 @@ This document is the full output of an impeccable review against `MEMORY.md` + `
 ## Project context (for a fresh session)
 
 - **What it is.** Elevation Studio — a bespoke web app for Christian & Kwan, a London art consultancy. Consultants upload photos of client walls (elevations), scale them, place artwork images on them, and share a proposal link. Clients view the proposal, pick between Option A / B (or more), and approve.
-- **Stack.** Next.js 16 + React 19 + Supabase (`@supabase/ssr`) + Tailwind v4 (currently barely used). TypeScript strict. Deployed on Vercel.
+- **Stack.** Next.js 16 + React 19 + Supabase (`@supabase/ssr`). TypeScript strict. Deployed on Vercel. (Tailwind v4 removed 2026-05-02.)
 - **Critical context.** `AGENTS.md` says *"This is NOT the Next.js you know"* — read `node_modules/next/dist/docs/` before touching Next APIs.
 - **Two registers.** The studio (consultant tool) is the **product** register — design serves the task. The client portal is closer to **brand** — gallery aesthetic, design IS the deliverable.
 - **Key files.**
   - `src/hooks/useStudio.ts` (~1.97 KLOC, load-bearing — touch with care)
-  - `src/app/globals.css` (~1.09 KLOC / 57 KB — monolithic; split is one of the suggestions)
+  - `src/app/globals.css` (tokens, reset, shared components — split into `dashboard.css`, `studio.css`, `client-portal.css`, `budget.css` 2026-05-02)
   - `src/components/client/ClientPortal.tsx`, `ClientElevation.tsx`
   - `src/components/dashboard/DashboardClient.tsx`
   - `src/components/budget/*` (newest feature, mostly clean)
@@ -75,6 +75,14 @@ The prior senior code review (`docs/code-review-followups.md`, dated 2026-04-21)
 
 - `ArcSpinner` and `DrawLoader` keyframes moved from inline JSX `<style>` tags to `globals.css`. Previously, any re-render of `ArcSpinner` (e.g. the luminance-sample `setVariant` call) replaced the `<style>` node and reset the animation clock, causing a stutter.
 - `ck-arc-dash` loop-boundary stutter fixed. The `100%` keyframe previously used `stroke-dashoffset: -224`, placing the arc at ~320° just before the loop reset to 0° — a visible ~40° jump each cycle. Changed to `dashoffset: 0` so start and end positions match exactly.
+
+**PR 4 — CSS architecture** (shipped to `dev` 2026-05-02, commit `2fa1d32`):
+
+- **P2-8** — `globals.css` split into four per-surface files (`dashboard.css`, `studio.css`, `client-portal.css`, `budget.css`). `globals.css` now contains only tokens, reset, shared components (buttons, modals, status bar), keyframes, and login styles. Tailwind v4 and `@tailwindcss/postcss` uninstalled (18 packages removed). Pure CSS going forward.
+
+**PR 5 — Delete project RPC** (shipped to `dev` 2026-05-02, commit `4e772a1`):
+
+- **P2-6 (complete)** — `deleteProject` replaced with atomic `delete_project()` Postgres RPC (migration `021_delete_project_rpc.sql`). Collects elevation, thumbnail, and artwork storage paths, deletes the project row (cascade handles all child records), returns paths for best-effort client-side storage cleanup. Also fixes a pre-existing gap: thumbnails bucket was never cleaned up on deletion. **Migration 021 must be applied in Supabase SQL editor.**
 
 If you spot any of the above and think it's open, double-check before editing.
 
@@ -125,11 +133,9 @@ If you spot any of the above and think it's open, double-check before editing.
 
 - **Shipped:** `--mid` changed from `#7A746E` to `#6E6862` in `globals.css`. Contrast against cream is now ~4.7:1. (PR 1, 2026-05-02)
 
-#### P2-6 `createProject` / `deleteProject` non-atomic — **PARTIAL**
+#### ~~P2-6 `createProject` / `deleteProject` non-atomic~~ ✓ SHIPPED
 
-- **Shipped:** `createProject` replaced with atomic `create_project()` Postgres RPC (migration `020_create_project_rpc.sql`, `security invoker`). `DashboardClient.tsx` now makes one `.rpc()` call. **Migration must be applied to Supabase via SQL editor** before it works in production.
-- **Still open:** `deleteProject` (`DashboardClient.tsx:167–210`) retains the sequential client-side pattern. It does have a try/catch and only the DB delete can cause data loss (storage removes are best-effort), so risk is lower — but still worth an RPC for the same reason.
-- **Command:** `$impeccable harden`.
+- **Shipped:** Both `createProject` and `deleteProject` replaced with atomic Postgres RPCs (`create_project` migration 020, `delete_project` migration 021). Both use `security invoker`. Migrations must be applied in Supabase SQL editor. `deleteProject` also fixed a pre-existing gap where thumbnails bucket paths were never cleaned up.
 
 #### P2-7 Strict TypeScript posture undermined by `any` casts in SSR pages
 
@@ -138,15 +144,9 @@ If you spot any of the above and think it's open, double-check before editing.
 - **Fix:** Regenerate Supabase types (`supabase gen types typescript --local > src/types/db.ts` or equivalent), import the Database generic, and remove the casts.
 - **Command:** `$impeccable harden`.
 
-#### P2-8 `globals.css` is 57 KB and monolithic; Tailwind v4 set up but barely used
+#### ~~P2-8 `globals.css` is 57 KB and monolithic; Tailwind v4 set up but barely used~~ ✓ SHIPPED
 
-- **Where:** `src/app/globals.css` (1091 lines), `tailwind.config` / `@import "tailwindcss"` in place but almost no utility classes used in components.
-- **Why it matters:** Two parallel systems = highest-friction change cost. A non-technical owner reading the CSS for the first time has 1091 lines to wade through.
-- **Fix — pick one:**
-  - **Commit to CSS.** Split `globals.css` per-surface (`dashboard.css`, `studio.css`, `client-portal.css`, `budget.css`) and remove the Tailwind import + dependencies.
-  - **Lean into Tailwind v4.** Move the `:root` tokens to `@theme`; migrate the most-touched surfaces (buttons, modals, layout primitives) to utility classes; keep the highly-bespoke layers (canvas, perspective, foreground masks) in CSS.
-  - The first option is the smaller diff and the right call for an internal tool with no dedicated front-end engineer.
-- **Command:** `$impeccable distill` (option 1) or `$impeccable extract` (option 2).
+- **Shipped:** Split into `dashboard.css`, `studio.css`, `client-portal.css`, `budget.css`. Tailwind removed. (PR 4, 2026-05-02)
 
 #### ~~P2-9 Token expiry~~ — CLOSED / WILL NOT FIX
 
@@ -217,13 +217,13 @@ This is the order to attack things in. Each item maps to one impeccable command.
 | 5 | P2-2 | Promote dashboard / studio titles to `<h1>` / `<h2>` | `$impeccable harden` | ✓ PR 1 |
 | 6 | P2-5 | Darken `--mid` to `#6E6862` for AA contrast | `$impeccable harden` | ✓ PR 1 |
 | 7 | P2-6 | `createProject` → Postgres RPC (migration 020) | `$impeccable harden` | ✓ PR 1 (apply migration in Supabase) |
-| 7b | P2-6 | `deleteProject` → Postgres RPC | `$impeccable harden` | **open** |
+| 7b | P2-6 | `deleteProject` → Postgres RPC | `$impeccable harden` | ✓ PR 5 (apply migration 021 in Supabase) |
 | 8 | P2-9 | Token expiry 90 → 42 days | — | ✗ will not fix (user decision) |
 | 9 | P1-2 | Bump client portal touch targets to ≥36px | `$impeccable adapt` | ✓ PR 2 |
 | 10 | P2-3 | Batch dashboard thumbnail signing | `$impeccable optimize` | ✓ PR 3 |
 | 11 | P2-4 | `next/image` + `unoptimized` on dashboard thumbs and client elevation | `$impeccable optimize` | ✓ PR 3 (low-pri studio thumbs deferred) |
 | 12 | P2-7 | Regenerate Supabase types; remove `as any` casts | `$impeccable harden` | open |
-| 13 | P2-8 | Either split `globals.css` per surface or commit to Tailwind v4 + `@theme` | `$impeccable distill` or `$impeccable extract` | open |
+| 13 | P2-8 | Either split `globals.css` per surface or commit to Tailwind v4 + `@theme` | `$impeccable distill` or `$impeccable extract` | ✓ PR 4 |
 | 14 | P3-5 | Run `$impeccable document` to generate `DESIGN.md` from current tokens | `$impeccable document` | open |
 | 15 | P3-1 | Replace `.elev-wrap` heavy shadow with border + softer shadow | `$impeccable polish` | open |
 | 16 | P3-2 | Remove `backdrop-filter: blur` from `.modal-bg` and `.client-zoom-controls` | `$impeccable polish` | open |
@@ -233,13 +233,14 @@ This is the order to attack things in. Each item maps to one impeccable command.
 | 20 | — | Final pass | `$impeccable polish` | open |
 
 **Batches:**
-1. **PR 1 — A11y & correctness** ✓ shipped to `main` 2026-05-02. **Pending:** apply migration 020 in Supabase SQL editor; `deleteProject` RPC (row 7b) still open.
+1. **PR 1 — A11y & correctness** ✓ shipped to `main` 2026-05-02. Migration 020 applied to Supabase.
 2. **PR 2 — Mobile polish** ✓ shipped to `main` 2026-05-02.
 3. **PR 3 — Performance** ✓ shipped to `main` 2026-05-02. Low-priority studio thumbs deferred.
 4. **Spinner fixes** ✓ shipped to `main` 2026-05-02 (keyframes to globals.css + loop-boundary dashoffset fix).
-5. **PR 4 — Type hygiene** (row 12): regen + remove casts. Test `npm run build` carefully.
-6. **PR 5 — CSS architecture** (row 13): bigger move; do alone.
-7. **PR 6 — Polish** (rows 14–20): can ship as smaller commits or one polish PR.
+5. **PR 4 — CSS architecture** ✓ shipped to `dev` 2026-05-02. Globals split, Tailwind removed.
+6. **PR 5 — Delete project RPC** ✓ shipped to `dev` 2026-05-02. **Pending:** apply migration 021 in Supabase SQL editor; PRs 4+5 not yet merged to `main`.
+7. **Next — Type hygiene** (row 12): regen Supabase types + remove `as any` casts. Test `npm run build` carefully.
+8. **After that — Polish** (rows 14–20): can ship as smaller commits or one polish PR.
 
 ---
 
