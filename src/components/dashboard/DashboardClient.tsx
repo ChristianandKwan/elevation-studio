@@ -71,6 +71,18 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     return () => document.removeEventListener('click', handleOutsideClick)
   }, [menuOpenId])
 
+  // Escape closes whichever modal is open
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (showModal) { setShowModal(false); setNewName(''); setNewClient(''); setNewBudget(''); setNewElevName('') }
+      else if (renameProjectId && !renaming) setRenameProjectId(null)
+      else if (confirmDeleteId && !deleting) setConfirmDeleteId(null)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showModal, renameProjectId, renaming, confirmDeleteId, deleting])
+
   function showStatus(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
@@ -90,44 +102,22 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
     setCreating(true)
 
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    // Create project
     const budgetVal = parseFloat(newBudget)
-    const { data: project, error: pErr } = await supabase
-      .from('projects')
-      .insert({ name, client_name: newClient.trim() || 'Unnamed client', consultant_id: user.id, budget: !isNaN(budgetVal) && budgetVal > 0 ? budgetVal : null })
-      .select()
-      .single()
+    const budget = !isNaN(budgetVal) && budgetVal > 0 ? budgetVal : null
 
-    if (pErr || !project) { showStatus('Failed to create project'); setCreating(false); return }
-
-    // Create first elevation
-    const { data: elevation, error: eErr } = await supabase
-      .from('elevations')
-      .insert({ project_id: project.id, name: elevName, display_order: 0 })
-      .select()
-      .single()
-
-    if (eErr || !elevation) { showStatus('Failed to create elevation'); setCreating(false); return }
-
-    // Create A + B options
-    await supabase.from('elevation_options').insert([
-      { elevation_id: elevation.id, option: 'A' },
-      { elevation_id: elevation.id, option: 'B' },
-    ])
-
-    // Log activity
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'created',
-      text: `Project created by ${profile.name}`,
+    const { data: projectId, error } = await supabase.rpc('create_project', {
+      p_name: name,
+      p_client_name: newClient.trim() || 'Unnamed client',
+      p_budget: budget,
+      p_elev_name: elevName,
+      p_profile_name: profile.name,
     })
+
+    if (error || !projectId) { showStatus('Failed to create project'); setCreating(false); return }
 
     setNewName(''); setNewClient(''); setNewBudget(''); setNewElevName(''); setShowModal(false); setCreating(false)
     showStatus(`Project "${name}" created`)
-    router.push(`/projects/${project.id}`)
+    router.push(`/projects/${projectId}`)
   }
 
   async function archiveProject(id: string) {
@@ -262,7 +252,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
           <div className="dash-section-header">
             <div>
               <div className="dash-kicker">Projects</div>
-              <div className="dash-section-title">Your Work</div>
+              <h1 className="dash-section-title">Your Work</h1>
             </div>
             <div className="dash-view-tabs">
               <button
@@ -286,7 +276,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                   <ArcSpinner />
                 </div>
               ) : archivedProjects.length === 0 ? (
-                <div style={{ color: 'var(--muted)', padding: '1rem' }}>No archived projects.</div>
+                <div style={{ color: 'var(--mid)', padding: '1rem' }}>No archived projects.</div>
               ) : archivedProjects.map(p => (
                 <div key={p.id} className="project-card project-card--archived">
                   <div className="project-card-thumb">
@@ -301,7 +291,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
                       <span className="project-card-badge badge-draft">
                         {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
                       </span>
-                      <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>Archived</span>
+                      <span style={{ color: 'var(--mid)', fontSize: '0.75rem' }}>Archived</span>
                     </div>
                   </div>
                   {/* Kebab menu */}
@@ -338,7 +328,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               >
                 <div className="project-card-thumb">
                   {p.thumbnailUrl
-                    ? <img src={p.thumbnailUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    ? <Image src={p.thumbnailUrl} alt={p.name} fill unoptimized style={{ objectFit: 'cover' }} />
                     : <div className="project-card-thumb-placeholder"><span>{p.name.charAt(0)}</span></div>
                   }
                 </div>
@@ -382,8 +372,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
             <div className="modal-title">New Project</div>
             <div className="modal-sub">Create a new art placement project for a client.</div>
             <div className="field">
-              <label className="field-label">Project Name</label>
+              <label className="field-label" htmlFor="np-name">Project Name</label>
               <input
+                id="np-name"
                 className="field-input"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
@@ -393,8 +384,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               />
             </div>
             <div className="field">
-              <label className="field-label">Client Name</label>
+              <label className="field-label" htmlFor="np-client">Client Name</label>
               <input
+                id="np-client"
                 className="field-input"
                 value={newClient}
                 onChange={e => setNewClient(e.target.value)}
@@ -403,8 +395,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               />
             </div>
             <div className="field">
-              <label className="field-label">Budget (£, optional)</label>
+              <label className="field-label" htmlFor="np-budget">Budget (£, optional)</label>
               <input
+                id="np-budget"
                 type="number"
                 className="field-input"
                 value={newBudget}
@@ -416,8 +409,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               />
             </div>
             <div className="field">
-              <label className="field-label">First Elevation Name <span style={{ color: 'var(--red)' }}>*</span></label>
+              <label className="field-label" htmlFor="np-elev">First Elevation Name <span style={{ color: 'var(--red)' }}>*</span></label>
               <input
+                id="np-elev"
                 className="field-input"
                 value={newElevName}
                 onChange={e => setNewElevName(e.target.value)}
@@ -441,8 +435,9 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-title">Rename Project</div>
             <div className="field">
-              <label className="field-label">Project Name</label>
+              <label className="field-label" htmlFor="rn-name">Project Name</label>
               <input
+                id="rn-name"
                 className="field-input"
                 value={renameName}
                 onChange={e => setRenameName(e.target.value)}

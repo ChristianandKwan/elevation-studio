@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import NextImage from 'next/image'
 import { formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
 import { ArcSpinner } from '@/components/ui/Spinner'
@@ -125,7 +126,7 @@ export default function ClientElevation({
           >+</button>
           <button
             className="client-zoom-btn"
-            style={{ fontSize: 10, width: 32, letterSpacing: 0.5 }}
+            style={{ fontSize: 10, letterSpacing: 0.5 }}
             onClick={() => { setRefitKey(k => k + 1); onZoom(1.0) }}
             title="Fit to viewport"
           >Fit</button>
@@ -218,9 +219,9 @@ export default function ClientElevation({
                     <span>Total</span>
                     <span className="amount">{formatPrice(totalCost)}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Prices exclude VAT.</div>
+                  <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 6 }}>Prices exclude VAT.</div>
                   {budgetPct !== null && (
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 2 }}>
                       {budgetPct.toFixed(1)}% of project budget
                     </div>
                   )}
@@ -257,9 +258,9 @@ export default function ClientElevation({
                     <span>Total</span>
                     <span className="amount">{formatPrice(totalCost)}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Prices exclude VAT.</div>
+                  <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 6 }}>Prices exclude VAT.</div>
                   {budgetPct !== null && (
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 2 }}>
                       {budgetPct.toFixed(1)}% of project budget
                     </div>
                   )}
@@ -649,8 +650,16 @@ function ClientCanvas({
         ref={elevWrapRef}
         style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.15s ease' }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="client-elev-img" src={optData.imageUrl!} alt="elevation" draggable={false} ref={elevImgRef} />
+        <NextImage
+          className="client-elev-img"
+          src={optData.imageUrl!}
+          alt="elevation"
+          width={optData.orig_w || 1600}
+          height={optData.orig_h || 900}
+          unoptimized
+          draggable={false}
+          ref={elevImgRef}
+        />
         <svg
           id="client-snap-svg"
           style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', display: 'none', overflow: 'visible' }}
