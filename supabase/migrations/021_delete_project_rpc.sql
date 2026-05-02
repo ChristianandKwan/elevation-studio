@@ -44,7 +44,7 @@ begin
   select array_agg(a.image_path) filter (where a.image_path is not null)
   into v_art_paths
   from artworks a
-  join elevation_options eo on eo.id = a.elevation_option_id
+  join elevation_options eo on eo.id = a.option_id
   join elevations e on e.id = eo.elevation_id
   where e.project_id = p_id;
 
