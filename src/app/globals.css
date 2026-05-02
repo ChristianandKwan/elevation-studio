@@ -87,9 +87,9 @@ body {
 }
 @keyframes ck-arc-rotate { to { transform: rotate(360deg); } }
 @keyframes ck-arc-dash {
-  0%   { stroke-dasharray:   4 248; stroke-dashoffset:    0; }
-  60%  { stroke-dasharray: 228  24; stroke-dashoffset:    0; }
-  100% { stroke-dasharray:   4 248; stroke-dashoffset: -224; }
+  0%   { stroke-dasharray:   4 248; stroke-dashoffset: 0; }
+  60%  { stroke-dasharray: 228  24; stroke-dashoffset: 0; }
+  100% { stroke-dasharray:   4 248; stroke-dashoffset: 0; }
 }
 .modal-title {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 22px; font-weight: 400; margin-bottom: 4px;
