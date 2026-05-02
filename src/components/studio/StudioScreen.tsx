@@ -629,7 +629,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           )}
         </div>
         <div className="header-app-title">Elevation Studio</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="studio-header-right">
           {/* Studio / Budget view toggle */}
           <div className="budget-view-toggle">
             <button
