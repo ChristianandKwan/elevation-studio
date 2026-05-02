@@ -50,21 +50,6 @@ export function DrawLoader({ label, variant = 'dark' }: { label?: string; varian
         </div>
         {label && <p style={{ ...drawStyles.caption, color: captionColor }}>{label}</p>}
       </div>
-
-      <style>{`
-        @keyframes ck-draw-circle {
-          0%   { stroke-dasharray: 239; stroke-dashoffset: 239; opacity: 1; }
-          55%  { stroke-dasharray: 239; stroke-dashoffset: 0;   opacity: 1; }
-          80%  { stroke-dasharray: 239; stroke-dashoffset: 0;   opacity: 1; }
-          100% { stroke-dasharray: 239; stroke-dashoffset: 0;   opacity: 0; }
-        }
-        @keyframes ck-draw-label {
-          0%,  45% { opacity: 0; }
-          70%       { opacity: 1; }
-          90%       { opacity: 1; }
-          100%      { opacity: 0; }
-        }
-      `}</style>
     </div>
   )
 }
@@ -207,15 +192,6 @@ export function ArcSpinner({
           <span style={{ ...arcStyles.label, color: stroke }}>C&amp;K</span>
         </div>
       </div>
-
-      <style>{`
-        @keyframes ck-arc-rotate { to { transform: rotate(360deg); } }
-        @keyframes ck-arc-dash {
-          0%   { stroke-dasharray:   4 248; stroke-dashoffset:    0; }
-          60%  { stroke-dasharray: 228  24; stroke-dashoffset:    0; }
-          100% { stroke-dasharray:   4 248; stroke-dashoffset: -224; }
-        }
-      `}</style>
     </div>
   )
 }
