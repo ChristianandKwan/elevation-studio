@@ -23,6 +23,8 @@
 .project-card {
   background: var(--warm-white); border: 1px solid var(--border); cursor: pointer;
   transition: border-color .15s, box-shadow .15s; position: relative;
+  /* overflow clips the thumbnail image to the card's rounded top corners */
+  border-radius: var(--radius); overflow: hidden;
 }
 .project-card:hover { border-color: var(--accent); box-shadow: 0 4px 20px rgba(0,0,0,.08); }
 .project-card-thumb {
@@ -51,6 +53,7 @@
 .project-card-badge {
   padding: 2px 7px; font-size: 10px; font-weight: 500; letter-spacing: .04em;
   text-transform: uppercase; display: inline-flex; align-items: center;
+  border-radius: var(--radius-xs);
 }
 .badge-draft   { background: var(--cream); color: var(--mid); border: 1px solid var(--border); }
 .badge-sent    { background: var(--amber-light); color: var(--accent); border: 1px solid rgba(139,111,71,.2); }
@@ -62,7 +65,7 @@
 }
 .project-card-menu-btn {
   width: 28px; height: 28px; background: rgba(255,255,255,0.85); border: 1px solid var(--border);
-  border-radius: 4px; font-size: 16px; line-height: 1; cursor: pointer; color: var(--mid);
+  border-radius: var(--radius-sm); font-size: 16px; line-height: 1; cursor: pointer; color: var(--mid);
   display: flex; align-items: center; justify-content: center;
   opacity: 0; transition: opacity .15s;
 }
@@ -70,7 +73,7 @@
 .project-card-menu-btn:hover { color: var(--charcoal); background: white; }
 .project-card-dropdown {
   position: absolute; top: 32px; right: 0; background: white;
-  border: 1px solid var(--border); border-radius: 6px;
+  border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: 0 4px 16px rgba(0,0,0,.12); overflow: hidden; min-width: 120px;
 }
 .project-card-dropdown button {
@@ -83,7 +86,10 @@
 .project-card-dropdown button.danger:hover { background: var(--red-light); }
 .dash-view-tabs { display: flex; gap: 4px; }
 .dash-view-tab {
-  padding: 5px 14px; border-radius: 4px; font-size: 13px; font-weight: 500;
+  padding: 5px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+  /* Buttons do not inherit font-family, so without this the tabs rendered in
+     the browser's default UI font — the only two controls in the app that did. */
+  font-family: var(--font-karla, 'Karla'), sans-serif;
   background: transparent; border: 1px solid var(--border); color: var(--mid); cursor: pointer;
 }
 .dash-view-tab:hover { color: var(--charcoal); border-color: var(--charcoal); }
@@ -95,6 +101,7 @@
   border: 1px dashed var(--border); display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 8px; min-height: 240px;
   cursor: pointer; transition: border-color .15s, background .15s;
+  border-radius: var(--radius);
 }
 .project-card-new:hover { border-color: var(--accent); background: var(--accent-light); }
 .project-card-new-icon { font-size: 28px; opacity: .25; }

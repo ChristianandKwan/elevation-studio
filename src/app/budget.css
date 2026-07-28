@@ -19,7 +19,7 @@
 .budget-header-left .save-status--error { color: rgba(220,100,100,0.9); }
 
 /* VAT toggle */
-.budget-vat-toggle { display: flex; border: 1px solid rgba(255,255,255,0.2); }
+.budget-vat-toggle { display: flex; border: 1px solid rgba(255,255,255,0.2); border-radius: var(--radius-sm); overflow: hidden; }
 .budget-vat-btn {
   padding: 5px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
   background: transparent; border: none; color: rgba(255,255,255,0.45); cursor: pointer;
@@ -36,6 +36,7 @@
   padding: 6px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
   border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.6);
   cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
+  border-radius: var(--radius-sm);
 }
 .budget-preview-btn:hover { background: rgba(255,255,255,0.12); color: white; }
 .budget-preview-btn.active { background: rgba(255,255,255,0.15); color: white; border-color: rgba(255,255,255,0.5); }
@@ -45,6 +46,7 @@
   padding: 6px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
   border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.8);
   cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
+  border-radius: var(--radius-sm);
 }
 .budget-export-btn:hover { background: rgba(255,255,255,0.12); color: white; }
 
@@ -59,6 +61,7 @@
   display: inline-block; margin-top: 8px; padding: 2px 9px;
   font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
   background: var(--accent-light); color: var(--accent); border: 1px solid rgba(139,111,71,.25);
+  border-radius: var(--radius-xs);
 }
 
 /* Section kicker */
@@ -77,7 +80,7 @@
 .budget-elev-block--picked {
   background: var(--warm-white);
   border: 1px solid var(--border);
-  margin-top: 12px;
+  margin-top: 12px; border-radius: var(--radius); overflow: hidden;
 }
 .budget-elev-block--picked:first-of-type { margin-top: 16px; }
 
@@ -95,12 +98,12 @@
 .budget-elev-pick-badge {
   font-size: 11px; font-weight: 500; color: var(--green);
   background: var(--green-light); border: 1px solid rgba(46,107,79,.2);
-  padding: 2px 8px; letter-spacing: .02em;
+  padding: 2px 8px; letter-spacing: .02em; border-radius: var(--radius-xs);
 }
 .budget-elev-pending-badge {
   font-size: 11px; font-weight: 500; color: var(--red);
   background: rgba(185,64,64,.07); border: 1px solid rgba(185,64,64,.2);
-  padding: 2px 8px; letter-spacing: .02em;
+  padding: 2px 8px; letter-spacing: .02em; border-radius: var(--radius-xs);
 }
 .budget-elev-total {
   margin-left: auto; font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 20px; font-weight: 400;
@@ -111,7 +114,7 @@
 
 /* Pending elevation: two option blocks side by side */
 .budget-options-row { display: flex; gap: 14px; }
-.budget-option-block { flex: 1; border: 1px solid var(--border); background: var(--warm-white); }
+.budget-option-block { flex: 1; border: 1px solid var(--border); background: var(--warm-white); border-radius: var(--radius); overflow: hidden; }
 .budget-option-header {
   display: flex; align-items: baseline; justify-content: space-between;
   padding: 11px 14px; background: var(--cream); border-bottom: 1px solid var(--border);
@@ -142,6 +145,7 @@
 
 .budget-costs-panel {
   background: var(--warm-white); border: 1px solid var(--border); padding: 0 20px;
+  border-radius: var(--radius);
 }
 
 /* ── Additional costs rows ──────────────────────────────── */
@@ -165,7 +169,7 @@
 /* Badges */
 .budget-badge {
   font-size: 10.5px; font-weight: 500; letter-spacing: .03em;
-  padding: 2px 7px; flex-shrink: 0;
+  padding: 2px 7px; flex-shrink: 0; border-radius: var(--radius-xs);
 }
 .budget-badge--indicative {
   background: rgba(139,111,71,.09); color: var(--accent); border: 1px solid rgba(139,111,71,.28);
@@ -182,7 +186,7 @@
 .budget-inline-input {
   padding: 5px 8px; font-family: var(--font-karla, 'Karla'); font-size: 12px;
   border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
-  outline: none; width: 90px;
+  outline: none; width: 90px; border-radius: var(--radius-xs);
   -moz-appearance: textfield;
 }
 .budget-inline-input::-webkit-outer-spin-button,
@@ -191,7 +195,7 @@
 .budget-inline-input--amount { width: 80px; }
 
 /* Consultant fee mode toggle */
-.budget-fee-mode-toggle { display: flex; border: 1px solid var(--border); }
+.budget-fee-mode-toggle { display: flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
 .budget-fee-mode-btn {
   padding: 4px 10px; font-family: var(--font-karla, 'Karla'); font-size: 11px; font-weight: 500;
   background: transparent; border: none; color: var(--mid); cursor: pointer; transition: all .15s;
@@ -208,6 +212,7 @@
 .budget-custom-name-input {
   padding: 3px 6px; font-family: var(--font-karla, 'Karla'); font-size: 13px; color: var(--charcoal);
   border: 1px solid var(--border); background: var(--cream); outline: none; width: 100%; max-width: 240px;
+  border-radius: var(--radius-xs);
 }
 .budget-custom-name-input:focus { border-color: var(--charcoal); }
 .budget-custom-item-controls { display: flex; gap: 16px; padding-left: 0; }
@@ -222,7 +227,7 @@
 .budget-totals {
   margin-top: 0; padding-top: 0;
   background: var(--warm-white); border: 1px solid var(--border);
-  padding: 20px 24px; margin-top: 8px;
+  padding: 20px 24px; margin-top: 8px; border-radius: var(--radius);
 }
 .budget-totals-rows { margin-top: 0; }
 .budget-totals-row {

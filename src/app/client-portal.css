@@ -63,12 +63,12 @@
   position: absolute; bottom: 16px; right: 16px;
   display: flex; align-items: center; gap: 4px;
   background: rgba(255,255,255,0.9); backdrop-filter: blur(4px);
-  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 .client-zoom-btn {
   min-width: 36px; height: 36px; border: none; background: none; cursor: pointer;
-  font-size: 16px; line-height: 1; color: var(--charcoal); border-radius: 4px;
+  font-size: 16px; line-height: 1; color: var(--charcoal); border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
 }
 .client-zoom-btn:hover { background: var(--cream); }
@@ -104,6 +104,7 @@
   background: none; border: 1px solid var(--border); padding: 0; cursor: pointer;
   color: var(--mid); flex-shrink: 0; display: flex; align-items: center; justify-content: center;
   transition: border-color .15s, color .15s; width: 36px; height: 36px;
+  border-radius: var(--radius-sm);
 }
 .client-art-eye:hover { color: var(--charcoal); border-color: var(--charcoal); }
 .client-art-eye.hidden-art { color: var(--border); }
@@ -112,7 +113,7 @@
   width: 100%; resize: none; height: 80px; box-sizing: border-box;
   font-family: var(--font-karla, 'Karla'); font-size: 12px; padding: 8px 10px; line-height: 1.5;
   border: 1px solid var(--border); background: var(--cream);
-  outline: none; color: var(--charcoal);
+  outline: none; color: var(--charcoal); border-radius: var(--radius-sm);
 }
 .client-notes-textarea:focus { border-color: var(--charcoal); }
 .client-notes-textarea:disabled { opacity: .6; cursor: not-allowed; }
@@ -131,13 +132,13 @@
 .client-aw-overlay.locked { cursor: default; }
 .client-aw-tag {
   position: absolute; bottom: calc(100% + 4px); left: 0; background: var(--charcoal); color: white;
-  font-size: 10px; padding: 2px 7px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  font-size: 10px; padding: 2px 7px; border-radius: var(--radius-xs); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
   opacity: 0; pointer-events: none; transition: opacity .15s;
 }
 .client-aw-overlay:hover .client-aw-tag { opacity: 1; }
 
 /* Approval UI */
-.approval-status-bar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; }
+.approval-status-bar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-radius: var(--radius); }
 .approval-status-bar.approved { background: var(--green-light); border: 1px solid rgba(46,107,79,.2); }
 .approval-status-bar.pending { background: var(--amber-light); border: 1px solid rgba(139,111,71,.2); }
 .approval-status-icon { font-size: 18px; }
@@ -158,9 +159,26 @@
 .activity-time { font-size: 10.5px; color: var(--mid); flex-shrink: 0; }
 
 /* ── CLIENT PICK PANEL ───────────────────────────────────── */
-.client-pick-panel { padding: 16px; background: var(--cream); border: 1px solid var(--border); }
+.client-pick-panel { padding: 16px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); }
 .client-pick-title { font-size: 13px; font-weight: 500; color: var(--charcoal); margin-bottom: 6px; }
 .client-pick-hint { font-size: 11.5px; color: var(--mid); margin-bottom: 14px; line-height: 1.5; }
+
+/* ── EXPIRED LINK ────────────────────────────────────────── */
+.client-expired {
+  min-height: 100vh; background: var(--charcoal);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 24px; text-align: center;
+}
+.client-expired-logo { height: 56px; width: auto; margin-bottom: 40px; }
+.client-expired-title {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
+  font-size: 30px; font-weight: 300; color: #fff; margin-bottom: 16px;
+}
+.client-expired-body {
+  font-size: 13px; line-height: 1.75; color: rgba(255,255,255,.55);
+  max-width: 420px; margin-bottom: 12px;
+}
+.client-expired-body:last-child { margin-bottom: 0; }
 
 /* Elevation name label */
 .elevation-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 17px; font-weight: 400; }

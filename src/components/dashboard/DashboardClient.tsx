@@ -383,7 +383,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               />
             </div>
             <div className="field">
-              <label className="field-label" htmlFor="np-budget">Budget (£, optional)</label>
+              <label className="field-label" htmlFor="np-budget">Budget (£, exc VAT, optional)</label>
               <input
                 id="np-budget"
                 type="number"

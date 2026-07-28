@@ -15,6 +15,16 @@
   --amber: #8B6F47;
   --amber-light: rgba(139,111,71,0.12);
   --badge-size: 18px;
+
+  /* Corner rounding. Three steps rather than one so nested corners stay
+     concentric: a panel is always rounder than the buttons sitting inside it,
+     which are rounder than the badges inside those. --radius-sm is 4px because
+     that is what the dashboard's Active / Archived tabs already used, and they
+     were the reference for softening the rest. Canvas, artwork overlays and
+     image thumbnails stay square — rounding those would clip artwork. */
+  --radius: 6px;      /* cards, panels, modals, dropdowns */
+  --radius-sm: 4px;   /* buttons, inputs, tabs, chips */
+  --radius-xs: 3px;   /* badges and other small labels */
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,6 +49,7 @@ body {
   letter-spacing: .02em; cursor: pointer;
   border: 1px solid var(--charcoal); background: transparent;
   color: var(--charcoal); transition: all .15s; white-space: nowrap; text-decoration: none;
+  border-radius: var(--radius-sm);
 }
 .btn:hover { background: var(--charcoal); color: white; }
 .btn:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
@@ -66,6 +77,7 @@ body {
   background: var(--warm-white); border: 1px solid var(--border);
   padding: 30px; min-width: 340px; max-width: 480px; width: 92%;
   animation: modalIn .15s ease; max-height: 90vh; overflow-y: auto;
+  border-radius: var(--radius);
 }
 .modal-title {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 22px; font-weight: 400; margin-bottom: 4px;
@@ -79,7 +91,7 @@ body {
 .field-input {
   width: 100%; padding: 9px 11px; font-family: var(--font-karla, 'Karla'); font-size: 13px;
   border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
-  outline: none; transition: border-color .15s;
+  outline: none; transition: border-color .15s; border-radius: var(--radius-sm);
 }
 .field-input:focus { border-color: var(--charcoal); }
 .field-row { display: flex; gap: 10px; }
@@ -91,6 +103,7 @@ body {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: var(--charcoal); color: white; padding: 9px 20px; font-size: 12px;
   opacity: 0; transition: opacity .25s; pointer-events: none; white-space: nowrap; z-index: 9999;
+  border-radius: var(--radius-sm);
 }
 .status-bar.show { opacity: 1; }
 
@@ -128,12 +141,13 @@ body {
 .login-input {
   width: 100%; padding: 10px 13px; font-family: var(--font-karla, 'Karla'); font-size: 13px;
   border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.06);
-  color: white; outline: none; transition: border-color .15s;
+  color: white; outline: none; transition: border-color .15s; border-radius: var(--radius-sm);
 }
 .login-input:focus { border-color: rgba(255,255,255,.4); }
 .login-btn {
   width: 100%; padding: 11px; font-family: var(--font-karla, 'Karla'); font-size: 13px; font-weight: 500;
   background: white; color: var(--charcoal); border: none; cursor: pointer; margin-top: 8px; transition: background .15s;
+  border-radius: var(--radius-sm);
 }
 .login-btn:hover { background: #eee; }
 .login-hint { font-size: 11px; color: rgba(255,255,255,.3); margin-top: 16px; text-align: center; line-height: 1.5; }
