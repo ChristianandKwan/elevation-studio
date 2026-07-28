@@ -31,15 +31,23 @@ function mapRow(row: Record<string, unknown>): ProjectBudget {
   }
 }
 
-export function useBudgetState(projectId: string): UseBudgetStateResult {
-  const [budget, setBudget] = useState<ProjectBudget | null>(null)
+/**
+ * @param initialBudget  When provided (client portal), the row has already been
+ *   fetched server-side and the hook skips Supabase entirely — the browser
+ *   there holds no database access. `undefined` keeps the consultant
+ *   behaviour: load on mount, lazy-create, and persist edits.
+ */
+export function useBudgetState(projectId: string, initialBudget?: ProjectBudget | null): UseBudgetStateResult {
+  const serverProvided = initialBudget !== undefined
+  const [budget, setBudget] = useState<ProjectBudget | null>(initialBudget ?? null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(!serverProvided)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const budgetIdRef = useRef<string | null>(null)
+  const budgetIdRef = useRef<string | null>(initialBudget?.id ?? null)
 
   // Load on mount — lazy-create row if none exists
   useEffect(() => {
+    if (serverProvided) return
     let cancelled = false
     async function load() {
       setIsLoading(true)
@@ -83,10 +91,13 @@ export function useBudgetState(projectId: string): UseBudgetStateResult {
     }
     load()
     return () => { cancelled = true }
-  }, [projectId])
+  }, [projectId, serverProvided])
 
-  // Stable debounced persist — references only refs, never stale state
+  // Stable debounced persist — references only refs, never stale state.
+  // No-op when the row came from the server: that path is the read-only
+  // client portal, which cannot write to project_budgets.
   const persistDebounced = useCallback((next: ProjectBudget) => {
+    if (serverProvided) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     setSaveStatus('saving')
     debounceRef.current = setTimeout(async () => {
@@ -105,7 +116,7 @@ export function useBudgetState(projectId: string): UseBudgetStateResult {
       setSaveStatus(error ? 'error' : 'saved')
       if (!error) setTimeout(() => setSaveStatus(prev => prev === 'saved' ? 'idle' : prev), 2500)
     }, 500)
-  }, [])
+  }, [serverProvided])
 
   function mutateBudget(updater: (prev: ProjectBudget) => ProjectBudget) {
     setBudget(prev => {

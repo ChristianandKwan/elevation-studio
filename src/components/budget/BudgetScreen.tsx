@@ -10,6 +10,7 @@ import TotalsPanel from './TotalsPanel'
 import { useBudgetState } from './useBudgetState'
 import { computeProjectTotals } from './budgetCalc'
 import type { BudgetElevationData } from './budgetCalc'
+import type { ProjectBudget } from '@/types'
 import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface Props {
@@ -22,6 +23,12 @@ interface Props {
   onPreviewToggle?: () => void
   clientBudget: number | null
   onClientBudgetChange?: (v: number | null) => void
+  /**
+   * Pre-fetched budget row. Supplied by the client portal, where the browser
+   * has no database access — passing it (even as `null`) makes the screen
+   * read-only and skips the Supabase load. Omit on the consultant side.
+   */
+  initialBudget?: ProjectBudget | null
 }
 
 const VAT_STORAGE_KEY = (pid: string) => `elevation_budget_vat_mode_${pid}`
@@ -36,6 +43,7 @@ export default function BudgetScreen({
   onPreviewToggle,
   clientBudget,
   onClientBudgetChange,
+  initialBudget,
 }: Props) {
   // VAT toggle — persisted per project in localStorage
   const [vatMode, setVatMode] = useState(false)
@@ -62,7 +70,7 @@ export default function BudgetScreen({
     addCustomLineItem,
     updateCustomLineItem,
     removeCustomLineItem,
-  } = useBudgetState(projectId)
+  } = useBudgetState(projectId, initialBudget)
 
   // Compute artwork counts for installation tier
   const pt = computeProjectTotals(elevations)

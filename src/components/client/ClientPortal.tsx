@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { createClient } from '@/lib/supabase/client'
 import ClientElevation from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { DrawLoader } from '@/components/ui/Spinner'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
+import type { ProjectBudget } from '@/types'
 
 interface ClientArtwork {
   id: string
@@ -70,9 +70,10 @@ interface Props {
   elevations: ClientElevationData[]
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
   clientBudget: number | null
+  budget: ProjectBudget | null
 }
 
-export default function ClientPortal({ token, project, elevations, approvalActivity, clientBudget }: Props) {
+export default function ClientPortal({ token, project, elevations, approvalActivity, clientBudget, budget }: Props) {
   const inFlightRef = useRef(new Set<string>())
   const [toast, setToast] = useState('')
   const [portalView, setPortalView] = useState<'elevations' | 'budget'>('elevations')
@@ -168,6 +169,30 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     setTimeout(() => setToast(''), 3000)
   }
 
+  /**
+   * Every portal write goes through the server, which re-verifies the magic
+   * link and that the IDs belong to this project. The browser holds no
+   * database credentials. Throws on failure so the existing optimistic-update
+   * rollbacks fire exactly as they did with the direct Supabase calls.
+   */
+  async function callAction<T = unknown>(action: string, payload: Record<string, unknown>): Promise<T> {
+    const res = await fetch(`/api/client/${encodeURIComponent(token)}/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload }),
+    })
+    if (!res.ok) throw new Error(`${action} failed: ${res.status}`)
+    return res.json() as Promise<T>
+  }
+
+  /** Flush dragged positions before locking them in — batched into one call. */
+  async function flushPositions(artworks: ClientArtwork[]) {
+    if (!artworks.length) return
+    await callAction('move_artworks', {
+      artworks: artworks.map(a => ({ id: a.id, xF: a.xF, yF: a.yF })),
+    })
+  }
+
   const activeElev = elevations.find(e => e.id === activeElevId)
   const optData = optionsState[activeElevId]?.[activeOpt]
 
@@ -229,9 +254,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     }))
     setRerenderKey(k => k + 1)
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from('artworks').update({ visible: newVis }).eq('id', artId)
-      if (error) throw error
+      await callAction('toggle_visibility', { artworkId: artId, visible: newVis })
     } catch {
       // Revert to snapshot
       setOptionsState(prev => ({
@@ -262,9 +285,12 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       },
     }))
     if (notesTimer.current) clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(async () => {
-      const supabase = createClient()
-      await supabase.from('elevation_options').update({ client_notes: notes }).eq('id', optionId)
+    notesTimer.current = setTimeout(() => {
+      // Fire-and-forget, as before: notes are low-stakes and the field keeps
+      // the typed value regardless.
+      callAction('save_notes', { optionId, notes }).catch(err => {
+        console.warn('save_notes failed:', err)
+      })
     }, 800)
   }
 
@@ -278,28 +304,10 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     setActiveElevId(elevId)
     setActiveOpt(opt)
     try {
-      const supabase = createClient()
       // Save client's artwork positions before locking them in
-      const artworks = optionsState[elevId]?.[opt]?.artworks ?? []
-      if (artworks.length) {
-        await Promise.all(
-          artworks.map(art =>
-            supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
-          )
-        )
-      }
-      const { error } = await supabase.from('elevations').update({ client_picked_option: opt }).eq('id', elevId)
-      if (error) throw error
-      // Activity log: non-critical, don't roll back on failure
-      try {
-        await supabase.from('activity_logs').insert({
-          project_id: project.id,
-          type: 'pick',
-          text: `Client picked Option ${opt} for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
-        })
-      } catch (logErr) {
-        console.warn('activity_logs insert failed (pick):', logErr)
-      }
+      await flushPositions(optionsState[elevId]?.[opt]?.artworks ?? [])
+      // The server writes the pick and its activity-log entry.
+      await callAction('pick_option', { elevationId: elevId, option: opt })
       onStatus(`Option ${opt} selected`)
     } catch {
       // Revert optimistic update
@@ -318,19 +326,8 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     // Optimistic update
     setPickedOptions(prev => ({ ...prev, [elevId]: null }))
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from('elevations').update({ client_picked_option: null }).eq('id', elevId)
-      if (error) throw error
-      // Activity log: non-critical, don't roll back on failure
-      try {
-        await supabase.from('activity_logs').insert({
-          project_id: project.id,
-          type: 'pick_cleared',
-          text: `Client cleared option selection for ${elevations.find(e => e.id === elevId)?.name ?? ''}`,
-        })
-      } catch (logErr) {
-        console.warn('activity_logs insert failed (pick_cleared):', logErr)
-      }
+      // The server clears the pick and writes its activity-log entry.
+      await callAction('unpick_option', { elevationId: elevId })
       onStatus('Selection cleared')
     } catch {
       // Revert optimistic update
@@ -347,54 +344,25 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     if (inFlightRef.current.has(key)) return
     inFlightRef.current.add(key)
     const snapshotOpt = { ...optionsState[activeElevId][activeOpt] }
-    const supabase = createClient()
-    const now = new Date().toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
     try {
-      // Save current artwork positions
-      await Promise.all(
-        optData.artworks.map(art =>
-          supabase.from('artworks').update({ x_fraction: art.xF, y_fraction: art.yF }).eq('id', art.id)
-        )
-      )
+      // Save current artwork positions before they lock
+      await flushPositions(optData.artworks)
 
-      // Primary write: approve the option
-      const { error } = await supabase.from('elevation_options').update({ approved: true, approved_at: now }).eq('id', optData.id)
-      if (error) throw error
+      // Primary write: approve the option. The server also writes the
+      // activity-log entry and flips the project to 'approved' once every
+      // elevation's chosen option is approved.
+      const { approvedAt } = await callAction<{ approvedAt: string }>('approve', {
+        optionId: optData.id,
+      })
 
       // Primary write succeeded — update local state
       setOptionsState(prev => ({
         ...prev,
         [activeElevId]: {
           ...prev[activeElevId],
-          [activeOpt]: { ...prev[activeElevId][activeOpt], approved: true, approved_at: now },
+          [activeOpt]: { ...prev[activeElevId][activeOpt], approved: true, approved_at: approvedAt },
         },
       }))
-
-      // Activity log: non-critical, don't roll back on failure
-      try {
-        await supabase.from('activity_logs').insert({
-          project_id: project.id,
-          type: 'approved',
-          text: `Client approved Option ${activeOpt} of ${activeElev?.name ?? ''}`,
-        })
-      } catch (logErr) {
-        console.warn('activity_logs insert failed (approve):', logErr)
-      }
-
-      // Check if ALL elevations are fully done (picked + approved)
-      const allDone = elevations.every(elev => {
-        const requires = needsPick(elev)
-        const pickedOpt = requires ? pickedOptions[elev.id] : resolveOpt(elev)
-        if (!pickedOpt) return false
-        if (elev.id === activeElevId) return true  // just approved above
-        return optionsState[elev.id]?.[pickedOpt]?.approved ?? false
-      })
-
-      if (allDone) {
-        await supabase.from('projects').update({ status: 'approved' }).eq('id', project.id)
-      }
 
       onStatus(`Option ${activeOpt} approved!`)
     } catch {
@@ -538,6 +506,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           isConsultant={false}
           isPreviewingClientView={false}
           clientBudget={clientBudget}
+          initialBudget={budget}
         />
       </div>
 
