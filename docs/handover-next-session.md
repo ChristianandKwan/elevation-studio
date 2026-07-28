@@ -36,7 +36,21 @@ Supabase afterwards, in that order.
   offending policies. Plus `scripts/verify-rls.mjs`.
 - **PR-C** (`9f24ebf`) — `docs/DEPLOYING.md` and the deploy-order note in `AGENTS.md`.
 - **`c1e01d1`** — fix to `verify-rls.mjs` (its portal check gave a false pass on
-  production builds). On `dev`, not yet merged to `main`.
+  production builds).
+
+Two unrelated studio bugs were found while testing the deployed portal and fixed in
+the same session. Neither was caused by the security work.
+
+- **`dbbde03`** — `deleteOption` destroyed the other option's elevation photo.
+  Options of one elevation **deliberately share a single wall photo**: `handleSwitch`
+  (`StudioScreen.tsx:310`) copies `image_path` into an empty option so A and B show the
+  same room. `deleteOption` then deleted that file unconditionally. The routine way to
+  end up with a single-option elevation — upload to A, click over to B, delete B —
+  therefore destroyed A's photo and left its `image_path` dangling, which the client
+  portal renders as an empty canvas. Now guarded by a reference check.
+- **`9196d14`** — the add-artwork confirm button had no in-flight guard, so clicking
+  during upload placed the whole batch again (three clicks, three copies). The client
+  portal already guarded its actions this way; the studio did not.
 
 The client portal now holds **no database credentials in the browser**. Confirm with:
 
@@ -92,6 +106,10 @@ debounced position saves** — dragging only persists via the flush inside pick/
 
 ## 4. Outstanding work
 
+**Start by asking Tom for his notes (4e).** He deferred them to a fresh session, and
+they may reprioritise everything else here. 4a is a two-minute check worth doing
+alongside them.
+
 ### 4a. Verify the consultant token policy (do first, 2 minutes)
 
 Migration 022 replaced the token SELECT policy and **nothing has exercised it since**.
@@ -99,7 +117,16 @@ In the studio: confirm an existing project's share link displays, and that gener
 a link on a throwaway project works. If broken, the fix is a small SQL change — the
 original policy definitions are in `supabase/migrations/001` and `011`.
 
-### 4b. PR-D — storage sweep (the actual next feature)
+### 4b. One elevation image is unrecoverably lost
+
+The "Test, test, test" project's elevation **"The Big Room."** has an `image_path`
+pointing at a file that no longer exists (deleted by the `deleteOption` bug above,
+before it was fixed). Its client link renders an empty canvas. Fix by re-uploading the
+elevation in the studio, or by clearing that option's `image_path` so the portal shows
+its "No elevation uploaded" state instead. All other images are intact — 10 of 11
+elevation images and 13 of 13 artwork images verified present.
+
+### 4c. PR-D — storage sweep (the actual next feature)
 
 Spec is `docs/handover-security-and-cleanup.md` §5, unchanged. In brief: a
 `POST /api/admin/sweep-storage` route, consultant-authenticated in-route (middleware
@@ -110,7 +137,16 @@ remove the previous `image_path` after a successful replace.
 **Deploy order: app first** (additive route, no migration). Follow
 `src/app/api/thumbnails/[optionId]/route.ts` for the auth pattern.
 
-### 4c. Known pre-existing bugs, none introduced by this work
+Two things learned this session that sharpen the spec:
+
+- **`deleteArtwork` (`useStudio.ts:1597`) deletes the database row and nothing else**,
+  so every removed artwork leaks its file permanently. This is the main way orphans
+  accumulate, more than the re-upload path the original spec emphasises.
+- **An elevation image may be referenced by more than one option** (see `dbbde03`
+  above). Any sweep must treat a file as live if *any* row references it, and must not
+  assume one file per option.
+
+### 4d. Known pre-existing bugs, none introduced by this work
 
 - **Expired magic links return HTTP 200** while rendering the 404 page. Caused by
   `client/[token]/loading.tsx` flushing headers before `notFound()` runs. Invisible to
@@ -123,10 +159,12 @@ remove the previous `image_path` after a successful replace.
 - `npm run lint` reports ~111 pre-existing errors across the codebase. This work
   reduced the count; none of them are new.
 
-### 4d. Tom's notes
+### 4e. Tom's notes
 
-Tom has feedback from testing the production portal that had not been discussed when
-this was written. Ask him.
+Tom has feedback from testing the production portal that he has deliberately deferred
+to a fresh session. **Ask him for these first** — they may reprioritise everything
+below. They are unrelated to the two studio bugs above, which were found and fixed
+separately.
 
 ---
 
