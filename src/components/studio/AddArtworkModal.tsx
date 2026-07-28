@@ -25,7 +25,8 @@ interface RowMeta {
 }
 
 interface Props {
-  onConfirm: (files: File[], metas: ArtMeta[]) => void
+  /** Awaited so the modal can stay disabled until the upload finishes. */
+  onConfirm: (files: File[], metas: ArtMeta[]) => void | Promise<void>
   onCancel: () => void
 }
 
@@ -37,6 +38,9 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
   const [previews, setPreviews] = useState<string[]>([])
   const [sizeErrors, setSizeErrors] = useState<string[]>([])
   const [reading, setReading] = useState(false)
+  // The modal stays mounted while addArtworks uploads, so without this a
+  // second click fires a whole second batch — three clicks, three copies.
+  const [submitting, setSubmitting] = useState(false)
   // Single-file fields
   const [name, setName] = useState('')
   const [wCm, setWCm] = useState('')
@@ -107,29 +111,36 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
     setRowMetas(prev => prev.map((m, idx) => idx === i ? { ...m, ...patch } : m))
   }
 
-  function handleConfirm() {
-    if (!files.length) return
-    if (files.length === 1) {
-      const fs = framingStatus
-      onConfirm(files, [{
-        name: name.trim() || 'Untitled',
-        wCm: parseFloat(wCm) || DEFAULT_W,
-        hCm: parseFloat(hCm) || DEFAULT_H,
-        price: parseFloat(price) || 0,
-        artist: artist.trim(),
-        framingStatus: fs,
-        framingCost: fs === 'requires_framing' ? (parseFloat(framingCost) || null) : null,
-      }])
-    } else {
-      onConfirm(files, rowMetas.map(m => ({
-        name: m.name,
-        wCm: parseFloat(m.wStr) || DEFAULT_W,
-        hCm: parseFloat(m.hStr) || DEFAULT_H,
-        price: m.price,
-        artist: m.artist.trim(),
-        framingStatus: m.framingStatus,
-        framingCost: m.framingStatus === 'requires_framing' ? (parseFloat(m.framingCostStr) || null) : null,
-      })))
+  async function handleConfirm() {
+    if (!files.length || submitting) return
+
+    const metas: ArtMeta[] = files.length === 1
+      ? [{
+          name: name.trim() || 'Untitled',
+          wCm: parseFloat(wCm) || DEFAULT_W,
+          hCm: parseFloat(hCm) || DEFAULT_H,
+          price: parseFloat(price) || 0,
+          artist: artist.trim(),
+          framingStatus,
+          framingCost: framingStatus === 'requires_framing' ? (parseFloat(framingCost) || null) : null,
+        }]
+      : rowMetas.map(m => ({
+          name: m.name,
+          wCm: parseFloat(m.wStr) || DEFAULT_W,
+          hCm: parseFloat(m.hStr) || DEFAULT_H,
+          price: m.price,
+          artist: m.artist.trim(),
+          framingStatus: m.framingStatus,
+          framingCost: m.framingStatus === 'requires_framing' ? (parseFloat(m.framingCostStr) || null) : null,
+        }))
+
+    setSubmitting(true)
+    try {
+      await onConfirm(files, metas)
+    } finally {
+      // addArtworks closes the modal on success; resetting matters for the
+      // case where it fails and leaves the modal open.
+      setSubmitting(false)
     }
   }
 
@@ -319,9 +330,9 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
         )}
 
         <div className="modal-footer">
-          <button className="btn" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleConfirm} disabled={!files.length}>
-            Place on Elevation
+          <button className="btn" onClick={onCancel} disabled={submitting}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleConfirm} disabled={!files.length || submitting}>
+            {submitting ? 'Placing…' : 'Place on Elevation'}
           </button>
         </div>
       </div>
