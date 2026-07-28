@@ -489,8 +489,22 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     // Delete artwork images
     const artPaths = opt.artworks.map(a => (a as any).imagePath).filter(Boolean) as string[]
     if (artPaths.length) await supabase.storage.from('artwork-images').remove(artPaths)
-    // Delete elevation image
-    if (opt.imagePath) await supabase.storage.from('elevation-images').remove([opt.imagePath])
+    // Delete the elevation image — but ONLY if no other option still points at
+    // it. Options of the same elevation deliberately share one wall photo:
+    // handleSwitch copies image_path into an empty option so both show the same
+    // room. Removing it blindly here deletes the surviving option's photo and
+    // leaves its image_path dangling, which renders an empty client portal.
+    if (opt.imagePath) {
+      const { data: alsoUsing } = await supabase
+        .from('elevation_options')
+        .select('id')
+        .eq('image_path', opt.imagePath)
+        .neq('id', opt.id)
+
+      if (!alsoUsing?.length) {
+        await supabase.storage.from('elevation-images').remove([opt.imagePath])
+      }
+    }
     // Delete option row (DB cascades to artworks)
     await supabase.from('elevation_options').delete().eq('id', opt.id)
     const remaining = elev.elevation_options.filter(o => o.option !== optKey)
