@@ -1106,9 +1106,33 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   // ─── ELEVATION UPLOAD ────────────────────────────────────────────
+  /**
+   * Remove a superseded elevation image, but only once nothing points at it.
+   *
+   * Options of one elevation deliberately share a single wall photo —
+   * `handleSwitch` copies `image_path` into an empty option so A and B show the
+   * same room — so the file must survive while any other row references it.
+   * This is the same reference check that `deleteOption` needs (commit dbbde03).
+   * Best-effort: a failure here just leaves an orphan for the storage sweep.
+   */
+  async function removeUnreferencedElevationImage(oldPath: string | null | undefined, keepOptionId: string) {
+    if (!oldPath) return
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('elevation_options')
+      .select('id')
+      .eq('image_path', oldPath)
+      .neq('id', keepOptionId)
+      .limit(1)
+    if (error || (data && data.length > 0)) return
+    await supabase.storage.from('elevation-images').remove([oldPath])
+  }
+
   async function uploadElevation(file: File) {
     setBusy(true)
     const supabase = createClient()
+    // Captured before the state swap below so the replaced file can be cleaned up.
+    const previousPath = stateRef.current.elev?.imagePath ?? null
     const path = `${projectId}/${optionId}/elevation-${Date.now()}.${file.name.split('.').pop()}`
     const { error } = await supabase.storage.from('elevation-images').upload(path, file, { upsert: true })
     if (error) { onStatus('Upload failed: ' + error.message); setBusy(false); return }
@@ -1137,7 +1161,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         image_path: path, orig_w: img.naturalWidth, orig_h: img.naturalHeight,
         scale_px_per_cm: null, foreground_masks: null,
       }).eq('id', optionId).then(({ error }) => {
-        if (error) onStatus('Elevation saved to storage but DB update failed — reload to retry')
+        if (error) {
+          onStatus('Elevation saved to storage but DB update failed — reload to retry')
+          return
+        }
+        // Only after the row points at the new file is the old one safe to drop.
+        if (previousPath !== path) {
+          removeUnreferencedElevationImage(previousPath, optionId).catch(() => { /* sweep will catch it */ })
+        }
       })
       scheduleThumbnailRegen()
 
@@ -1596,7 +1627,32 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // ─── DELETE ARTWORK ───────────────────────────────────────────────
   async function deleteArtwork(artId: string) {
     const supabase = createClient()
+
+    // The file is read before the row goes, and removed after. Deleting the row
+    // alone used to strand the image permanently — the single biggest source of
+    // orphaned files. Artwork images are per-artwork (`art-{uuid}.{ext}`), but
+    // the reference check still runs in case a future duplicate action reuses a
+    // path. Storage removal is best-effort; the sweep endpoint is the backstop.
+    const { data: doomed } = await supabase
+      .from('artworks')
+      .select('image_path')
+      .eq('id', artId)
+      .maybeSingle()
+
     await supabase.from('artworks').delete().eq('id', artId)
+
+    const oldPath = doomed?.image_path as string | null | undefined
+    if (oldPath) {
+      const { data: stillUsed, error } = await supabase
+        .from('artworks')
+        .select('id')
+        .eq('image_path', oldPath)
+        .limit(1)
+      if (!error && (!stillUsed || stillUsed.length === 0)) {
+        await supabase.storage.from('artwork-images').remove([oldPath])
+      }
+    }
+
     setState(s => {
       const newArts = s.artworks.filter(a => a.id !== artId)
       const newSelIds = new Set(s.selIds)
