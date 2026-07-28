@@ -86,6 +86,14 @@ export default function InstallationRow({
 
   const showControls = isConsultant && !displayRaw.isIndicative && !editing
 
+  // Unticking "Shown to client" has to remove the row itself, not just its
+  // controls. TotalsPanel already excluded installation from the client's
+  // summary when this is off, so without this the client saw a line that
+  // wasn't in the total. Mirrors ConsultantFeeRow's early return.
+  // `shownToClient` defaults to true, so rows saved before this flag existed
+  // keep showing.
+  if (!isConsultant && !shownToClient) return null
+
   return (
     <div className={`budget-cost-row${showControls ? ' budget-cost-row--stacked' : ''}`}>
       <div className={showControls ? 'budget-cost-row-main' : ''} style={showControls ? undefined : { display: 'contents' }}>

@@ -66,6 +66,8 @@ interface Props {
   zoom: number
   onZoom: (val: number | ((prev: number) => number)) => void
   onArtworkMove: (artId: string, xF: number, yF: number) => void
+  /** Fired once when a drag finishes, so positions can be persisted. */
+  onArtworkMoveEnd: () => void
   onToggleVisibility: (artId: string) => void
   onNotesChange: (notes: string) => void
   onApprove: () => void
@@ -75,7 +77,7 @@ export default function ClientElevation({
   optData, elevationName, activeOpt, rerenderKey,
   approvalActivity, clientBudget, isPicked, artworksLocked, onPick, onClearPick,
   zoom, onZoom,
-  onArtworkMove, onToggleVisibility, onNotesChange, onApprove,
+  onArtworkMove, onArtworkMoveEnd, onToggleVisibility, onNotesChange, onApprove,
 }: Props) {
   const [showApproveWarning, setShowApproveWarning] = useState(false)
   // Bumped on Fit click to re-measure the viewport and re-fit the elevation
@@ -108,6 +110,7 @@ export default function ClientElevation({
             refitKey={refitKey}
             locked={artworksLocked}
             onArtworkMove={onArtworkMove}
+            onArtworkMoveEnd={onArtworkMoveEnd}
             zoom={zoom}
           />
         </div>
@@ -356,6 +359,7 @@ function ClientCanvas({
   refitKey,
   locked,
   onArtworkMove,
+  onArtworkMoveEnd,
   zoom,
 }: {
   optData: ClientOption
@@ -363,19 +367,23 @@ function ClientCanvas({
   refitKey: number
   locked: boolean
   onArtworkMove: (artId: string, xF: number, yF: number) => void
+  onArtworkMoveEnd: () => void
   zoom: number
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const elevWrapRef = useRef<HTMLDivElement>(null)
   const elevImgRef = useRef<HTMLImageElement>(null)
   const [isLoading, setIsLoading] = useState(true)
+  // Decoded elevation images, kept across rebuilds. Every visibility toggle
+  // bumps rerenderKey and re-runs this effect; without the cache each one
+  // re-entered the loading state and flashed the spinner over an image the
+  // browser already had, which is what made the eye icon feel slow.
+  const decodedRef = useRef(new Map<string, HTMLImageElement>())
 
   useEffect(() => {
     if (!optData.imageUrl || !canvasRef.current) return
-    setIsLoading(true)
-    const img = new Image()
-    img.onerror = () => setIsLoading(false)
-    img.onload = () => {
+
+    const build = (img: HTMLImageElement) => {
       // Fit to the visible canvas frame (.client-canvas-area) on both dimensions
       // with 32 px padding per side. Measuring canvas-area — not canvas-inner —
       // matters because canvas-inner grows with its own content (the wrap we size
@@ -558,6 +566,7 @@ function ClientCanvas({
               document.removeEventListener('mouseup', up)
               const svg = wrap.querySelector('#client-snap-svg') as SVGSVGElement | null
               if (svg) { svg.innerHTML = ''; svg.style.display = 'none' }
+              onArtworkMoveEnd()
             }
             document.addEventListener('mousemove', mv)
             document.addEventListener('mouseup', up)
@@ -583,6 +592,7 @@ function ClientCanvas({
             function up() {
               document.removeEventListener('touchmove', mv)
               document.removeEventListener('touchend', up)
+              onArtworkMoveEnd()
             }
             document.addEventListener('touchmove', mv, { passive: false })
             document.addEventListener('touchend', up)
@@ -640,7 +650,24 @@ function ClientCanvas({
       }
       setIsLoading(false)
     }
-    img.src = optData.imageUrl
+
+    // Already decoded (a visibility toggle, a re-fit, a tab switch back):
+    // rebuild the overlays straight away and never show the spinner.
+    const url = optData.imageUrl
+    const cached = decodedRef.current.get(url)
+    if (cached?.complete && cached.naturalWidth > 0) {
+      build(cached)
+      return
+    }
+
+    setIsLoading(true)
+    const img = new Image()
+    img.onerror = () => setIsLoading(false)
+    img.onload = () => {
+      decodedRef.current.set(url, img)
+      build(img)
+    }
+    img.src = url
   }, [optData.id, optData.imageUrl, locked, rerenderKey, refitKey]) // eslint-disable-line
 
   return (
