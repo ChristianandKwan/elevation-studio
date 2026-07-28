@@ -62,10 +62,15 @@ console.log('\n── Magic link still works (portal must be running) ──')
     const base = process.env.PORTAL_BASE ?? 'http://localhost:3000'
     const r = await fetch(`${base}/client/${token}`)
     const body = await r.text()
-    // Don't grep for the 404 copy: Next serialises the not-found boundary
-    // into every response. This meta tag is only emitted on a real 404.
-    if (body.includes('name="next-error"')) fail(`portal returned its 404 page for ${token}`)
-    else pass(`portal still renders for ${token}`)
+    // Check for a positive signal, not the absence of a 404 one. Next
+    // serialises the not-found boundary into every response, so grepping
+    // for the 404 copy always matches; and the `next-error` meta tag it
+    // emits on a real 404 exists only in dev builds, so on production that
+    // test silently passes even when the portal is broken.
+    // `client-layout` is ClientPortal's root div — present only when the
+    // portal actually rendered, in both dev and production builds.
+    if (body.includes('client-layout')) pass(`portal still renders for ${token}`)
+    else fail(`portal did NOT render for ${token} — check SUPABASE_SERVICE_ROLE_KEY`)
   }
 }
 
