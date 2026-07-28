@@ -1,0 +1,101 @@
+/* ══════════════════════════════════════════════════════════
+   DASHBOARD
+══════════════════════════════════════════════════════════ */
+.dash-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 40px; height: 80px; border-bottom: 1px solid var(--border);
+  background: var(--warm-white); position: sticky; top: 0; z-index: 100;
+  position: relative;
+}
+.dash-logo { height: 56px; width: auto; }
+.dash-user { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--mid); }
+.dash-user-name { font-weight: 500; color: var(--charcoal); }
+.dash-avatar {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: white;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0;
+}
+.dash-body { padding: 40px; }
+.dash-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.dash-section-title { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 24px; font-weight: 400; }
+.dash-kicker { font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--mid); margin-bottom: 6px; }
+
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.project-card {
+  background: var(--warm-white); border: 1px solid var(--border); cursor: pointer;
+  transition: border-color .15s, box-shadow .15s; position: relative;
+}
+.project-card:hover { border-color: var(--accent); box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+.project-card-thumb {
+  position: relative; height: 160px; background: #E5E0D8;
+  background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,.06) 1px, transparent 0);
+  background-size: 20px 20px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.project-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.project-card-thumb-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+.project-card-thumb-placeholder span {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
+  font-size: 72px; font-style: italic;
+  color: var(--charcoal); opacity: 0.1;
+  line-height: 1; user-select: none;
+}
+.project-card-body { padding: 16px 18px; }
+.project-card-name { font-weight: 500; font-size: 14px; margin-bottom: 3px; }
+.project-card-client { font-size: 12px; color: var(--mid); }
+.project-card-meta {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--mid);
+}
+.project-card-badge {
+  padding: 2px 7px; font-size: 10px; font-weight: 500; letter-spacing: .04em;
+  text-transform: uppercase; display: inline-flex; align-items: center;
+}
+.badge-draft   { background: var(--cream); color: var(--mid); border: 1px solid var(--border); }
+.badge-sent    { background: var(--amber-light); color: var(--accent); border: 1px solid rgba(139,111,71,.2); }
+.badge-approved { background: var(--green-light); color: var(--green); border: 1px solid rgba(46,107,79,.2); }
+
+/* Project card kebab menu */
+.project-card-menu-wrap {
+  position: absolute; top: 8px; right: 8px; z-index: 10;
+}
+.project-card-menu-btn {
+  width: 28px; height: 28px; background: rgba(255,255,255,0.85); border: 1px solid var(--border);
+  border-radius: 4px; font-size: 16px; line-height: 1; cursor: pointer; color: var(--mid);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .15s;
+}
+.project-card:hover .project-card-menu-btn { opacity: 1; }
+.project-card-menu-btn:hover { color: var(--charcoal); background: white; }
+.project-card-dropdown {
+  position: absolute; top: 32px; right: 0; background: white;
+  border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); overflow: hidden; min-width: 120px;
+}
+.project-card-dropdown button {
+  display: block; width: 100%; text-align: left;
+  padding: 9px 14px; font-size: 13px; font-family: var(--font-karla, 'Karla'), sans-serif;
+  background: none; border: none; cursor: pointer; color: var(--charcoal);
+}
+.project-card-dropdown button:hover { background: var(--cream); }
+.project-card-dropdown button.danger { color: var(--red); }
+.project-card-dropdown button.danger:hover { background: var(--red-light); }
+.dash-view-tabs { display: flex; gap: 4px; }
+.dash-view-tab {
+  padding: 5px 14px; border-radius: 4px; font-size: 13px; font-weight: 500;
+  background: transparent; border: 1px solid var(--border); color: var(--mid); cursor: pointer;
+}
+.dash-view-tab:hover { color: var(--charcoal); border-color: var(--charcoal); }
+.dash-view-tab.active { background: var(--charcoal); color: white; border-color: var(--charcoal); }
+.project-card--archived { opacity: 0.7; cursor: default; }
+.project-card--archived:hover { box-shadow: none; }
+
+.project-card-new {
+  border: 1px dashed var(--border); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px; min-height: 240px;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.project-card-new:hover { border-color: var(--accent); background: var(--accent-light); }
+.project-card-new-icon { font-size: 28px; opacity: .25; }
+.project-card-new-label { font-size: 12px; color: var(--mid); }

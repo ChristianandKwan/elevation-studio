@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import ClientPortal from '@/components/client/ClientPortal'
+import type { ProjectBudget } from '@/types'
 
 interface Props {
   params: Promise<{ token: string }>
@@ -8,8 +9,10 @@ interface Props {
 
 export default async function ClientPortalPage({ params }: Props) {
   const { token } = await params
-  const supabase = await createClient()
-  const supabaseService = createServiceClient()
+  // The portal is unauthenticated (magic link only), so every read runs
+  // through the service client and is scoped by the token's project_id below.
+  // RLS is bypassed deliberately — this page does the checking itself.
+  const supabase = createServiceClient()
 
   // Verify token
   const { data: tokenRow } = await supabase
@@ -81,8 +84,8 @@ export default async function ClientPortalPage({ params }: Props) {
 
   // Two batched createSignedUrls calls in parallel — service client, 72-hour expiry
   const [{ data: elevSigned }, { data: artSigned }] = await Promise.all([
-    supabaseService.storage.from('elevation-images').createSignedUrls(elevPaths, 259200),
-    supabaseService.storage.from('artwork-images').createSignedUrls(artPaths, 259200),
+    supabase.storage.from('elevation-images').createSignedUrls(elevPaths, 259200),
+    supabase.storage.from('artwork-images').createSignedUrls(artPaths, 259200),
   ])
   const elevMap = new Map(elevSigned?.map(e => [e.path, e.signedUrl]) ?? [])
   const artMap = new Map(artSigned?.map(e => [e.path, e.signedUrl]) ?? [])
@@ -141,6 +144,29 @@ export default async function ClientPortalPage({ params }: Props) {
     .in('type', ['approved', 'unapprove'])
     .order('created_at', { ascending: false })
 
+  // Budget row for the portal's Budget tab. Fetched here rather than in the
+  // browser: the client is read-only for budgets and has no way to query
+  // project_budgets directly. Null when the consultant hasn't opened the
+  // budget screen yet (the row is created lazily on the consultant side).
+  const { data: budgetRow } = await supabase
+    .from('project_budgets')
+    .select('*')
+    .eq('project_id', projectId)
+    .maybeSingle()
+
+  const budget: ProjectBudget | null = budgetRow
+    ? {
+        id: budgetRow.id,
+        projectId: budgetRow.project_id,
+        installation: budgetRow.installation ?? { indicative: true, confirmedAmount: null },
+        consultantFee: budgetRow.consultant_fee ?? null,
+        customLineItems: budgetRow.custom_line_items ?? [],
+        vatIncludedDefault: budgetRow.vat_included_default ?? false,
+        createdAt: budgetRow.created_at,
+        updatedAt: budgetRow.updated_at,
+      }
+    : null
+
   return (
     <ClientPortal
       token={token}
@@ -156,6 +182,7 @@ export default async function ClientPortalPage({ params }: Props) {
       elevations={elevationsWithUrls}
       approvalActivity={activity ?? []}
       clientBudget={(project as any).client_budget ?? null}
+      budget={budget}
     />
   )
 }
