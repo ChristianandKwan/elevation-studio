@@ -140,8 +140,9 @@ Two things learned this session that sharpen the spec:
 - **Expired magic links return HTTP 200** while rendering the 404 page. Caused by
   `client/[token]/loading.tsx` flushing headers before `notFound()` runs. Invisible to
   visitors; wrong for crawlers and uptime monitoring.
-- **`formatApprovalTimestamp`** (`src/lib/utils.ts:20`) renders 24-hour times with an
-  am/pm suffix — the portal shows "Approved 21:12 pm".
+- ~~`formatApprovalTimestamp` renders "21:12 pm".~~ **Accepted as-is by Tom on
+  2026-07-29.** Still true (`src/lib/utils.ts:20`), deliberately not fixed. Leave
+  it unless he raises it.
 - ~~Dragging an artwork does not save on its own.~~ **Resolved 2026-07-29** — Tom asked
   for it to persist; the client portal now saves on drop. The consultant side always
   did. See §6.2.
@@ -381,6 +382,7 @@ apart, that needs a `revoked_at` column and therefore a migration.
 
 Retired rows accumulate rather than being cleaned up. They are inert (every read
 path checks expiry) and serve as an audit trail, but nothing prunes them.
+**Tom accepted this on 2026-07-29** — no pruning wanted.
 
 ### 7.3 First production dry run — 2026-07-29
 
@@ -432,3 +434,32 @@ If asked to move it again, change the margin by the amount you want the
 The measurement is a canvas pixel-scan for the last inked row of the PNG plus
 `TextMetrics.actualBoundingBoxAscent` for the title's cap top — the numbers
 above came from that, not from eyeballing a screenshot.
+
+---
+
+## 8. Where this leaves things — 2026-07-29, end of session
+
+**Everything is shipped.** [PR #7](https://github.com/ChristianandKwan/elevation-studio/pull/7)
+merged `dev` into `main` (`33b26d4`), production deployed, and
+`https://elevation-studio-psi.vercel.app/login` serves 200.
+
+All three issues from `docs/handover-security-and-cleanup.md` are now closed —
+Issue 3 was the last, resolved by the sweep in §7.4.
+
+`CRON_SECRET` is confirmed set on Production: an unauthenticated GET to
+`/api/admin/sweep-storage` on the live site returns **401**, not 503. 503 would
+mean the secret was missing, so 401 is the proof the cron will authenticate.
+
+### Genuinely open
+
+- No UI for manual sweep runs — console only.
+- Nothing notifies anyone if the nightly cron aborts on a safety rail. It logs
+  to the Vercel function logs tagged `[sweep-storage]` and stays quiet.
+  **Check those logs after the first 03:00 UTC run.**
+
+### Settled — do not reopen
+
+- `formatApprovalTimestamp`'s "21:12 pm" (§4d).
+- Retired token rows accumulating unpruned (§7.2).
+
+Both were put to Tom on 2026-07-29 and he chose to keep them.
