@@ -120,7 +120,7 @@ export default function FeedbackButton({ variant = 'light' }: Props = {}) {
         style={{
           width: 28,
           height: 28,
-          borderRadius: 0,
+          borderRadius: 'var(--radius-sm)',
           border: `1px solid ${palette.borderIdle}`,
           background: 'transparent',
           color: palette.colorIdle,

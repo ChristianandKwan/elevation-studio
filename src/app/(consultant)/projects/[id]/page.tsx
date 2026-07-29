@@ -106,15 +106,19 @@ export default async function ProjectPage({ params }: Props) {
     return { ...elev, elevation_options: options, clientPickedOption: (elev as any).client_picked_option ?? null }
   })
 
-  // Fetch existing client token if any
+  // Most recent client token, expired or not. The expiry filter used to live in
+  // this query, which meant an expired link was indistinguishable from never
+  // having made one — the consultant had no way to know their client's link had
+  // gone dead. Filtering happens below instead, so the studio can warn.
   const { data: tokenRow } = await supabase
     .from('client_tokens')
-    .select('token')
+    .select('token, expires_at')
     .eq('project_id', id)
-    .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+
+  const clientLinkExpired = !!tokenRow && new Date(tokenRow.expires_at) <= new Date()
 
   // Fetch last 10 activity logs for the project
   const { data: activityLogs } = await supabase
@@ -128,7 +132,8 @@ export default async function ProjectPage({ params }: Props) {
     <StudioScreen
       project={{ ...project, consultantName: profile?.name ?? 'Consultant', budget: (project as any).budget ?? null }}
       elevations={elevationsWithUrls}
-      existingToken={tokenRow?.token ?? null}
+      existingToken={clientLinkExpired ? null : (tokenRow?.token ?? null)}
+      clientLinkExpired={clientLinkExpired}
       activityLogs={(activityLogs ?? []).map(a => ({ id: a.id, type: a.type, text: a.text, createdAt: a.created_at }))}
     />
   )

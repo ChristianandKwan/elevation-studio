@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/server'
 import ClientPortal from '@/components/client/ClientPortal'
+import ClientLinkExpired from '@/components/client/ClientLinkExpired'
 import type { ProjectBudget } from '@/types'
 
 interface Props {
@@ -14,15 +15,18 @@ export default async function ClientPortalPage({ params }: Props) {
   // RLS is bypassed deliberately — this page does the checking itself.
   const supabase = createServiceClient()
 
-  // Verify token
+  // Verify token. The expiry check happens here rather than in the query so an
+  // expired link can be told apart from a wrong one: expired gets an
+  // explanation, unknown still gets a plain 404 (a mistyped URL must not reveal
+  // whether a project exists).
   const { data: tokenRow } = await supabase
     .from('client_tokens')
     .select('project_id, expires_at')
     .eq('token', token)
-    .gt('expires_at', new Date().toISOString())
-    .single()
+    .maybeSingle()
 
   if (!tokenRow) notFound()
+  if (new Date(tokenRow.expires_at) <= new Date()) return <ClientLinkExpired />
 
   const projectId = tokenRow.project_id
 
