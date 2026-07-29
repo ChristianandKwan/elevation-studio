@@ -277,7 +277,7 @@ everyone. An unauthenticated GET that deletes files is the one mistake worth
 engineering against, so absence of config disables the feature rather than
 opening it.
 
-Three rails protect the unattended run:
+Four rails protect the unattended run:
 
 1. Files younger than 24h are never touched — uploads write the file before the
    row, so a sweep landing in that gap would otherwise eat a fresh upload.
@@ -287,8 +287,15 @@ Three rails protect the unattended run:
    returns 409 with the list. A schema change or a bug in path-matching looks
    exactly like "everything is an orphan", and this is what stops that from
    emptying the buckets overnight.
+4. **Any bucket where nothing at all matched a live row aborts the run.** Added
+   2026-07-29 after the first dry run (§7.3). Storage keys and the paths held in
+   the database are compared as plain strings; if the two formats ever drift,
+   every file in that bucket is reported as an orphan — and that failure looks
+   exactly like a plausible list of real paths. One match proves the comparison
+   still works. Zero matches on a non-empty bucket is refused, 409
+   `no-matches-in-bucket`.
 
-Rails 1 and 2 also apply to manual POSTs. Rail 3 does not — a person can read
+Rails 1, 2 and 4 also apply to manual POSTs. Rail 3 does not — a person can read
 the list first.
 
 Outcomes go to the Vercel function logs, tagged `[sweep-storage]` with `manual`
@@ -374,3 +381,30 @@ apart, that needs a `revoked_at` column and therefore a migration.
 
 Retired rows accumulate rather than being cleaned up. They are inert (every read
 path checks expiry) and serve as an audit trail, but nothing prunes them.
+
+### 7.3 First production dry run — 2026-07-29
+
+`scanned 68 · orphans 35 · skipped as under 24h 7`, broken down as 6 elevation
+images, 17 artwork images, 12 thumbnails.
+
+The list was consistent with all three known leaks and with nothing else:
+
+- Four of the six elevation orphans sat in one option folder
+  (`bdcfcf85…/0b30e653…`) with timestamps minutes apart — `uploadElevation`
+  orphaning the previous file on each re-upload.
+- That same option UUID appeared in the orphaned thumbnails *and* had two
+  orphaned artwork files: a deleted project whose storage was stranded by
+  `deleteProject`'s best-effort browser cleanup.
+- The 17 artwork orphans match `deleteArtwork` leaking a file per removal.
+
+**What made the run trustworthy was the match rate, not the list.** Roughly 33
+of 68 files matched a live row, which proves the path comparison works — a
+broken format would have flagged all 68. That reasoning could only be done by
+hand because the response reported one global total, so the endpoint now returns
+per-bucket `scanned` / `matched` / `orphans` / `livePathsInDb`, and rail 4 above
+enforces the same check automatically.
+
+**Thumbnails remained unverified at that point** — all 12 were flagged with no
+visible total, so there was no way to tell 12-of-21 (fine) from 12-of-12 (a
+broken check that would have blanked the dashboard). Re-run the dry run and
+confirm `buckets.thumbnails.matched > 0` before any real run.

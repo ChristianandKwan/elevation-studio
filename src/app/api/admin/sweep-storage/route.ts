@@ -19,9 +19,15 @@
  *   3. The cron refuses to delete more than CRON_MAX_DELETIONS in one run and
  *      reports instead. A schema change or a bug in the path-matching would
  *      otherwise look exactly like "everything is an orphan".
+ *   4. Any bucket where *nothing* matched a live row aborts the run. Storage
+ *      keys and database paths are compared as strings, so drift between the
+ *      two formats reports every file as an orphan — and that failure produces
+ *      a list of real, plausible-looking paths. One match proves the comparison
+ *      still works; zero on a non-empty bucket is refused.
  *
- * A human POSTing the route is subject to (1) and (2) but not (3) — they can
- * see the list first.
+ * A human POSTing the route is subject to (1), (2) and (4) but not (3) — they
+ * can see the list first. The dry-run response carries per-bucket `matched`
+ * counts so a reviewer can check rail 4 themselves before deleting.
  *
  * ── Where orphans come from ─────────────────────────────────────────────
  *
@@ -247,16 +253,75 @@ async function runSweep({ dryRun, maxDeletions, source }: SweepOptions) {
       'artwork-images': art.orphans,
       thumbnails: thumbs.orphans,
     }
+
+    /**
+     * Per-bucket totals, so a reviewer can see the *match rate* rather than
+     * just a list of paths.
+     *
+     * This is the check that catches a broken path format. If live rows and
+     * storage keys stop agreeing — a leading slash, a bucket prefix, a renamed
+     * convention — every file in that bucket is reported as an orphan, and a
+     * list of plausible-looking paths is exactly what that failure produces.
+     * `matched > 0` is the cheap proof that the comparison still works;
+     * `matched === 0` on a non-empty bucket means stop, not proceed.
+     */
+    const buckets = {
+      'elevation-images': {
+        scanned: elev.scanned,
+        matched: elev.scanned - elev.orphans.length - elev.skippedRecent,
+        orphans: elev.orphans.length,
+        skippedRecent: elev.skippedRecent,
+        livePathsInDb: liveElevPaths.size,
+      },
+      'artwork-images': {
+        scanned: art.scanned,
+        matched: art.scanned - art.orphans.length - art.skippedRecent,
+        orphans: art.orphans.length,
+        skippedRecent: art.skippedRecent,
+        livePathsInDb: liveArtPaths.size,
+      },
+      thumbnails: {
+        scanned: thumbs.scanned,
+        matched: thumbs.scanned - thumbs.orphans.length - thumbs.skippedRecent,
+        orphans: thumbs.orphans.length,
+        skippedRecent: thumbs.skippedRecent,
+        livePathsInDb: liveOptionIds.size,
+      },
+    }
+
     const scanned = elev.scanned + art.scanned + thumbs.scanned
     const orphans = elev.orphans.length + art.orphans.length + thumbs.orphans.length
     const skippedRecent = elev.skippedRecent + art.skippedRecent + thumbs.skippedRecent
 
     if (dryRun) {
       console.log(`[sweep-storage] ${source} dry run: ${scanned} scanned, ${orphans} orphans`)
-      return NextResponse.json({ dryRun: true, scanned, orphans, deleted: 0, skippedRecent, paths })
+      return NextResponse.json({ dryRun: true, scanned, orphans, deleted: 0, skippedRecent, buckets, paths })
     }
 
-    // 4. Rail 3 — an unattended run that suddenly wants to delete a great deal
+    // 4. Rail 4 — a bucket where nothing at all matched a live row.
+    //    Storage keys and the paths held in the database are compared as plain
+    //    strings, so any drift between the two formats turns every file in that
+    //    bucket into an "orphan". The result looks entirely plausible: a list of
+    //    real paths that really exist. A single match is enough to prove the two
+    //    sides still speak the same language; zero matches on a non-empty bucket
+    //    is indistinguishable from a total comparison failure, so refuse.
+    const blind = Object.entries(buckets)
+      .filter(([, b]) => b.scanned > 0 && b.matched === 0)
+      .map(([name]) => name)
+    if (blind.length > 0) {
+      console.error(
+        `[sweep-storage] ${source} run aborted: nothing matched a live row in ` +
+        `${blind.join(', ')}. Treating as a path-format failure, not an empty system.`
+      )
+      return NextResponse.json({
+        dryRun: false,
+        aborted: 'no-matches-in-bucket',
+        blindBuckets: blind,
+        scanned, orphans, deleted: 0, skippedRecent, buckets, paths,
+      }, { status: 409 })
+    }
+
+    // 5. Rail 3 — an unattended run that suddenly wants to delete a great deal
     //    is far more likely to be a bug than a real backlog. Report, don't act.
     if (maxDeletions !== undefined && orphans > maxDeletions) {
       console.warn(
@@ -266,7 +331,7 @@ async function runSweep({ dryRun, maxDeletions, source }: SweepOptions) {
       return NextResponse.json({
         dryRun: false,
         aborted: 'too-many-orphans',
-        scanned, orphans, deleted: 0, skippedRecent, maxDeletions, paths,
+        scanned, orphans, deleted: 0, skippedRecent, maxDeletions, buckets, paths,
       }, { status: 409 })
     }
 
@@ -277,7 +342,7 @@ async function runSweep({ dryRun, maxDeletions, source }: SweepOptions) {
     deleted += await removeAll(svc, 'thumbnails', thumbs.orphans)
 
     console.log(`[sweep-storage] ${source} run: ${scanned} scanned, ${deleted} deleted`)
-    return NextResponse.json({ dryRun: false, scanned, orphans, deleted, skippedRecent, paths })
+    return NextResponse.json({ dryRun: false, scanned, orphans, deleted, skippedRecent, buckets, paths })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Sweep failed'
     console.error('[sweep-storage]', message)
