@@ -186,8 +186,10 @@ before (11 problems, all pre-existing).
   `--radius` / `--radius-sm` / `--radius-xs` in `globals.css`. Change those three
   values to retune the whole app. Canvas, artwork overlays and image thumbnails
   stay square deliberately: rounding them clips artwork.
-- **Regenerating a client link kills the old one immediately.** Rows are deleted,
-  not expired.
+- **Regenerating a client link kills the old one immediately.** Implemented by
+  setting `expires_at` to now, *not* by deleting the row — see §6.7. Both gates
+  test `expires_at > now()`, so the link dies either way, but a surviving row is
+  what lets the old URL show the explanation instead of a bare 404.
 - **Expired links get an explanation page only** — no contact form, no email
   address, no notification back to the consultant.
 
@@ -326,3 +328,49 @@ Still to try by hand:
   deletes files from the production bucket, which was not worth doing blind.
   Do a manual dry run first, then let the first scheduled run happen and read
   the Vercel logs.
+
+---
+
+## 7. Follow-ups from Tom's preview testing (2026-07-29)
+
+Tom worked through §6.5 on the Vercel preview. Items 1, 2, 4 confirmed working:
+dashboard fonts and rounding, header collision behaviour, the eye icon and client
+drag. Two things came back.
+
+### 7.1 Empty "Additional Costs" heading — fixed
+
+Unticking "Shown to client" correctly removed the row, but with *every* row
+hidden the client still saw the section heading above an empty panel.
+`BudgetScreen` now hides the whole section unless something in it is visible,
+via `hasClientVisibleCosts()`. That helper duplicates the per-row rules — a
+missing `shownToClient` counts as true for installation, the fee needs to exist
+*and* be flagged, custom items need at least one flagged. **Keep it in step with
+InstallationRow, ConsultantFeeRow and CustomLineItems**, or the heading and its
+contents will disagree.
+
+The consultant always sees the section; it holds the controls for adding to it.
+
+### 7.2 A replaced link 404'd instead of explaining — fixed
+
+The gap: `regenerateShareToken` **deleted** the old rows, so the old URL resolved
+to an *unknown* token, and unknown tokens deliberately 404 (a mistyped URL must
+not confirm a project exists). Only a row that still existed with a past expiry
+reached the explanation page. Replaced links therefore got the bare 404 —
+inconsistent with expired ones, and not what Tom expected.
+
+Old links are now retired by **setting `expires_at` to now** rather than by
+deleting the row. The portal page and the action route both gate on
+`expires_at > now()`, so the link stops working exactly as immediately as before,
+but the row survives and the old URL reaches the explanation.
+
+No migration: migration 011's "Consultants update tokens via project" policy
+already permits the update.
+
+Consequence for the copy: that page now covers two different situations — a link
+that ran out its 90 days, and one deliberately replaced. It no longer says
+anything about time running out, because that is false in the second case. It
+reads "This link is no longer active". If a future change needs to tell the two
+apart, that needs a `revoked_at` column and therefore a migration.
+
+Retired rows accumulate rather than being cleaned up. They are inert (every read
+path checks expiry) and serve as an audit trail, but nothing prunes them.

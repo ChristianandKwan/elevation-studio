@@ -583,23 +583,29 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   /**
    * Replace the current link with a new one — for when the generated artist
-   * names read badly. The old link stops working immediately, so the rows are
-   * deleted rather than left to expire.
+   * names read badly. The old link stops working immediately.
    *
-   * The new token is inserted *before* the old ones are removed. If the delete
+   * Retired by setting `expires_at` to now rather than by deleting the row.
+   * Both the portal page and the action route gate on `expires_at > now()`, so
+   * the effect is identical — but a row that still exists means a client who
+   * follows the old link reaches the "no longer active" explanation instead of
+   * a bare 404, which is what an unknown token gets. Deleting the row lost that
+   * distinction.
+   *
+   * The new token is inserted *before* the old ones are retired. If the update
    * fails the project is left with two working links, which is recoverable;
-   * deleting first and failing to insert would leave it with none.
+   * retiring first and failing to insert would leave it with none.
    */
   async function regenerateShareToken(): Promise<string> {
     const supabase = createClient()
     const token = await insertNewToken()
 
-    const { error: delErr } = await supabase
+    const { error: retireErr } = await supabase
       .from('client_tokens')
-      .delete()
+      .update({ expires_at: new Date().toISOString() })
       .eq('project_id', project.id)
       .neq('token', token)
-    if (delErr) onStatus('New link created, but the old one could not be disabled')
+    if (retireErr) onStatus('New link created, but the old one could not be disabled')
 
     setShareToken(token)
     setExpiryNoticeOpen(false)

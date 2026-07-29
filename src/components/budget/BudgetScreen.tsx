@@ -33,6 +33,20 @@ interface Props {
 
 const VAT_STORAGE_KEY = (pid: string) => `elevation_budget_vat_mode_${pid}`
 
+/**
+ * Whether the Additional Costs section would show the client anything.
+ *
+ * Mirrors the per-row rules exactly: InstallationRow and TotalsPanel both treat
+ * a missing `shownToClient` as true, so installation shows unless explicitly
+ * unticked; the consultant fee needs a fee that is flagged; custom items need
+ * at least one flagged. Keep these in step with those components.
+ */
+function hasClientVisibleCosts(budget: ProjectBudget): boolean {
+  if (budget.installation?.shownToClient ?? true) return true
+  if (budget.consultantFee?.shownToClient) return true
+  return budget.customLineItems.some(item => item.shownToClient)
+}
+
 export default function BudgetScreen({
   projectId,
   projectName,
@@ -131,6 +145,11 @@ export default function BudgetScreen({
             </section>
 
             {/* ── Additional costs ─────────────────────────────────────── */}
+            {/* Every row here can be hidden from the client individually, so
+                they can all be off at once — leaving a heading above an empty
+                panel. The consultant always sees the section: it holds the
+                controls for adding to it. */}
+            {(effectiveIsConsultant || hasClientVisibleCosts(budget)) && (
             <section className="budget-section">
               <div className="budget-section-kicker">Additional Costs</div>
               <div className="budget-costs-panel">
@@ -162,6 +181,7 @@ export default function BudgetScreen({
                 />
               </div>
             </section>
+            )}
 
             {/* ── Totals ───────────────────────────────────────────────── */}
             <TotalsPanel
