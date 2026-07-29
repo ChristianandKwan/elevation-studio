@@ -169,16 +169,26 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 40px 24px; text-align: center;
 }
-.client-expired-logo { height: 56px; width: auto; margin-bottom: 40px; }
+/* 95px is 56px + 70%, at Tom's request — this page is almost all whitespace,
+   so the wordmark was carrying too little of it. */
+.client-expired-logo { height: 95px; width: auto; margin-bottom: 44px; }
 .client-expired-title {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
   font-size: 30px; font-weight: 300; color: #fff; margin-bottom: 16px;
 }
 .client-expired-body {
   font-size: 13px; line-height: 1.75; color: rgba(255,255,255,.55);
-  max-width: 420px; margin-bottom: 12px;
+  /* 470 rather than 420: the copy is a single paragraph now, and the narrower
+     measure broke it across four lines with "the project." stranded alone. */
+  max-width: 470px; margin-bottom: 12px;
 }
 .client-expired-body:last-child { margin-bottom: 0; }
+.client-expired-email {
+  color: #fff; font-weight: 600; text-decoration: underline;
+  text-underline-offset: 3px; text-decoration-color: rgba(255,255,255,.35);
+  transition: text-decoration-color .15s;
+}
+.client-expired-email:hover { text-decoration-color: #fff; }
 
 /* Elevation name label */
 .elevation-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 17px; font-weight: 400; }
