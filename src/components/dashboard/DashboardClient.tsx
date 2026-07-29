@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
-import { timeNow } from '@/lib/utils'
+import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import StatusToast from '@/components/ui/StatusToast'
 import { ArcSpinner } from '@/components/ui/Spinner'
 import FeedbackButton from '@/components/feedback/FeedbackButton'
@@ -110,7 +110,10 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
       p_client_name: newClient.trim() || 'Unnamed client',
       p_budget: budget,
       p_elev_name: elevName,
-      p_profile_name: profile.name,
+      // The RPC uses this only to write "Project created by …" into
+      // activity_logs, so it gets the practice name for the same reason the
+      // other log writers do — the shared info@ login is not a useful author.
+      p_profile_name: PRACTICE_NAME,
     })
 
     if (error || !projectId) { showStatus('Failed to create project'); setCreating(false); return }

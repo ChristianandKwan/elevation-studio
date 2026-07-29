@@ -13,6 +13,18 @@ export function timeNow(): string {
   })
 }
 
+/**
+ * How the practice is named in anything a client can read.
+ *
+ * The consultants share one login (info@), so the profile name attached to an
+ * action is "info" — which is what the client portal's activity history was
+ * showing them. The studio is single-tenant, so attributing consultant actions
+ * to the practice is both accurate and what the client should see.
+ *
+ * Only affects entries written from here on; existing rows keep their text.
+ */
+export const PRACTICE_NAME = 'C&K'
+
 export function formatApprovalTimestamp(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
