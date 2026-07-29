@@ -408,3 +408,27 @@ enforces the same check automatically.
 visible total, so there was no way to tell 12-of-21 (fine) from 12-of-12 (a
 broken check that would have blanked the dashboard). Re-run the dry run and
 confirm `buckets.thumbnails.matched > 0` before any real run.
+### 7.4 Sweep run for real — 2026-07-29
+
+`deleted 35 of 35 orphans`, with per-bucket counts identical to the dry run
+immediately before it (elevation 13/7/6, artwork 36/12/17+7 skipped,
+thumbnails 19/7/12). The sweep removed exactly what it previewed and nothing
+else, which is §5.3's acceptance criteria met: dry run listed plausible
+orphans and deleted nothing; the real run deleted only those paths; every
+image still referenced survived — `matched` equalled `livePathsInDb` on both
+image buckets, so nothing live was touched.
+
+Unauthenticated POST → 401 was verified earlier. **Issue 3 is closed.**
+
+### 7.5 A note on nudging the expired page's wordmark
+
+`ck-wordmark-white.png` carries roughly **16% of its own height as empty space
+below "Kwan"**, so the element's box is nowhere near where the letterforms
+end. `margin-bottom: 28px` renders as a ~49px gap to the cap-height of the
+title beneath it.
+
+If asked to move it again, change the margin by the amount you want the
+*visible* gap to change, and re-measure rather than reasoning from the CSS.
+The measurement is a canvas pixel-scan for the last inked row of the PNG plus
+`TextMetrics.actualBoundingBoxAscent` for the title's cap top — the numbers
+above came from that, not from eyeballing a screenshot.

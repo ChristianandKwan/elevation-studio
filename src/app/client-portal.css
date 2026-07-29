@@ -170,8 +170,13 @@
   padding: 40px 24px; text-align: center;
 }
 /* 95px is 56px + 70%, at Tom's request — this page is almost all whitespace,
-   so the wordmark was carrying too little of it. */
-.client-expired-logo { height: 95px; width: auto; margin-bottom: 44px; }
+   so the wordmark was carrying too little of it.
+
+   The margin reads smaller than the gap it produces: the PNG has about 16% of
+   its own height as empty space below "Kwan", so 28px of margin renders as a
+   ~49px gap to the cap-height of the title. Measured, not guessed — adjust the
+   margin by whatever change you want in the *visible* gap, not the total. */
+.client-expired-logo { height: 95px; width: auto; margin-bottom: 28px; }
 .client-expired-title {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
   font-size: 30px; font-weight: 300; color: #fff; margin-bottom: 16px;
