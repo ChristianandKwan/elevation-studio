@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
-import { wallQuadToSkewMatrix } from '@/lib/homography'
+import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
+import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 
 /**
@@ -1937,6 +1938,25 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const canFilter = 'filter' in ctx
     const pxPerCm = s.scale.origPxPerCm * k
 
+    //    Perspective. The canvas applies the same transform to #artwork-layer,
+    //    whose box is the elevation at display size; here the layer is the
+    //    export canvas instead. The homography is scale-invariant, so it can be
+    //    rebuilt straight in export space from the stored corner fractions —
+    //    no separate step to undo the display size or the 2x.
+    //
+    //    Left null unless the option actually uses perspective: the flat path
+    //    below lands on whole pixels and is measurably sharper, and putting
+    //    every export through a resampling warp to serve a minority of options
+    //    would be a poor trade.
+    const skewH = s.skewActive && s.skewCorners
+      ? wallQuadToHomography(c.width, c.height, [
+          [s.skewCorners[0][0] * c.width, s.skewCorners[0][1] * c.height],
+          [s.skewCorners[1][0] * c.width, s.skewCorners[1][1] * c.height],
+          [s.skewCorners[2][0] * c.width, s.skewCorners[2][1] * c.height],
+          [s.skewCorners[3][0] * c.width, s.skewCorners[3][1] * c.height],
+        ])
+      : null
+
     s.artworks.forEach(art => {
       if (!art.visible || !art.img || art.loadFailed || !s.scale) return
       const w = art.wCm * pxPerCm
@@ -2003,10 +2023,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       if (canFilter && art.brightness != null && art.brightness !== 1) {
         ctx.filter = `brightness(${art.brightness})`
       }
-      // Snapped to whole pixels: a canvas dropped at a fractional coordinate is
-      // resampled to straddle the pixel grid, which softens every edge in it.
-      // Half a pixel of position is not worth that.
-      ctx.drawImage(layer, Math.round(x + offX), Math.round(y + offY))
+      // `layer` carries the frame and the baked shadow as well as the artwork,
+      // so warping it warps all three together — the same grouping the DOM
+      // gets by transforming #artwork-layer rather than its children.
+      const warped = skewH
+        ? drawImageWarped(ctx, layer, x + offX, y + offY, skewH)
+        : false
+      if (!warped) {
+        // Snapped to whole pixels: a canvas dropped at a fractional coordinate is
+        // resampled to straddle the pixel grid, which softens every edge in it.
+        // Half a pixel of position is not worth that.
+        ctx.drawImage(layer, Math.round(x + offX), Math.round(y + offY))
+      }
       ctx.restore()
     })
 

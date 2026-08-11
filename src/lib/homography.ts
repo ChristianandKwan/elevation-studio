@@ -1,17 +1,23 @@
 /**
- * Computes the CSS matrix3d string for a perspective transform that maps
- * a rectangle of size (rectW x rectH) to an arbitrary quadrilateral.
+ * A 3×3 projective transform, row-major: [h0..h8] with h8 normalised to 1.
+ * Maps (x, y) → ((h0x + h1y + h2)/w, (h3x + h4y + h5)/w) where w = h6x + h7y + h8.
+ */
+export type Homography = number[]
+
+/**
+ * Computes the homography that maps a rectangle of size (rectW x rectH),
+ * anchored at the origin, to an arbitrary quadrilateral.
  *
  * @param rectW  Width of the source rectangle (the element's CSS width)
  * @param rectH  Height of the source rectangle (the element's CSS height)
  * @param quad   Destination corners [TL, TR, BR, BL] in display pixels
- * @returns      CSS matrix3d(...) string, or '' if the computation fails
+ * @returns      The 3×3 matrix, or null if the quad is degenerate
  */
-export function quadToCSSMatrix3d(
+export function quadToHomography(
   rectW: number,
   rectH: number,
   quad: [[number, number], [number, number], [number, number], [number, number]]
-): string {
+): Homography | null {
   const [tl, tr, br, bl] = quad
   const src: Array<[number, number]> = [
     [0, 0],
@@ -22,18 +28,51 @@ export function quadToCSSMatrix3d(
   const dst: Array<[number, number]> = [tl, tr, br, bl]
 
   try {
-    const h = computeHomography(src, dst)
-    // CSS matrix3d is column-major 4x4:
-    //   col0: [h[0], h[3], 0, h[6]]
-    //   col1: [h[1], h[4], 0, h[7]]
-    //   col2: [0,    0,    1, 0   ]
-    //   col3: [h[2], h[5], 0, h[8]]
-    // Flat row: matrix3d(h0,h3,0,h6, h1,h4,0,h7, 0,0,1,0, h2,h5,0,h8)
-    const [h0, h1, h2, h3, h4, h5, h6, h7, h8] = h
-    return `matrix3d(${h0},${h3},0,${h6},${h1},${h4},0,${h7},0,0,1,0,${h2},${h5},0,${h8})`
+    return computeHomography(src, dst)
   } catch {
-    return ''
+    return null
   }
+}
+
+/** Maps a point through a homography. Returns null on the degenerate case. */
+export function applyHomography(
+  h: Homography,
+  x: number,
+  y: number
+): [number, number] | null {
+  const denom = h[6] * x + h[7] * y + h[8]
+  if (Math.abs(denom) < 1e-9) return null
+  return [
+    (h[0] * x + h[1] * y + h[2]) / denom,
+    (h[3] * x + h[4] * y + h[5]) / denom,
+  ]
+}
+
+/** Formats a homography as the equivalent CSS matrix3d string. */
+function toCSSMatrix3d(h: Homography): string {
+  // CSS matrix3d is column-major 4x4:
+  //   col0: [h[0], h[3], 0, h[6]]
+  //   col1: [h[1], h[4], 0, h[7]]
+  //   col2: [0,    0,    1, 0   ]
+  //   col3: [h[2], h[5], 0, h[8]]
+  // Flat row: matrix3d(h0,h3,0,h6, h1,h4,0,h7, 0,0,1,0, h2,h5,0,h8)
+  const [h0, h1, h2, h3, h4, h5, h6, h7, h8] = h
+  return `matrix3d(${h0},${h3},0,${h6},${h1},${h4},0,${h7},0,0,1,0,${h2},${h5},0,${h8})`
+}
+
+/**
+ * Computes the CSS matrix3d string for a perspective transform that maps
+ * a rectangle of size (rectW x rectH) to an arbitrary quadrilateral.
+ *
+ * @returns CSS matrix3d(...) string, or '' if the computation fails
+ */
+export function quadToCSSMatrix3d(
+  rectW: number,
+  rectH: number,
+  quad: [[number, number], [number, number], [number, number], [number, number]]
+): string {
+  const h = quadToHomography(rectW, rectH, quad)
+  return h ? toCSSMatrix3d(h) : ''
 }
 
 /**
@@ -61,14 +100,18 @@ export function quadToCSSMatrix3d(
  *      point correspondences, so the resulting transform agrees with H at every
  *      point — including every artwork — and therefore scales correctly.
  *
- * @returns CSS matrix3d(...) string, or '' if the computation fails or the
- *          wall quad is degenerate.
+ * Returns the numeric matrix so that callers which are not the DOM — the PNG
+ * export warps pixels through it directly — do not have to parse a CSS string
+ * back apart. `wallQuadToSkewMatrix` is the same thing formatted.
+ *
+ * @returns The 3×3 matrix, or null if the computation fails or the wall quad
+ *          is degenerate.
  */
-export function wallQuadToSkewMatrix(
+export function wallQuadToHomography(
   photoW: number,
   photoH: number,
   wallQuad: [[number, number], [number, number], [number, number], [number, number]]
-): string {
+): Homography | null {
   const [TL, TR, BR, BL] = wallQuad
   const d = (a: [number, number], b: [number, number]) =>
     Math.hypot(a[0] - b[0], a[1] - b[1])
@@ -79,7 +122,7 @@ export function wallQuadToSkewMatrix(
 
   const hWall = Math.max(leftLen, rightLen)
   const wWall = Math.max(topLen, bottomLen)
-  if (hWall < 1 || wWall < 1) return ''
+  if (hWall < 1 || wWall < 1) return null
 
   // Anchor the flat-on wall rect so its near (tall) edge sits where the
   // quad's tall edge sits. The near edge is whichever vertical edge is longer.
@@ -106,17 +149,11 @@ export function wallQuadToSkewMatrix(
   try {
     h = computeHomography(wallRect, [TL, TR, BR, BL])
   } catch {
-    return ''
+    return null
   }
 
-  const apply = (x: number, y: number): [number, number] => {
-    const denom = h[6] * x + h[7] * y + h[8]
-    if (Math.abs(denom) < 1e-9) return [0, 0]
-    return [
-      (h[0] * x + h[1] * y + h[2]) / denom,
-      (h[3] * x + h[4] * y + h[5]) / denom,
-    ]
-  }
+  const apply = (x: number, y: number): [number, number] =>
+    applyHomography(h, x, y) ?? [0, 0]
 
   const photoQuad: [[number, number], [number, number], [number, number], [number, number]] = [
     apply(0, 0),
@@ -125,7 +162,22 @@ export function wallQuadToSkewMatrix(
     apply(0, photoH),
   ]
 
-  return quadToCSSMatrix3d(photoW, photoH, photoQuad)
+  return quadToHomography(photoW, photoH, photoQuad)
+}
+
+/**
+ * The CSS form of {@link wallQuadToHomography}, for the DOM path.
+ *
+ * @returns CSS matrix3d(...) string, or '' if the computation fails or the
+ *          wall quad is degenerate.
+ */
+export function wallQuadToSkewMatrix(
+  photoW: number,
+  photoH: number,
+  wallQuad: [[number, number], [number, number], [number, number], [number, number]]
+): string {
+  const h = wallQuadToHomography(photoW, photoH, wallQuad)
+  return h ? toCSSMatrix3d(h) : ''
 }
 
 /** Solves for the 3×3 homography H mapping src[i] → dst[i] via DLT. */
