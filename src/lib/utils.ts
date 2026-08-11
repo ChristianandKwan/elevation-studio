@@ -54,7 +54,7 @@ export const STUDIO_SIGNED_URL_TTL = 60 * 60 * 12
  * to fill its box and reads as a soft rectangle in a sharp photograph. Above
  * it, the artwork can never be the weak link.
  */
-export const ARTWORK_DETAIL_TOLERANCE = 0.9
+export const ARTWORK_DETAIL_TOLERANCE = 0.8
 
 /** Below this on the long edge, an elevation photo is soft however it is used. */
 export const MIN_ELEVATION_LONG_EDGE = 2000
