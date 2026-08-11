@@ -861,6 +861,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         <AddArtworkModal
           onConfirm={studio.addArtworks}
           onCancel={() => studio.setShowArtModal(false)}
+          wallPxPerCm={state.scale?.origPxPerCm ?? null}
         />
       )}
 

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { ArcSpinner } from '@/components/ui/Spinner'
+import { checkArtworkDetail } from '@/lib/utils'
 
 export interface ArtMeta {
   name: string
@@ -28,14 +29,41 @@ interface Props {
   /** Awaited so the modal can stay disabled until the upload finishes. */
   onConfirm: (files: File[], metas: ArtMeta[]) => void | Promise<void>
   onCancel: () => void
+  /**
+   * Detail the calibrated wall photograph carries, per centimetre. Lets the
+   * modal say whether a chosen file has the pixels to hang at the size being
+   * typed in. Null before calibration, when there is nothing to compare to.
+   */
+  wallPxPerCm?: number | null
+}
+
+/**
+ * Advises when a file will be enlarged to fill its place on the wall. Never
+ * blocks: a consultant who only has this image still needs to use it.
+ */
+function DetailNote({ filePx, wCm, wallPxPerCm }: { filePx: number | undefined; wCm: number; wallPxPerCm: number | null | undefined }) {
+  const detail = checkArtworkDetail(filePx, wCm, wallPxPerCm)
+  if (!detail || detail.ok) return null
+  return (
+    <div style={{
+      marginTop: 6, padding: '5px 8px', fontSize: 11, lineHeight: 1.45,
+      color: 'var(--amber)', background: 'var(--amber-light)', borderRadius: 'var(--radius-sm)',
+    }}>
+      At {wCm} cm wide this needs about <strong>{detail.neededPx.toLocaleString()} px</strong> to match
+      the wall; this file is {detail.filePx.toLocaleString()} px. It will be enlarged, so it will look
+      softer than its surroundings. Fine to continue if it is the only image you have.
+    </div>
+  )
 }
 
 const DEFAULT_W = 40
 const DEFAULT_H = 60
 
-export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
+export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Props) {
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
+  /** Pixel width of each chosen file, read off the preview once it decodes. */
+  const [naturalWidths, setNaturalWidths] = useState<number[]>([])
   const [sizeErrors, setSizeErrors] = useState<string[]>([])
   const [reading, setReading] = useState(false)
   // The modal stays mounted while addArtworks uploads, so without this a
@@ -58,6 +86,20 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [onCancel])
+
+  // Measure each preview so the detail advice can compare the file against the
+  // wall. Reads the data URL already built for the thumbnails — no second read.
+  useEffect(() => {
+    let cancelled = false
+    if (previews.length === 0) { setNaturalWidths([]); return }
+    Promise.all(previews.map(src => new Promise<number>(resolve => {
+      const img = new Image()
+      img.onload = () => resolve(img.naturalWidth)
+      img.onerror = () => resolve(0)
+      img.src = src
+    }))).then(widths => { if (!cancelled) setNaturalWidths(widths) })
+    return () => { cancelled = true }
+  }, [previews])
 
   function pickImages() {
     inputRef.current?.click()
@@ -208,6 +250,7 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
                 <input type="number" className="field-input" value={hCm} onChange={e => setHCm(e.target.value)} placeholder="60" min={1} step={0.5} />
               </div>
             </div>
+            <DetailNote filePx={naturalWidths[0]} wCm={parseFloat(wCm) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />
             <div className="field">
               <label className="field-label">
                 Price (£)
@@ -289,6 +332,7 @@ export default function AddArtworkModal({ onConfirm, onCancel }: Props) {
                       <input type="number" className="field-input" value={meta.price || ''} onChange={e => updateRow(i, { price: parseFloat(e.target.value) || 0 })} min={0} step={50} placeholder="0" style={{ fontSize: 12, width: 80 }} />
                     </div>
                   </div>
+                  <DetailNote filePx={naturalWidths[i]} wCm={parseFloat(meta.wStr) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />
                   {/* Framing */}
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <button
