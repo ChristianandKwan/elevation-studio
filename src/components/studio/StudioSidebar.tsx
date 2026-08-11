@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, memo } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 import type { ActivityLog } from '@/types'
-import { framingLabel, formatPrice, formatApprovalTimestamp } from '@/lib/utils'
+import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail, MIN_ELEVATION_LONG_EDGE } from '@/lib/utils'
 
 type StudioHook = ReturnType<typeof useStudio>
 
@@ -89,6 +89,15 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
           style={{ display: 'none' }}
           onChange={onFileChange}
         />
+        {/* A small photo limits everything: it sets the detail budget the
+            artworks have to share, and it cannot be improved after the fact. */}
+        {hasElev && Math.max(state.elev!.origW, state.elev!.origH) < MIN_ELEVATION_LONG_EDGE && (
+          <div className="detail-note">
+            This photo is {state.elev!.origW} × {state.elev!.origH} px, which will look soft to the
+            client and in exports. Around 3000 px on the long edge is ideal — a photo sent through
+            WhatsApp, screenshotted, or pulled out of a slide is usually the culprit.
+          </div>
+        )}
       </div>
 
       {/* Step 2: Scale */}
@@ -142,6 +151,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
                   isSelected={state.selIds.has(art.id)}
                   isExpanded={expandedArtId === art.id}
                   hasScale={hasScale}
+                  wallPxPerCm={state.scale?.origPxPerCm ?? null}
                   isLocked={isLocked}
                   onSelect={() => studio.selectArtwork(art.id)}
                   onDeselect={() => studio.selectArtwork(null)}
@@ -483,10 +493,12 @@ const FRAME_COLORS: Record<string, string> = {
 }
 
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; framingStatus: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; framingStatus: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null; img?: HTMLImageElement | null }
   isSelected: boolean
   isExpanded: boolean
   hasScale: boolean
+  /** Detail the wall photo carries, per cm — what each artwork is judged against. */
+  wallPxPerCm: number | null
   isLocked: boolean
   onSelect: () => void
   onDeselect: () => void
@@ -506,7 +518,7 @@ interface ArtworkItemProps {
   onShadowApplyAll: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onFadeChange, onFadeApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
+const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, wallPxPerCm, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onFadeChange, onFadeApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -516,6 +528,8 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
   const [shadowAngle, setShadowAngle] = useState(art.shadowAngle ?? 225)
   const [shadowBlur, setShadowBlur] = useState(art.shadowBlur ?? 0)
   const [shadowOpacity, setShadowOpacity] = useState(art.shadowOpacity ?? 0)
+
+  const detail = checkArtworkDetail(art.img?.naturalWidth, art.wCm, wallPxPerCm)
 
   useEffect(() => { setNameValue(art.name) }, [art.name])
   useEffect(() => { setArtistValue(art.artist ?? '') }, [art.artist])
@@ -555,6 +569,16 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
         <div className="aw-info">
           <div className="aw-name">{art.name}</div>
           {art.artist && <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 1 }}>{art.artist}</div>}
+          {/* Re-checked on every render rather than at upload: resizing the
+              piece or redrawing the scale line moves the threshold under it. */}
+          {detail && !detail.ok && (
+            <span
+              className="aw-detail-flag"
+              title={`This image is ${Math.round(detail.artworkPxPerCm)} px per cm at ${art.wCm} cm wide; the wall photo carries ${detail.wallPxPerCm.toFixed(1)}. It needs about ${detail.neededPx.toLocaleString()} px to match — it has ${detail.filePx.toLocaleString()}. It will look softer than its surroundings.`}
+            >
+              Low detail
+            </span>
+          )}
         </div>
         <div className="aw-btns">
           <button

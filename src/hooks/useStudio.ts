@@ -17,6 +17,25 @@ const FRAME_COLORS: Record<string, string> = {
 }
 
 /**
+ * How far above the elevation photograph's own resolution the PNG export is
+ * rendered, and the ceiling that keeps a large photo from producing a canvas
+ * the browser cannot allocate or the consultant cannot email.
+ *
+ * A 6000 × 4000 photo would be 96 megapixels at a straight 2×, so the factor
+ * is reduced rather than the export failing.
+ */
+const EXPORT_SUPERSAMPLE = 2
+const EXPORT_MAX_EDGE = 10000
+const EXPORT_MAX_PIXELS = 60_000_000
+
+function exportScaleFor(origW: number, origH: number): number {
+  if (!origW || !origH) return 1
+  const byEdge = EXPORT_MAX_EDGE / Math.max(origW, origH)
+  const byArea = Math.sqrt(EXPORT_MAX_PIXELS / (origW * origH))
+  return Math.max(1, Math.min(EXPORT_SUPERSAMPLE, byEdge, byArea))
+}
+
+/**
  * Mint a fresh signed URL for a storage object.
  *
  * Every image URL in the studio is a signature with an expiry, and the studio
@@ -1888,12 +1907,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     if (!s.elev || !s.scale) { onStatus('Please complete calibration first'); return }
     onStatus('Rendering…')
     setBusy(true)
+
+    // Rendered above the elevation photograph's own size. The photo gains
+    // nothing from this — it is being enlarged — but the artworks do: their
+    // files are typically several times larger than the space they occupy on
+    // the wall, and at 1:1 all of that detail was thrown away. Everything is
+    // enlarged by the same factor, so nothing looks out of place against
+    // anything else.
+    const k = exportScaleFor(s.elev.origW, s.elev.origH)
     const c = document.createElement('canvas')
-    c.width = s.elev.origW; c.height = s.elev.origH
+    c.width = Math.round(s.elev.origW * k)
+    c.height = Math.round(s.elev.origH * k)
     const ctx = c.getContext('2d')!
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
 
     // 1. Draw base elevation
-    ctx.drawImage(s.elev.img, 0, 0)
+    ctx.drawImage(s.elev.img, 0, 0, c.width, c.height)
 
     // 2. Draw artworks — frame, brightness, fade and drop shadow included, so
     //    the file matches the canvas. The export used to draw the bare image,
@@ -1903,19 +1933,20 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     //    sets them straight into a CSS drop-shadow), so they are converted to
     //    original-image pixels here — otherwise the shadow would come out
     //    however many times too small the elevation is displayed at.
-    const dispToOrig = s.scale.dispPxPerCm > 0 ? s.scale.origPxPerCm / s.scale.dispPxPerCm : 1
+    const dispToOrig = (s.scale.dispPxPerCm > 0 ? s.scale.origPxPerCm / s.scale.dispPxPerCm : 1) * k
     const canFilter = 'filter' in ctx
+    const pxPerCm = s.scale.origPxPerCm * k
 
     s.artworks.forEach(art => {
       if (!art.visible || !art.img || art.loadFailed || !s.scale) return
-      const w = art.wCm * s.scale.origPxPerCm
-      const h = art.hCm * s.scale.origPxPerCm
-      const x = art.xF * s.elev!.origW
-      const y = art.yF * s.elev!.origH
+      const w = art.wCm * pxPerCm
+      const h = art.hCm * pxPerCm
+      const x = art.xF * c.width
+      const y = art.yF * c.height
       // The overlay is content-box with the border outside the artwork, so the
       // frame grows right and down from (x, y) rather than centring on it.
       const frame = art.frameType && art.frameWidthMm
-        ? Math.round((art.frameWidthMm / 10) * s.scale.origPxPerCm)
+        ? Math.round((art.frameWidthMm / 10) * pxPerCm)
         : 0
 
       // Compose frame + artwork off-screen so brightness, fade and shadow
@@ -1985,12 +2016,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       ctx.beginPath()
       s.masks.forEach(polygon => {
         if (polygon.length < 3) return
-        ctx.moveTo(polygon[0].x * s.elev!.origW, polygon[0].y * s.elev!.origH)
-        polygon.slice(1).forEach(pt => ctx.lineTo(pt.x * s.elev!.origW, pt.y * s.elev!.origH))
+        ctx.moveTo(polygon[0].x * c.width, polygon[0].y * c.height)
+        polygon.slice(1).forEach(pt => ctx.lineTo(pt.x * c.width, pt.y * c.height))
         ctx.closePath()
       })
       ctx.clip()
-      ctx.drawImage(s.elev.img, 0, 0, s.elev.origW, s.elev.origH)
+      ctx.drawImage(s.elev.img, 0, 0, c.width, c.height)
       ctx.restore()
     }
 

@@ -153,6 +153,21 @@
 .scale-chip strong { color: var(--charcoal); }
 .kb-hint { font-size: 10px; color: var(--mid); margin-top: 8px; line-height: 1.6; }
 
+/* Image-detail advice. Advisory, never a blocker — a consultant with only a
+   poor photograph still has to be able to use it, so this is styled as a note
+   rather than an error. */
+.detail-note {
+  margin-top: 8px; padding: 7px 9px; font-size: 10.5px; line-height: 1.5;
+  color: var(--amber); background: var(--amber-light);
+  border-radius: var(--radius-sm);
+}
+.aw-detail-flag {
+  display: inline-block; margin-top: 3px; padding: 1px 5px;
+  font-size: 9.5px; letter-spacing: .03em; text-transform: uppercase;
+  color: var(--amber); background: var(--amber-light);
+  border-radius: var(--radius-xs); cursor: help;
+}
+
 /* Multi-select bar */
 .multi-select-bar {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
