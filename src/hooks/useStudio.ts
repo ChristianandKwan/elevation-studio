@@ -1925,6 +1925,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       tile.height = Math.max(1, Math.round(h + frame * 2))
       const tctx = tile.getContext('2d')
       if (!tctx) return
+      // Artwork files are usually far larger than the space they occupy on the
+      // wall, so this is a heavy downscale — worth asking for the good filter.
+      tctx.imageSmoothingEnabled = true
+      tctx.imageSmoothingQuality = 'high'
       if (frame > 0) {
         tctx.fillStyle = FRAME_COLORS[art.frameType!] ?? FRAME_COLORS.black
         tctx.fillRect(0, 0, tile.width, tile.height)
@@ -1968,7 +1972,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       if (canFilter && art.brightness != null && art.brightness !== 1) {
         ctx.filter = `brightness(${art.brightness})`
       }
-      ctx.drawImage(layer, x + offX, y + offY)
+      // Snapped to whole pixels: a canvas dropped at a fractional coordinate is
+      // resampled to straddle the pixel grid, which softens every edge in it.
+      // Half a pixel of position is not worth that.
+      ctx.drawImage(layer, Math.round(x + offX), Math.round(y + offY))
       ctx.restore()
     })
 
