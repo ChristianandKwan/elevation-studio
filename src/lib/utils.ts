@@ -25,6 +25,21 @@ export function timeNow(): string {
  */
 export const PRACTICE_NAME = 'C&K'
 
+/**
+ * How long signed storage URLs handed to the studio stay valid.
+ *
+ * The studio is a single long-lived screen: a consultant opens a project in the
+ * morning and works in it for hours without a page load. Signatures used to
+ * last an hour, so past that point every wall photo and artwork the page was
+ * loaded with started 403ing — switching options appeared to do nothing (the
+ * canvas kept the last option that had loaded) and thumbnails went blank, while
+ * anything uploaded in the last hour still worked. Twelve hours covers a
+ * working day; `useStudio` re-signs on load failure for anything longer.
+ *
+ * The client portal signs its own URLs for 72 h — see `client/[token]/page.tsx`.
+ */
+export const STUDIO_SIGNED_URL_TTL = 60 * 60 * 12
+
 export function formatApprovalTimestamp(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)

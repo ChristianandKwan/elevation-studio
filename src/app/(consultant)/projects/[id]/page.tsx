@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import StudioScreen from '@/components/studio/StudioScreen'
+import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -50,10 +51,12 @@ export default async function ProjectPage({ params }: Props) {
   const elevPaths = [...new Set(allOptions.map((o: any) => o.image_path).filter(Boolean))] as string[]
   const artPaths = [...new Set(allOptions.flatMap((o: any) => (o.artworks ?? []).map((a: any) => a.image_path)).filter(Boolean))] as string[]
 
-  // Two batched createSignedUrls calls in parallel — one per bucket
+  // Two batched createSignedUrls calls in parallel — one per bucket.
+  // TTL is deliberately long: the studio never reloads on its own, so these
+  // URLs have to outlive a working session. See STUDIO_SIGNED_URL_TTL.
   const [{ data: elevSigned }, { data: artSigned }] = await Promise.all([
-    supabase.storage.from('elevation-images').createSignedUrls(elevPaths, 3600),
-    supabase.storage.from('artwork-images').createSignedUrls(artPaths, 3600),
+    supabase.storage.from('elevation-images').createSignedUrls(elevPaths, STUDIO_SIGNED_URL_TTL),
+    supabase.storage.from('artwork-images').createSignedUrls(artPaths, STUDIO_SIGNED_URL_TTL),
   ])
   const elevMap = new Map(elevSigned?.map(e => [e.path, e.signedUrl]) ?? [])
   const artMap = new Map(artSigned?.map(e => [e.path, e.signedUrl]) ?? [])

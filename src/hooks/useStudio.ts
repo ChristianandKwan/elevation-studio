@@ -4,6 +4,39 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
+import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
+
+/**
+ * Frame colours, shared by the on-screen overlay and the PNG export so the
+ * exported file matches the canvas. `lib/thumbnail.ts` holds the same five
+ * colours as RGB triples for sharp.
+ */
+const FRAME_COLORS: Record<string, string> = {
+  black: '#1a1a1a', white: '#f0ede8',
+  'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
+}
+
+/**
+ * Mint a fresh signed URL for a storage object.
+ *
+ * Every image URL in the studio is a signature with an expiry, and the studio
+ * is a screen consultants leave open all day. When one expires the image just
+ * 403s, so anything that loads an image gets one re-signed retry before it
+ * treats the image as broken.
+ */
+async function resignStorageUrl(
+  bucket: 'elevation-images' | 'artwork-images',
+  path: string | null | undefined
+): Promise<string | null> {
+  if (!path) return null
+  try {
+    const supabase = createClient()
+    const { data } = await supabase.storage.from(bucket).createSignedUrl(path, STUDIO_SIGNED_URL_TTL)
+    return data?.signedUrl ?? null
+  } catch {
+    return null
+  }
+}
 
 export interface StudioElev {
   imagePath: string
@@ -693,14 +726,30 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         img.src = art.imageUrl ?? ''
         img.draggable = false
 
+        // The signature on this URL may have expired while the consultant sat
+        // on this option. Re-sign once and reload — both the tile on the wall
+        // and `art.img`, which the PNG export draws from.
+        let retriedSignature = false
+        img.onerror = () => {
+          if (retriedSignature || !art.imagePath) return
+          retriedSignature = true
+          resignStorageUrl('artwork-images', art.imagePath).then(fresh => {
+            if (!fresh) return
+            art.imageUrl = fresh
+            const reload = new Image()
+            reload.crossOrigin = 'anonymous'
+            reload.onload = () => { art.img = reload; art.loadFailed = false }
+            reload.src = fresh
+            img.src = fresh
+            // Nudge React so the sidebar's thumbnail picks up the new URL too.
+            setState(s => ({ ...s, artworks: [...s.artworks] }))
+          })
+        }
+
         // Frame border
         if (art.frameType && art.frameWidthMm && sc) {
           const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
-          const frameColor: Record<string, string> = {
-            black: '#1a1a1a', white: '#f0ede8',
-            'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-          }
-          div.style.border = `${framePx}px solid ${frameColor[art.frameType] ?? '#1a1a1a'}`
+          div.style.border = `${framePx}px solid ${FRAME_COLORS[art.frameType] ?? FRAME_COLORS.black}`
           div.style.boxSizing = 'content-box'
         }
 
@@ -973,24 +1022,50 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     skewCorners?: SkewCorners | null;
     skewActive?: boolean;
   }) {
-    if (!opts.imageUrl) {
+    // Empty canvas: the option has no image, or the one it has cannot be
+    // loaded. Bailing out without clearing left the *previous* option on
+    // screen, which made switching options look like it had done nothing.
+    const showEmptyCanvas = () => {
       setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
       setBusy(false)
+    }
+
+    if (!opts.imageUrl) {
+      showEmptyCanvas()
       return
     }
 
     setBusy(true)
+    // Reassigned if the signature on the URL we were handed has expired.
+    let elevUrl = opts.imageUrl
     const img = new Image()
     img.crossOrigin = 'anonymous'
-    img.onerror = () => setBusy(false)
+    let retriedSignature = false
+    img.onerror = () => {
+      if (!retriedSignature && opts.imagePath) {
+        retriedSignature = true
+        resignStorageUrl('elevation-images', opts.imagePath).then(fresh => {
+          if (!fresh) {
+            onStatus('Could not load this elevation image — please reload the page')
+            showEmptyCanvas()
+            return
+          }
+          elevUrl = fresh
+          img.src = fresh
+        })
+        return
+      }
+      onStatus('Could not load this elevation image — please reload the page')
+      showEmptyCanvas()
+    }
     img.onload = () => {
       const origW = opts.origW || img.naturalWidth
       const origH = opts.origH || img.naturalHeight
       const elev: StudioElev = {
         imagePath: opts.imagePath ?? '',
-        imageUrl: opts.imageUrl!,
+        imageUrl: elevUrl,
         img,
         origW,
         origH,
@@ -999,7 +1074,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       }
 
       const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
-      if (elevImg) elevImg.src = opts.imageUrl!
+      if (elevImg) elevImg.src = elevUrl
 
       const masks = opts.foregroundMasks ?? []
       const newArts = opts.artworks.map(a => ({ ...a }))
@@ -1087,8 +1162,28 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           newArts[i].img = ai
           tryFinish()
         }
+        let retriedSignature = false
         ai.onerror = () => {
           if (finished) return
+          // An expired signature is the likeliest reason a stored artwork
+          // stops loading, so re-sign once before calling it broken. The 10 s
+          // timer above still bounds the retry.
+          if (!retriedSignature && a.imagePath) {
+            retriedSignature = true
+            resignStorageUrl('artwork-images', a.imagePath).then(fresh => {
+              if (finished) return
+              if (!fresh) {
+                finished = true
+                clearTimeout(imgTimer)
+                newArts[i].loadFailed = true
+                tryFinish()
+                return
+              }
+              newArts[i].imageUrl = fresh
+              ai.src = fresh
+            })
+            return
+          }
           finished = true
           clearTimeout(imgTimer)
           newArts[i].loadFailed = true
@@ -1137,7 +1232,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const { error } = await supabase.storage.from('elevation-images').upload(path, file, { upsert: true })
     if (error) { onStatus('Upload failed: ' + error.message); setBusy(false); return }
 
-    const { data: signed } = await supabase.storage.from('elevation-images').createSignedUrl(path, 3600)
+    const { data: signed } = await supabase.storage.from('elevation-images').createSignedUrl(path, STUDIO_SIGNED_URL_TTL)
     const url = signed?.signedUrl
     if (!url) { setBusy(false); return }
 
@@ -1455,7 +1550,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const { error } = await supabase.storage.from('artwork-images').upload(path, file)
       if (error) { onStatus('Upload failed: ' + error.message); return null }
 
-      const { data: signed } = await supabase.storage.from('artwork-images').createSignedUrl(path, 3600)
+      const { data: signed } = await supabase.storage.from('artwork-images').createSignedUrl(path, STUDIO_SIGNED_URL_TTL)
       const url = signed?.signedUrl
       if (!url) return null
 
@@ -1800,11 +1895,81 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     // 1. Draw base elevation
     ctx.drawImage(s.elev.img, 0, 0)
 
-    // 2. Draw artworks
+    // 2. Draw artworks — frame, brightness, fade and drop shadow included, so
+    //    the file matches the canvas. The export used to draw the bare image,
+    //    which is why a framed artwork came out unframed.
+    //
+    //    Shadow offsets and blur are authored in display pixels (the overlay
+    //    sets them straight into a CSS drop-shadow), so they are converted to
+    //    original-image pixels here — otherwise the shadow would come out
+    //    however many times too small the elevation is displayed at.
+    const dispToOrig = s.scale.dispPxPerCm > 0 ? s.scale.origPxPerCm / s.scale.dispPxPerCm : 1
+    const canFilter = 'filter' in ctx
+
     s.artworks.forEach(art => {
-      if (!art.visible || !art.img || !s.scale) return
-      ctx.drawImage(art.img, art.xF * s.elev!.origW, art.yF * s.elev!.origH,
-        art.wCm * s.scale.origPxPerCm, art.hCm * s.scale.origPxPerCm)
+      if (!art.visible || !art.img || art.loadFailed || !s.scale) return
+      const w = art.wCm * s.scale.origPxPerCm
+      const h = art.hCm * s.scale.origPxPerCm
+      const x = art.xF * s.elev!.origW
+      const y = art.yF * s.elev!.origH
+      // The overlay is content-box with the border outside the artwork, so the
+      // frame grows right and down from (x, y) rather than centring on it.
+      const frame = art.frameType && art.frameWidthMm
+        ? Math.round((art.frameWidthMm / 10) * s.scale.origPxPerCm)
+        : 0
+
+      // Compose frame + artwork off-screen so brightness, fade and shadow
+      // apply to the pair as one, exactly as the CSS filter on the overlay div does.
+      const tile = document.createElement('canvas')
+      tile.width = Math.max(1, Math.round(w + frame * 2))
+      tile.height = Math.max(1, Math.round(h + frame * 2))
+      const tctx = tile.getContext('2d')
+      if (!tctx) return
+      if (frame > 0) {
+        tctx.fillStyle = FRAME_COLORS[art.frameType!] ?? FRAME_COLORS.black
+        tctx.fillRect(0, 0, tile.width, tile.height)
+      }
+      tctx.drawImage(art.img, frame, frame, w, h)
+
+      // Drop shadow, baked into its own layer. CSS paints the shadow behind an
+      // opaque artwork and only then applies the element's opacity, so drawing
+      // the shadow straight onto the elevation under a `globalAlpha` would let
+      // it show through a faded artwork.
+      let layer = tile
+      let offX = 0
+      let offY = 0
+      const blur = art.shadowBlur ?? 0
+      const shadowOpacity = art.shadowOpacity ?? 0
+      if (blur > 0 && shadowOpacity > 0) {
+        const rad = ((art.shadowAngle ?? 225) * Math.PI) / 180
+        const dist = blur * 0.55 * dispToOrig
+        const shadowX = -Math.sin(rad) * dist
+        const shadowY = Math.cos(rad) * dist
+        const shadowBlur = blur * dispToOrig
+        const pad = Math.ceil(shadowBlur + Math.max(Math.abs(shadowX), Math.abs(shadowY)))
+        const shadowed = document.createElement('canvas')
+        shadowed.width = tile.width + pad * 2
+        shadowed.height = tile.height + pad * 2
+        const sctx = shadowed.getContext('2d')
+        if (sctx) {
+          sctx.shadowColor = `rgba(0,0,0,${shadowOpacity})`
+          sctx.shadowBlur = shadowBlur
+          sctx.shadowOffsetX = shadowX
+          sctx.shadowOffsetY = shadowY
+          sctx.drawImage(tile, pad, pad)
+          layer = shadowed
+          offX = -pad
+          offY = -pad
+        }
+      }
+
+      ctx.save()
+      if (art.fade != null && art.fade > 0) ctx.globalAlpha = 1 - art.fade * 0.25
+      if (canFilter && art.brightness != null && art.brightness !== 1) {
+        ctx.filter = `brightness(${art.brightness})`
+      }
+      ctx.drawImage(layer, x + offX, y + offY)
+      ctx.restore()
     })
 
     // 3. Composite foreground layer (elevation painted again, clipped to mask polygons)
