@@ -15,7 +15,10 @@ export interface BudgetArtwork {
 }
 
 export interface BudgetOptionData {
+  /** Stored key — matches `clientPickedOption`. Never shown. */
   key: string
+  /** Display letter, derived from position (src/lib/options.ts). */
+  label: string
   artworks: BudgetArtwork[]
 }
 

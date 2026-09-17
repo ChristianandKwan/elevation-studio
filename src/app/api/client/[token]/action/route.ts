@@ -20,6 +20,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { optionLabelFor, sortOptions } from '@/lib/options'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -69,9 +70,25 @@ async function optionInProject(svc: Svc, optionId: string, projectId: string) {
   return {
     id: opt.id as string,
     option: opt.option as string,
+    elevationId: opt.elevation_id as string,
     approved: opt.approved as boolean,
     elevationName: elev.name,
   }
+}
+
+/**
+ * The letter a person sees for an option is its position among its siblings
+ * (src/lib/options.ts), not the stored key. Returns null if the key is not on
+ * this elevation.
+ */
+async function optionLabelIn(svc: Svc, elevationId: string, key: string): Promise<string | null> {
+  const { data } = await svc
+    .from('elevation_options')
+    .select('option, sort_order, created_at')
+    .eq('elevation_id', elevationId)
+  const siblings = (data ?? []) as Array<{ option: string; sort_order: number | null; created_at: string | null }>
+  if (!siblings.some(o => o.option === key)) return null
+  return optionLabelFor(siblings, key)
 }
 
 /**
@@ -132,15 +149,16 @@ async function logActivity(svc: Svc, projectId: string, type: string, text: stri
 async function allElevationsApproved(svc: Svc, projectId: string): Promise<boolean> {
   const { data: elevs } = await svc
     .from('elevations')
-    .select('id, client_picked_option, elevation_options(option, image_path, approved)')
+    .select('id, client_picked_option, elevation_options(option, image_path, approved, sort_order, created_at)')
     .eq('project_id', projectId)
   if (!elevs?.length) return false
 
   return elevs.every(elev => {
     const options = (elev.elevation_options ?? []) as Array<{
       option: string; image_path: string | null; approved: boolean
+      sort_order: number | null; created_at: string | null
     }>
-    const withImages = options.filter(o => o.image_path)
+    const withImages = sortOptions(options).filter(o => o.image_path)
     const needsPick = withImages.length > 1
     const picked = (elev.client_picked_option as string | null) ?? null
     const resolved = needsPick ? picked : (picked ?? withImages[0]?.option ?? null)
@@ -254,15 +272,18 @@ export async function POST(
       return NextResponse.json({ ok: true, updated: writable.length })
     }
 
-    // ── Client picks Option A or B for an elevation ──────
+    // ── Client picks an option for an elevation ──────────
+    // `option` is the stored key, not the letter the client saw.
     case 'pick_option': {
       const elevationId = payload.elevationId
       const option = payload.option
-      if (typeof elevationId !== 'string' || (option !== 'A' && option !== 'B')) {
+      if (typeof elevationId !== 'string' || typeof option !== 'string' || !/^[A-Z]$/.test(option)) {
         return bad('Invalid payload', 400)
       }
       const elev = await elevationInProject(svc, elevationId, projectId)
       if (!elev) return bad('Forbidden', 403)
+      const label = await optionLabelIn(svc, elevationId, option)
+      if (label === null) return bad('Unknown option', 400)
 
       const { error } = await svc
         .from('elevations')
@@ -270,7 +291,7 @@ export async function POST(
         .eq('id', elevationId)
       if (error) return bad('Update failed', 500)
 
-      await logActivity(svc, projectId, 'pick', `Client picked Option ${option} for ${elev.name}`)
+      await logActivity(svc, projectId, 'pick', `Client picked Option ${label} for ${elev.name}`)
       return NextResponse.json({ ok: true })
     }
 
@@ -309,7 +330,7 @@ export async function POST(
 
       await logActivity(
         svc, projectId, 'approved',
-        `Client approved Option ${opt.option} of ${opt.elevationName}`
+        `Client approved Option ${(await optionLabelIn(svc, opt.elevationId, opt.option)) ?? opt.option} of ${opt.elevationName}`
       )
 
       // Whole project signed off once every elevation's resolved option is approved.

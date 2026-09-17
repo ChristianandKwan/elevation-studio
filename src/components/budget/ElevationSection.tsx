@@ -23,7 +23,7 @@ export default function ElevationSection({ elevation, vatMode }: Props) {
       <div className="budget-elev-block budget-elev-block--picked">
         <div className="budget-elev-header budget-elev-header--picked">
           <span className="budget-elev-name">{elevation.name}</span>
-          <span className="budget-elev-pick-badge">✓ Option {picked}</span>
+          <span className="budget-elev-pick-badge">✓ Option {opt?.label ?? picked}</span>
           <span className="budget-elev-total">{fmtGbp(displayTotal)}</span>
         </div>
         <div className="budget-picked-artworks">

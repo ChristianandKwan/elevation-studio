@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import ClientPortal from '@/components/client/ClientPortal'
 import ClientLinkExpired from '@/components/client/ClientLinkExpired'
 import type { ProjectBudget } from '@/types'
+import { labelOptions } from '@/lib/options'
 
 interface Props {
   params: Promise<{ token: string }>
@@ -53,7 +54,7 @@ export default async function ClientPortalPage({ params }: Props) {
     .select(`
       id, name, display_order, client_picked_option,
       elevation_options(
-        id, option, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes,
+        id, option, sort_order, created_at, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         artworks(
           id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, framing_status, framing_cost, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity
@@ -70,7 +71,7 @@ export default async function ClientPortalPage({ params }: Props) {
       .select(`
         id, name, display_order, client_picked_option,
         elevation_options(
-          id, option, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes,
+          id, option, sort_order, created_at, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes,
           artworks(
             id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, framing_status, framing_cost, display_order, frame_type, frame_width_mm
           )
@@ -97,7 +98,7 @@ export default async function ClientPortalPage({ params }: Props) {
   // Rehydrate the per-option / per-artwork structure using the maps
   const elevationsWithUrls = (elevations ?? []).map(elev => {
     const options = (elev.elevation_options ?? []).map((opt: {
-      id: string; option: string; image_path: string | null;
+      id: string; option: string; sort_order: number; created_at: string; image_path: string | null;
       orig_w: number; orig_h: number; scale_px_per_cm: number | null;
       approved: boolean; approved_at: string | null;
       foreground_masks?: any[] | null; client_notes?: string | null;
@@ -137,7 +138,8 @@ export default async function ClientPortalPage({ params }: Props) {
 
       return { ...opt, imageUrl, artworks, clientNotes: opt.client_notes ?? '' }
     })
-    return { ...elev, elevation_options: options, clientPickedOption: (elev as any).client_picked_option ?? null }
+    // Sorted and lettered by position, in the same one place the studio uses (src/lib/options.ts).
+    return { ...elev, elevation_options: labelOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null }
   })
 
   // Fetch approval activity

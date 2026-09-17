@@ -17,7 +17,7 @@ export default function OptionBlock({ option, vatMode }: Props) {
   return (
     <div className="budget-option-block">
       <div className="budget-option-header">
-        <span className="budget-option-key">Option {option.key}</span>
+        <span className="budget-option-key">Option {option.label}</span>
         <span className="budget-option-subtotal">{fmtGbp(displayTotal)}</span>
       </div>
       <div className="budget-option-artworks">

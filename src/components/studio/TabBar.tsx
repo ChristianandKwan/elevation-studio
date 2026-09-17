@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { optionTagClass } from '@/lib/options'
 
 interface ElevationTab {
   id: string
   name: string
-  options: Array<{ key: string; hasArtworks: boolean; hasClientNotes: boolean }>
+  /** `key` is the stored identity; `label` is the position letter people see. */
+  options: Array<{ key: string; label: string; hasArtworks: boolean; hasClientNotes: boolean }>
 }
 
 interface Props {
@@ -18,12 +20,6 @@ interface Props {
   onDeleteElevation: (elevId: string) => void
   onAddOption: (elevId: string) => void
   onDeleteOption: (elevId: string, optKey: string) => void
-}
-
-function optionTagClass(key: string) {
-  if (key === 'A') return 'tag tag-option-a'
-  if (key === 'B') return 'tag tag-option-b'
-  return 'tag tag-option-other'
 }
 
 export default function TabBar({
@@ -57,7 +53,7 @@ export default function TabBar({
   const [renameElevId, setRenameElevId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const [confirmDeleteElevId, setConfirmDeleteElevId] = useState<string | null>(null)
-  const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; hasArtworks: boolean } | null>(null)
+  const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; label: string; hasArtworks: boolean } | null>(null)
 
   function handleAdd() {
     const name = newName.trim() || 'New Elevation'
@@ -98,7 +94,7 @@ export default function TabBar({
                       className={`studio-tab${isActive ? ' active' : ''}`}
                       onClick={() => onSwitch(elev.id, opt.key)}
                     >
-                      <span className={optionTagClass(opt.key)} style={{ marginRight: 5 }}>{opt.key}</span>
+                      <span className={optionTagClass(opt.label)} style={{ marginRight: 5 }}>{opt.label}</span>
                       {elev.name}
                       {opt.hasClientNotes && !isActive && (
                         <span className="studio-tab-notes-dot" title="Client has left notes on this option" aria-label="Has client notes" />
@@ -106,10 +102,10 @@ export default function TabBar({
                       {elev.options.length > 1 && (
                         <span
                           className="studio-tab-del-opt"
-                          title={`Remove option ${opt.key}`}
+                          title={`Remove option ${opt.label}`}
                           onClick={e => {
                             e.stopPropagation()
-                            setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, hasArtworks: opt.hasArtworks })
+                            setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, label: opt.label, hasArtworks: opt.hasArtworks })
                           }}
                         >
                           ×
@@ -241,7 +237,7 @@ export default function TabBar({
       {confirmDeleteOpt && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteOpt(null) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Remove Option {confirmDeleteOpt.optKey}?</div>
+            <div className="modal-title">Remove Option {confirmDeleteOpt.label}?</div>
             <div className="modal-sub" style={{ color: 'var(--red)' }}>
               {confirmDeleteOpt.hasArtworks
                 ? 'This option has artworks. Removing it will permanently delete them and their images.'

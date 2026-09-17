@@ -17,6 +17,8 @@ interface Props {
   onRequestDeleteArtworks: (ids: Set<string>) => void
   approvalStatus?: {
     pickedOption: string | null
+    /** Position letter for pickedOption — what the consultant should read */
+    pickedOptionLabel?: string
     approved: boolean
     approvedAt: string | null
   }
@@ -347,7 +349,7 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {approvalStatus.pickedOption && (
               <div className="studio-approval-chip picked">
-                ✓ Client picked Option {approvalStatus.pickedOption}
+                ✓ Client picked Option {approvalStatus.pickedOptionLabel || approvalStatus.pickedOption}
               </div>
             )}
             {approvalStatus.approved ? (

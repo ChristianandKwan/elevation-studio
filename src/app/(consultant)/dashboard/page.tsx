@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import DashboardClient from '@/components/dashboard/DashboardClient'
+import { sortOptions } from '@/lib/options'
 
 /**
  * Dashboard project thumbnails used to be composited inline on every
@@ -41,7 +42,7 @@ export default async function DashboardPage() {
       elevations(
         id, client_picked_option, display_order,
         elevation_options(
-          id, option, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, approved
+          id, option, sort_order, created_at, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, approved
         )
       )
     `)
@@ -49,12 +50,10 @@ export default async function DashboardPage() {
     .eq('archived', false)
     .order('created_at', { ascending: false })
 
-  // Extract first option per project (sorted by display_order, option A preferred)
+  // Extract first option per project: first elevation by display_order, its first option by position
   const projectMeta = (projects ?? []).map(p => {
     const sortedElevations = [...(p.elevations ?? [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
-    const firstOption = sortedElevations[0]?.elevation_options?.find(
-      (o: { option: string }) => o.option === 'A'
-    )
+    const firstOption = sortOptions(sortedElevations[0]?.elevation_options ?? [])[0]
     const elevCount = p.elevations?.length ?? 0
     const pickedCount = (p.elevations ?? []).filter((e: { client_picked_option: string | null }) => e.client_picked_option != null).length
     const approvedCount = (p.elevations ?? []).filter((e: { elevation_options: Array<{ approved: boolean }> }) =>
