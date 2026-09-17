@@ -536,6 +536,33 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     onStatus(`Option ${removedLabel} removed`)
   }
 
+  /**
+   * Save a new left-to-right order for one elevation's options.
+   * Optimistic: the strip re-letters at once, then a single RPC writes every
+   * sort_order in one statement (see migration 023). If that fails the old
+   * order comes back. Only the order changes — nothing is deleted or re-keyed.
+   */
+  async function reorderOptions(elevId: string, orderedKeys: string[]) {
+    const elev = elevations.find(e => e.id === elevId)
+    if (!elev) return
+    const byKey = new Map(elev.elevation_options.map(o => [o.option, o]))
+    if (orderedKeys.length !== byKey.size || orderedKeys.some(k => !byKey.has(k))) return
+    const previous = elev.elevation_options
+    const reordered = orderedKeys.map((k, i) => ({ ...byKey.get(k)!, sort_order: i }))
+    setElevations(prev => prev.map(e => e.id === elevId ? { ...e, elevation_options: reordered } : e))
+
+    const supabase = createClient()
+    const { error } = await supabase.rpc('reorder_elevation_options', {
+      p_elevation_id: elevId,
+      p_option_ids: reordered.map(o => o.id),
+    })
+    if (error) {
+      console.error('reorder_elevation_options failed:', error)
+      setElevations(prev => prev.map(e => e.id === elevId ? { ...e, elevation_options: previous } : e))
+      onStatus('Could not save the new tab order — please try again')
+    }
+  }
+
   async function handleUnapprove() {
     if (!activeOptData) return
     const supabase = createClient()
@@ -797,6 +824,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onDeleteElevation={deleteElevation}
           onAddOption={addOption}
           onDeleteOption={deleteOption}
+          onReorderOptions={reorderOptions}
         />
 
         {/* Main */}

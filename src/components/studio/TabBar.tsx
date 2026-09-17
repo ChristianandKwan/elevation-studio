@@ -20,12 +20,14 @@ interface Props {
   onDeleteElevation: (elevId: string) => void
   onAddOption: (elevId: string) => void
   onDeleteOption: (elevId: string, optKey: string) => void
+  /** New left-to-right order of option keys for one elevation. Saved in one batched write. */
+  onReorderOptions: (elevId: string, orderedKeys: string[]) => void
 }
 
 export default function TabBar({
   elevations, activeElevId, activeOption, onSwitch,
   onAddElevation, onRenameElevation, onDeleteElevation,
-  onAddOption, onDeleteOption,
+  onAddOption, onDeleteOption, onReorderOptions,
 }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -54,6 +56,57 @@ export default function TabBar({
   const [renameName, setRenameName] = useState('')
   const [confirmDeleteElevId, setConfirmDeleteElevId] = useState<string | null>(null)
   const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; label: string; hasArtworks: boolean } | null>(null)
+
+  // ── Reordering ────────────────────────────────────────────────
+  // Tabs can be dragged within their elevation. Because letters are worked
+  // out from position, moving a tab re-letters the strip on the spot.
+  // Fallbacks for people who can't (or don't want to) drag: right-click a
+  // tab for "Move left / Move right", or focus it and press Alt+←/→.
+  const [dragging, setDragging] = useState<{ elevId: string; key: string } | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ elevId: string; key: string; side: 'before' | 'after' } | null>(null)
+  const [menu, setMenu] = useState<{ elevId: string; key: string; label: string; hasArtworks: boolean; x: number; y: number } | null>(null)
+
+  function moveOption(elevId: string, key: string, delta: number) {
+    const elev = elevations.find(e => e.id === elevId)
+    if (!elev) return
+    const keys = elev.options.map(o => o.key)
+    const from = keys.indexOf(key)
+    const to = from + delta
+    if (from < 0 || to < 0 || to >= keys.length) return
+    keys.splice(from, 1)
+    keys.splice(to, 0, key)
+    onReorderOptions(elevId, keys)
+  }
+
+  function dropOption(elevId: string, key: string, targetKey: string, side: 'before' | 'after') {
+    const elev = elevations.find(e => e.id === elevId)
+    if (!elev || key === targetKey) return
+    const keys = elev.options.map(o => o.key).filter(k => k !== key)
+    const at = keys.indexOf(targetKey) + (side === 'after' ? 1 : 0)
+    keys.splice(at, 0, key)
+    if (keys.every((k, i) => k === elev.options[i]?.key)) return
+    onReorderOptions(elevId, keys)
+  }
+
+  function sideOf(e: React.DragEvent<HTMLElement>): 'before' | 'after' {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientX < r.left + r.width / 2 ? 'before' : 'after'
+  }
+
+  // The context menu closes on any click elsewhere, on Escape, or on scroll.
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [menu])
 
   function handleAdd() {
     const name = newName.trim() || 'New Elevation'
@@ -86,13 +139,54 @@ export default function TabBar({
 
               {multiOption ? (
                 // Multiple options: render a tab per option
-                elev.options.map(opt => {
+                elev.options.map((opt, optIndex) => {
                   const isActive = activeElevId === elev.id && activeOption === opt.key
+                  const isDragging = dragging?.elevId === elev.id && dragging.key === opt.key
+                  const dropSide = dropTarget?.elevId === elev.id && dropTarget.key === opt.key ? dropTarget.side : null
+                  const classes = ['studio-tab', isActive && 'active', isDragging && 'dragging', dropSide && `drop-${dropSide}`]
                   return (
                     <button
                       key={opt.key}
-                      className={`studio-tab${isActive ? ' active' : ''}`}
+                      className={classes.filter(Boolean).join(' ')}
                       onClick={() => onSwitch(elev.id, opt.key)}
+                      title="Drag to reorder · right-click for more"
+                      aria-label={`Option ${opt.label}, ${elev.name}, position ${optIndex + 1} of ${elev.options.length}. Alt+arrow keys to move.`}
+                      draggable
+                      onDragStart={e => {
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', opt.key)
+                        setDragging({ elevId: elev.id, key: opt.key })
+                      }}
+                      onDragEnd={() => { setDragging(null); setDropTarget(null) }}
+                      onDragOver={e => {
+                        // Only within the same elevation — options belong to their wall.
+                        if (!dragging || dragging.elevId !== elev.id) return
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
+                        const side = sideOf(e)
+                        if (dropTarget?.key !== opt.key || dropTarget.side !== side) {
+                          setDropTarget({ elevId: elev.id, key: opt.key, side })
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dropTarget?.key === opt.key) setDropTarget(null)
+                      }}
+                      onDrop={e => {
+                        if (!dragging || dragging.elevId !== elev.id) return
+                        e.preventDefault()
+                        dropOption(elev.id, dragging.key, opt.key, sideOf(e))
+                        setDragging(null)
+                        setDropTarget(null)
+                      }}
+                      onContextMenu={e => {
+                        e.preventDefault()
+                        setMenu({ elevId: elev.id, key: opt.key, label: opt.label, hasArtworks: opt.hasArtworks, x: e.clientX, y: e.clientY })
+                      }}
+                      onKeyDown={e => {
+                        if (!e.altKey) return
+                        if (e.key === 'ArrowLeft') { e.preventDefault(); moveOption(elev.id, opt.key, -1) }
+                        if (e.key === 'ArrowRight') { e.preventDefault(); moveOption(elev.id, opt.key, 1) }
+                      }}
                     >
                       <span className={optionTagClass(opt.label)} style={{ marginRight: 5 }}>{opt.label}</span>
                       {elev.name}
@@ -166,6 +260,34 @@ export default function TabBar({
           + Add Elevation
         </button>
       </div>
+
+      {/* Option context menu: reorder without dragging, or remove */}
+      {menu && (() => {
+        const count = elevations.find(e => e.id === menu.elevId)?.options.length ?? 0
+        const index = elevations.find(e => e.id === menu.elevId)?.options.findIndex(o => o.key === menu.key) ?? -1
+        return (
+          <div
+            className="studio-tab-menu"
+            role="menu"
+            style={{ left: menu.x, top: menu.y }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <button role="menuitem" disabled={index <= 0} onClick={() => { moveOption(menu.elevId, menu.key, -1); setMenu(null) }}>
+              ← Move left
+            </button>
+            <button role="menuitem" disabled={index < 0 || index >= count - 1} onClick={() => { moveOption(menu.elevId, menu.key, 1); setMenu(null) }}>
+              Move right →
+            </button>
+            <div className="studio-tab-menu-sep" />
+            <button role="menuitem" className="danger" disabled={count <= 1} onClick={() => {
+              setConfirmDeleteOpt({ elevId: menu.elevId, optKey: menu.key, label: menu.label, hasArtworks: menu.hasArtworks })
+              setMenu(null)
+            }}>
+              Remove option {menu.label}…
+            </button>
+          </div>
+        )
+      })()}
 
       {/* Add Elevation modal */}
       {showAddModal && (
