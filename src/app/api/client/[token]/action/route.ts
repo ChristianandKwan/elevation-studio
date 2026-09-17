@@ -20,7 +20,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { optionLabelFor, sortOptions } from '@/lib/options'
+import { optionTitleFor, sortOptions } from '@/lib/options'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -77,18 +77,19 @@ async function optionInProject(svc: Svc, optionId: string, projectId: string) {
 }
 
 /**
- * The letter a person sees for an option is its position among its siblings
- * (src/lib/options.ts), not the stored key. Returns null if the key is not on
- * this elevation.
+ * How a person refers to an option: its name if the consultant gave it one,
+ * else "Option" plus its position letter among its siblings
+ * (src/lib/options.ts) — never the stored key. Returns null if the key is
+ * not on this elevation.
  */
-async function optionLabelIn(svc: Svc, elevationId: string, key: string): Promise<string | null> {
+async function optionTitleIn(svc: Svc, elevationId: string, key: string): Promise<string | null> {
   const { data } = await svc
     .from('elevation_options')
-    .select('option, sort_order, created_at')
+    .select('option, sort_order, created_at, name')
     .eq('elevation_id', elevationId)
-  const siblings = (data ?? []) as Array<{ option: string; sort_order: number | null; created_at: string | null }>
+  const siblings = (data ?? []) as Array<{ option: string; sort_order: number | null; created_at: string | null; name: string | null }>
   if (!siblings.some(o => o.option === key)) return null
-  return optionLabelFor(siblings, key)
+  return optionTitleFor(siblings, key)
 }
 
 /**
@@ -282,8 +283,8 @@ export async function POST(
       }
       const elev = await elevationInProject(svc, elevationId, projectId)
       if (!elev) return bad('Forbidden', 403)
-      const label = await optionLabelIn(svc, elevationId, option)
-      if (label === null) return bad('Unknown option', 400)
+      const title = await optionTitleIn(svc, elevationId, option)
+      if (title === null) return bad('Unknown option', 400)
 
       const { error } = await svc
         .from('elevations')
@@ -291,7 +292,7 @@ export async function POST(
         .eq('id', elevationId)
       if (error) return bad('Update failed', 500)
 
-      await logActivity(svc, projectId, 'pick', `Client picked Option ${label} for ${elev.name}`)
+      await logActivity(svc, projectId, 'pick', `Client picked ${title} for ${elev.name}`)
       return NextResponse.json({ ok: true })
     }
 
@@ -330,7 +331,7 @@ export async function POST(
 
       await logActivity(
         svc, projectId, 'approved',
-        `Client approved Option ${(await optionLabelIn(svc, opt.elevationId, opt.option)) ?? opt.option} of ${opt.elevationName}`
+        `Client approved ${(await optionTitleIn(svc, opt.elevationId, opt.option)) ?? `Option ${opt.option}`} of ${opt.elevationName}`
       )
 
       // Whole project signed off once every elevation's resolved option is approved.

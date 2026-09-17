@@ -1,13 +1,17 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { optionTagClass } from '@/lib/options'
+import { optionTagClass, OPTION_NAME_MAX } from '@/lib/options'
 
 interface ElevationTab {
   id: string
   name: string
-  /** `key` is the stored identity; `label` is the position letter people see. */
-  options: Array<{ key: string; label: string; hasArtworks: boolean; hasClientNotes: boolean }>
+  /**
+   * `key` is the stored identity. `letter` is the position letter, `name` the
+   * consultant's optional name, `label` / `title` whichever of those applies
+   * (tab text / sentence form). See src/lib/options.ts.
+   */
+  options: Array<{ key: string; letter: string; label: string; title: string; name: string | null; hasArtworks: boolean; hasClientNotes: boolean }>
 }
 
 interface Props {
@@ -22,12 +26,14 @@ interface Props {
   onDeleteOption: (elevId: string, optKey: string) => void
   /** New left-to-right order of option keys for one elevation. Saved in one batched write. */
   onReorderOptions: (elevId: string, orderedKeys: string[]) => void
+  /** Name (or clear, with '') one option. */
+  onRenameOption: (elevId: string, optKey: string, name: string) => void
 }
 
 export default function TabBar({
   elevations, activeElevId, activeOption, onSwitch,
   onAddElevation, onRenameElevation, onDeleteElevation,
-  onAddOption, onDeleteOption, onReorderOptions,
+  onAddOption, onDeleteOption, onReorderOptions, onRenameOption,
 }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -55,7 +61,20 @@ export default function TabBar({
   const [renameElevId, setRenameElevId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const [confirmDeleteElevId, setConfirmDeleteElevId] = useState<string | null>(null)
-  const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; label: string; hasArtworks: boolean } | null>(null)
+  const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; title: string; hasArtworks: boolean } | null>(null)
+  const [renameOpt, setRenameOpt] = useState<{ elevId: string; key: string; title: string } | null>(null)
+  const [renameOptName, setRenameOptName] = useState('')
+
+  function openRenameOption(elevId: string, key: string, title: string, name: string | null) {
+    setRenameOpt({ elevId, key, title })
+    setRenameOptName(name ?? '')
+  }
+
+  function handleRenameOption() {
+    if (!renameOpt) return
+    onRenameOption(renameOpt.elevId, renameOpt.key, renameOptName)
+    setRenameOpt(null)
+  }
 
   // ── Reordering ────────────────────────────────────────────────
   // Tabs can be dragged within their elevation. Because letters are worked
@@ -64,7 +83,7 @@ export default function TabBar({
   // tab for "Move left / Move right", or focus it and press Alt+←/→.
   const [dragging, setDragging] = useState<{ elevId: string; key: string } | null>(null)
   const [dropTarget, setDropTarget] = useState<{ elevId: string; key: string; side: 'before' | 'after' } | null>(null)
-  const [menu, setMenu] = useState<{ elevId: string; key: string; label: string; hasArtworks: boolean; x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ elevId: string; key: string; title: string; name: string | null; hasArtworks: boolean; x: number; y: number } | null>(null)
 
   function moveOption(elevId: string, key: string, delta: number) {
     const elev = elevations.find(e => e.id === elevId)
@@ -149,8 +168,9 @@ export default function TabBar({
                       key={opt.key}
                       className={classes.filter(Boolean).join(' ')}
                       onClick={() => onSwitch(elev.id, opt.key)}
-                      title="Drag to reorder · right-click for more"
-                      aria-label={`Option ${opt.label}, ${elev.name}, position ${optIndex + 1} of ${elev.options.length}. Alt+arrow keys to move.`}
+                      title="Drag to reorder · double-click to rename · right-click for more"
+                      aria-label={`${opt.title}, ${elev.name}, position ${optIndex + 1} of ${elev.options.length}. Alt+arrow keys to move.`}
+                      onDoubleClick={() => openRenameOption(elev.id, opt.key, opt.title, opt.name)}
                       draggable
                       onDragStart={e => {
                         e.dataTransfer.effectAllowed = 'move'
@@ -180,7 +200,7 @@ export default function TabBar({
                       }}
                       onContextMenu={e => {
                         e.preventDefault()
-                        setMenu({ elevId: elev.id, key: opt.key, label: opt.label, hasArtworks: opt.hasArtworks, x: e.clientX, y: e.clientY })
+                        setMenu({ elevId: elev.id, key: opt.key, title: opt.title, name: opt.name, hasArtworks: opt.hasArtworks, x: e.clientX, y: e.clientY })
                       }}
                       onKeyDown={e => {
                         if (!e.altKey) return
@@ -188,18 +208,20 @@ export default function TabBar({
                         if (e.key === 'ArrowRight') { e.preventDefault(); moveOption(elev.id, opt.key, 1) }
                       }}
                     >
-                      <span className={optionTagClass(opt.label)} style={{ marginRight: 5 }}>{opt.label}</span>
-                      {elev.name}
+                      {/* A named option shows its name; an unnamed one its letter badge and the wall it belongs to */}
+                      {opt.name
+                        ? opt.name
+                        : <><span className={optionTagClass(opt.letter)} style={{ marginRight: 5 }}>{opt.letter}</span>{elev.name}</>}
                       {opt.hasClientNotes && !isActive && (
                         <span className="studio-tab-notes-dot" title="Client has left notes on this option" aria-label="Has client notes" />
                       )}
                       {elev.options.length > 1 && (
                         <span
                           className="studio-tab-del-opt"
-                          title={`Remove option ${opt.label}`}
+                          title={`Remove ${opt.title}`}
                           onClick={e => {
                             e.stopPropagation()
-                            setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, label: opt.label, hasArtworks: opt.hasArtworks })
+                            setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, title: opt.title, hasArtworks: opt.hasArtworks })
                           }}
                         >
                           ×
@@ -272,6 +294,10 @@ export default function TabBar({
             style={{ left: menu.x, top: menu.y }}
             onMouseDown={e => e.stopPropagation()}
           >
+            <button role="menuitem" onClick={() => { openRenameOption(menu.elevId, menu.key, menu.title, menu.name); setMenu(null) }}>
+              Rename option…
+            </button>
+            <div className="studio-tab-menu-sep" />
             <button role="menuitem" disabled={index <= 0} onClick={() => { moveOption(menu.elevId, menu.key, -1); setMenu(null) }}>
               ← Move left
             </button>
@@ -280,10 +306,10 @@ export default function TabBar({
             </button>
             <div className="studio-tab-menu-sep" />
             <button role="menuitem" className="danger" disabled={count <= 1} onClick={() => {
-              setConfirmDeleteOpt({ elevId: menu.elevId, optKey: menu.key, label: menu.label, hasArtworks: menu.hasArtworks })
+              setConfirmDeleteOpt({ elevId: menu.elevId, optKey: menu.key, title: menu.title, hasArtworks: menu.hasArtworks })
               setMenu(null)
             }}>
-              Remove option {menu.label}…
+              Remove {menu.title}…
             </button>
           </div>
         )
@@ -337,6 +363,32 @@ export default function TabBar({
         </div>
       )}
 
+      {/* Rename Option modal */}
+      {renameOpt && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setRenameOpt(null) }}>
+          <div className="modal">
+            <div className="modal-title">Name this option</div>
+            <div className="modal-sub">Shown instead of the letter everywhere this option appears, including to your client. Leave blank to go back to the letter.</div>
+            <div className="field">
+              <label className="field-label">Option Name</label>
+              <input
+                className="field-input"
+                value={renameOptName}
+                maxLength={OPTION_NAME_MAX}
+                onChange={e => setRenameOptName(e.target.value)}
+                placeholder={`e.g. Kandinsky 1 (currently ${renameOpt.title})`}
+                onKeyDown={e => e.key === 'Enter' && handleRenameOption()}
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setRenameOpt(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleRenameOption}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Elevation confirmation modal */}
       {confirmDeleteElevId && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteElevId(null) }}>
@@ -359,7 +411,7 @@ export default function TabBar({
       {confirmDeleteOpt && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteOpt(null) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Remove Option {confirmDeleteOpt.label}?</div>
+            <div className="modal-title">Remove {confirmDeleteOpt.title}?</div>
             <div className="modal-sub" style={{ color: 'var(--red)' }}>
               {confirmDeleteOpt.hasArtworks
                 ? 'This option has artworks. Removing it will permanently delete them and their images.'

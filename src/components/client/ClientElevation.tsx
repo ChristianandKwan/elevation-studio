@@ -53,8 +53,8 @@ interface Props {
   elevationName: string
   /** Stored key of the active option — used for picks, never shown */
   activeOpt: string
-  /** Position letter for activeOpt — what the client reads */
-  optionLabel: string
+  /** How to refer to activeOpt: its name, or "Option A" */
+  optionTitle: string
   projectId: string
   rerenderKey: number
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
@@ -77,7 +77,7 @@ interface Props {
 }
 
 export default function ClientElevation({
-  optData, elevationName, activeOpt, optionLabel, rerenderKey,
+  optData, elevationName, activeOpt, optionTitle, rerenderKey,
   approvalActivity, clientBudget, isPicked, artworksLocked, onPick, onClearPick,
   zoom, onZoom,
   onArtworkMove, onArtworkMoveEnd, onToggleVisibility, onNotesChange, onApprove,
@@ -144,7 +144,7 @@ export default function ClientElevation({
         <div className="client-sidebar-scroll">
           {/* Option / elevation label */}
           <div className="client-sidebar-section">
-            <div className="client-sidebar-kicker">Option {optionLabel}</div>
+            <div className="client-sidebar-kicker">{optionTitle}</div>
             <div className="client-sidebar-elev-name">{elevationName}</div>
           </div>
 
@@ -201,7 +201,7 @@ export default function ClientElevation({
               <div className="approval-status-icon">✓</div>
               <div>
                 <div className="approval-status-text" style={{ color: 'var(--green)' }}>
-                  Option {optionLabel} approved
+                  {optionTitle} approved
                 </div>
                 <div className="approval-status-sub">Approved {formatApprovalTimestamp(optData.approved_at)}</div>
               </div>
@@ -237,7 +237,7 @@ export default function ClientElevation({
                 className="btn btn-primary btn-sm btn-full"
                 onClick={() => onPick(activeOpt)}
               >
-                Pick Option {optionLabel}
+                Pick {optionTitle}
               </button>
             </div>
           ) : (
@@ -246,7 +246,7 @@ export default function ClientElevation({
               <div className="approval-status-bar pending" style={{ margin: '0 0 12px' }}>
                 <div className="approval-status-icon">◌</div>
                 <div>
-                  <div className="approval-status-text">Option {optionLabel} selected</div>
+                  <div className="approval-status-text">{optionTitle} selected</div>
                   <div className="approval-status-sub">Adjust artworks, then approve when ready</div>
                 </div>
               </div>
@@ -274,7 +274,7 @@ export default function ClientElevation({
               )}
 
               <button className="btn btn-green btn-sm btn-full" onClick={handleApproveClick}>
-                ✓ Approve Option {optionLabel}
+                ✓ Approve {optionTitle}
               </button>
               {onClearPick && (
                 <>

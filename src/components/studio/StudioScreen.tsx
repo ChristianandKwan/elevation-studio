@@ -17,7 +17,7 @@ import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
-import { labelOptions, optionLabel, optionLabelFor, nextOptionKey, nextSortOrder } from '@/lib/options'
+import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
 
 interface DbElevation {
   id: string
@@ -30,6 +30,8 @@ interface DbElevation {
     option: string
     sort_order: number
     created_at?: string | null
+    /** Optional consultant-given name shown instead of the letter */
+    name?: string | null
     imageUrl: string | null
     imagePath: string | null
     orig_w: number
@@ -108,8 +110,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
   const optionId = activeOptData?.id ?? ''
-  // What people see for the active option: its position letter, not its stored key.
-  const activeOptionLabel = optionLabelFor(activeElev?.elevation_options ?? [], activeOption)
+  // How the active option is referred to: its name, or "Option" plus its position letter — never its stored key.
+  const activeOptionTitle = optionTitleFor(activeElev?.elevation_options ?? [], activeOption)
 
   const studio = useStudio({
     projectId: project.id,
@@ -117,7 +119,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     onStatus,
     projectName: project.name,
     elevationName: activeElev?.name ?? '',
-    optionKey: activeOptionLabel,
+    optionKey: activeOptionTitle,
     artworkDragLocked: !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption) || (activeOptData?.approved ?? false),
     onElevationUploaded: ({ imagePath, imageUrl, origW, origH }) => {
       setElevations(prev => prev.map(e => {
@@ -503,7 +505,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const elev = elevations.find(e => e.id === elevId)
     const opt = elev?.elevation_options.find(o => o.option === optKey)
     if (!opt || !elev) return
-    const removedLabel = optionLabelFor(elev.elevation_options, optKey)
+    const removedTitle = optionTitleFor(elev.elevation_options, optKey)
     const supabase = createClient()
     // Delete artwork images
     const artPaths = opt.artworks.map(a => (a as any).imagePath).filter(Boolean) as string[]
@@ -535,7 +537,35 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (activeElevId === elevId && activeOption === optKey && remaining.length > 0) {
       setActiveOption(remaining[0].option)
     }
-    onStatus(`Option ${removedLabel} removed`)
+    onStatus(`${removedTitle} removed`)
+  }
+
+  /**
+   * Give an option a name (or clear it with an empty string). The name
+   * replaces the position letter wherever the option is referred to; the
+   * stored key and the order are untouched.
+   */
+  async function renameOption(elevId: string, optKey: string, name: string) {
+    const elev = elevations.find(e => e.id === elevId)
+    const opt = elev?.elevation_options.find(o => o.option === optKey)
+    if (!opt) return
+    const value = cleanOptionName(name)
+    const previous = opt.name ?? null
+    if (value === previous) return
+    const apply = (v: string | null) => setElevations(prev => prev.map(e => e.id !== elevId ? e : {
+      ...e,
+      elevation_options: e.elevation_options.map(o => o.option === optKey ? { ...o, name: v } : o),
+    }))
+    apply(value)
+    const supabase = createClient()
+    const { error } = await supabase.from('elevation_options').update({ name: value }).eq('id', opt.id)
+    if (error) {
+      console.error('rename option failed:', error)
+      apply(previous)
+      onStatus('Could not save the option name — please try again')
+      return
+    }
+    onStatus(value ? `Option renamed to ${value}` : 'Option name cleared')
   }
 
   /**
@@ -572,7 +602,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     await supabase.from('activity_logs').insert({
       project_id: project.id,
       type: 'unapprove',
-      text: `${PRACTICE_NAME} unapproved Option ${activeOptionLabel} of ${activeElev?.name ?? ''}`,
+      text: `${PRACTICE_NAME} unapproved ${activeOptionTitle} of ${activeElev?.name ?? ''}`,
     })
     setElevations(prev => prev.map(e => {
       if (e.id !== activeElevId) return e
@@ -684,7 +714,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     await supabase.from('activity_logs').insert({
       project_id: project.id,
       type: 'unapprove',
-      text: `${PRACTICE_NAME} unapproved Option ${activeOptionLabel} of ${activeElev?.name ?? ''}`,
+      text: `${PRACTICE_NAME} unapproved ${activeOptionTitle} of ${activeElev?.name ?? ''}`,
     })
     onStatus('Approval removed — client can make changes again')
   }
@@ -813,7 +843,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             name: e.name,
             options: labelOptions(e.elevation_options).map(o => ({
               key: o.option,
+              letter: o.letter,
               label: o.label,
+              title: o.title,
+              name: cleanOptionName(o.name),
               hasArtworks: o.artworks.length > 0,
               hasClientNotes: (o.clientNotes ?? '').trim().length > 0,
             })),
@@ -827,6 +860,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onAddOption={addOption}
           onDeleteOption={deleteOption}
           onReorderOptions={reorderOptions}
+          onRenameOption={renameOption}
         />
 
         {/* Main */}
@@ -841,7 +875,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             onRequestDeleteArtworks={requestDeleteArtworks}
             approvalStatus={{
               pickedOption: activeElev?.clientPickedOption ?? null,
-              pickedOptionLabel: optionLabelFor(activeElev?.elevation_options ?? [], activeElev?.clientPickedOption),
+              pickedOptionTitle: optionTitleFor(activeElev?.elevation_options ?? [], activeElev?.clientPickedOption),
               approved: activeOptData?.approved ?? false,
               approvedAt: activeOptData?.approved_at ?? null,
             }}
@@ -871,6 +905,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             options: labelOptions(e.elevation_options).map(o => ({
               key: o.option,
               label: o.label,
+              title: o.title,
               artworks: o.artworks.map(a => ({
                 id: a.id,
                 name: a.name,

@@ -37,7 +37,7 @@ export default async function ProjectPage({ params }: Props) {
     .select(`
       id, name, display_order, client_picked_option,
       elevation_options(
-        id, option, sort_order, created_at, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes,
+        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         artworks(
           id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, framing_status, framing_cost, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity
@@ -65,7 +65,7 @@ export default async function ProjectPage({ params }: Props) {
   // Rehydrate the per-option / per-artwork structure using the maps
   const elevationsWithUrls = (elevations ?? []).map(elev => {
     const options = (elev.elevation_options ?? []).map((opt: {
-      id: string; option: string; sort_order: number; created_at: string; image_path: string | null;
+      id: string; option: string; sort_order: number; created_at: string; name: string | null; image_path: string | null;
       orig_w: number; orig_h: number; scale_px_per_cm: number | null;
       approved: boolean; approved_at: string | null;
       client_notes?: string | null;

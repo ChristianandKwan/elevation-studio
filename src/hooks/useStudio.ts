@@ -2125,7 +2125,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }
 
     const sanitise = (s: string) => s.replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
-    const filename = [projectNameRef.current, elevationNameRef.current, `Option-${optionKeyRef.current}`]
+    const filename = [projectNameRef.current, elevationNameRef.current, optionKeyRef.current]
       .map(sanitise).filter(Boolean).join('_') || 'elevation-artwork'
     c.toBlob(blob => {
       if (!blob) { onStatus('PNG export failed'); setBusy(false); return }

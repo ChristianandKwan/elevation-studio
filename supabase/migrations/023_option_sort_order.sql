@@ -15,6 +15,8 @@
 --      elevations.client_picked_option points at). It is no longer
 --      shown to anyone — the display letter is worked out from
 --      position by src/lib/options.ts (1st = A, 2nd = B, …).
+--    • `name` is an optional consultant-given name ("Kandinsky 1") shown
+--      in place of that letter wherever the option is referred to.
 --
 --  Backfill: existing rows are numbered by creation time within each
 --  elevation (ties broken by letter), which is the order the studio
@@ -36,6 +38,10 @@ update elevation_options eo
   from ranked
  where ranked.id = eo.id;
 
+alter table elevation_options
+  add column if not exists name text
+  check (name is null or char_length(name) <= 40);
+
 create index if not exists elevation_options_elevation_sort_idx
   on elevation_options (elevation_id, sort_order);
 
@@ -43,6 +49,8 @@ comment on column elevation_options.option is
   'Stable per-elevation key (A–Z). Not the display letter: labels are derived from sort_order position.';
 comment on column elevation_options.sort_order is
   'Position within the elevation, 0-based. The only field that decides tab order.';
+comment on column elevation_options.name is
+  'Optional consultant-given name, shown instead of the position letter. Null = use the letter.';
 
 -- ── create_project: the two starter options take positions 0 and 1 ──
 -- (Replaces 020_create_project_rpc.sql's body; signature unchanged.)
