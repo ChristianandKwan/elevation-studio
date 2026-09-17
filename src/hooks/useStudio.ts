@@ -7,6 +7,9 @@ import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 
+/** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
+const THUMBNAIL_DEBOUNCE_MS = 3000
+
 /**
  * Frame colours, shared by the on-screen overlay and the PNG export so the
  * exported file matches the canvas. `lib/thumbnail.ts` holds the same five
@@ -144,7 +147,7 @@ interface UseStudioOptions {
   onArtworksAdded?: (artworks: Array<Artwork & { imageUrl: string | null }>) => void
   /** Called when an artwork is deleted from the current option */
   onArtworkDeleted?: (id: string) => void
-  /** Called after foreground masks are persisted, so sibling options with the same elevation image can be synced */
+  /** Called only when foreground masks actually changed and were persisted, so sibling options sharing the wall photo can be synced */
   onForegroundSaved?: (masks: ForegroundMasks) => void
 }
 
@@ -219,21 +222,92 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
-  // ─── DASHBOARD THUMBNAIL REGEN (debounced) ────────────────────────
+  // ─── DASHBOARD THUMBNAIL REGEN (debounced, one at a time) ────────
   // After any write that would change the rendered option (upload,
   // calibrate, artwork add/move/restyle/delete, visibility, masks, …)
-  // we kick off a server-side regenerate so the dashboard's cached
-  // PNG stays fresh. Debounced so a burst of drags/slider moves
-  // collapses into a single composite. Fire-and-forget; failures are
+  // we ask the server to re-composite the dashboard PNG. Each render
+  // takes 4–9 s, so two rules stop them piling up:
+  //   1. Debounce — a burst of edits collapses into one request, sent
+  //      THUMBNAIL_DEBOUNCE_MS after the last change.
+  //   2. One in flight — if a render is already running, the option is
+  //      marked dirty and rendered once more when it finishes, instead
+  //      of a second overlapping request.
+  // Timers are per option, so switching tabs mid-burst doesn't drop the
+  // previous tab's pending render. Fire-and-forget; failures are
   // non-fatal (the dashboard falls back to the plain elevation URL).
-  const thumbnailRegenTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const thumbnailTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const thumbnailInFlight = useRef<string | null>(null)
+  const thumbnailDirty = useRef(new Set<string>())
+
+  const runThumbnailRegen = useCallback<(id: string) => Promise<void>>(async id => {
+    if (thumbnailInFlight.current) { thumbnailDirty.current.add(id); return }
+    thumbnailInFlight.current = id
+    thumbnailDirty.current.delete(id)
+    try {
+      await fetch(`/api/thumbnails/${id}`, { method: 'POST' })
+    } catch { /* non-fatal */ }
+    thumbnailInFlight.current = null
+    // Anything that changed while that render ran gets one more pass.
+    const next = thumbnailDirty.current.values().next().value
+    if (next) void runThumbnailRegen(next)
+  }, [])
+
   const scheduleThumbnailRegen = useCallback((id: string = optionId) => {
     if (!id) return
-    if (thumbnailRegenTimer.current) clearTimeout(thumbnailRegenTimer.current)
-    thumbnailRegenTimer.current = setTimeout(() => {
-      fetch(`/api/thumbnails/${id}`, { method: 'POST' }).catch(() => {})
-    }, 2000)
-  }, [optionId])
+    const timers = thumbnailTimers.current
+    const existing = timers.get(id)
+    if (existing) clearTimeout(existing)
+    timers.set(id, setTimeout(() => {
+      timers.delete(id)
+      void runThumbnailRegen(id)
+    }, THUMBNAIL_DEBOUNCE_MS))
+  }, [optionId, runThumbnailRegen])
+
+  /** Run every debounce-pending render now (leaving the studio), plus `alsoId` if given. */
+  const flushThumbnailRegens = useCallback((alsoId?: string) => {
+    const ids = new Set(thumbnailTimers.current.keys())
+    thumbnailTimers.current.forEach(t => clearTimeout(t))
+    thumbnailTimers.current.clear()
+    if (alsoId) ids.add(alsoId)
+    ids.forEach(id => { void runThumbnailRegen(id) })
+  }, [runThumbnailRegen])
+
+  // ─── WHAT THE DATABASE LAST SAW ───────────────────────────────────
+  // A save used to write the option's masks and every artwork on every
+  // debounce tick, changed or not — and the masks write fanned out into
+  // a bulk update of every sibling option sharing the wall photo. These
+  // snapshots let persistOption write only what actually changed. They
+  // are set when an option loads and after each successful write.
+  const lastSavedMasks = useRef<string>('null')
+  const lastSavedArts = useRef(new Map<string, string>())
+
+  /** The columns a save writes for one artwork, in the shape the DB takes. */
+  function artworkRow(art: Artwork) {
+    return {
+      x_fraction: art.xF,
+      y_fraction: art.yF,
+      w_cm: art.wCm,
+      h_cm: art.hCm,
+      visible: art.visible,
+      price: art.price,
+      artist: art.artist,
+      framing_status: art.framingStatus,
+      framing_cost: art.framingCost,
+      brightness: art.brightness ?? 1,
+      fade: art.fade ?? null,
+      name: art.name,
+      frame_type: art.frameType ?? null,
+      frame_width_mm: art.frameWidthMm ?? null,
+      shadow_angle: art.shadowAngle ?? null,
+      shadow_blur: art.shadowBlur ?? null,
+      shadow_opacity: art.shadowOpacity ?? null,
+    }
+  }
+
+  function rememberSaved(masks: ForegroundMasks, arts: Artwork[]) {
+    lastSavedMasks.current = JSON.stringify(masks.length > 0 ? masks : null)
+    lastSavedArts.current = new Map(arts.map(a => [a.id, JSON.stringify(artworkRow(a))]))
+  }
 
   // ─── HELPERS ──────────────────────────────────────────────────────
   function dispSize(art: Artwork, sc: Scale | null): { w: number; h: number } {
@@ -1049,6 +1123,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
+      rememberSaved([], [])
       setBusy(false)
     }
 
@@ -1098,6 +1173,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
       const masks = opts.foregroundMasks ?? []
       const newArts = opts.artworks.map(a => ({ ...a }))
+      rememberSaved(masks, newArts)
 
       const skewCorners = opts.skewCorners ?? null
       const skewActive = opts.skewActive ?? false
@@ -1267,6 +1343,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false }))
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
+      rememberSaved([], [])
 
       // A fresh upload starts at fit — clear any prior per-user zoom preference for this option
       saveRelativeZoom(optionId, 1)
@@ -1664,13 +1741,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       // Fire-and-forget flush on unmount so SPA navigation doesn't drop a pending save or thumbnail regen.
       const pendingId = optionId
       const hadSave = !!saveTimer.current
-      const hadThumb = !!thumbnailRegenTimer.current
       if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-      if (thumbnailRegenTimer.current) { clearTimeout(thumbnailRegenTimer.current); thumbnailRegenTimer.current = null }
       if (hadSave && pendingId) persistOption(stateRef.current)
-      if ((hadSave || hadThumb) && pendingId) {
-        fetch(`/api/thumbnails/${pendingId}`, { method: 'POST' }).catch(() => {})
-      }
+      flushThumbnailRegens(hadSave && pendingId ? pendingId : undefined)
     }
   }, [])
 
@@ -1687,52 +1760,50 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }
     // Thumbnail — fire-and-forget so dashboard navigation isn't blocked on
     // server-side sharp compositing. Dashboard refetches thumbnails on mount.
-    if (thumbnailRegenTimer.current) {
-      clearTimeout(thumbnailRegenTimer.current)
-      thumbnailRegenTimer.current = null
-    }
-    fetch(`/api/thumbnails/${currentId}`, { method: 'POST' }).catch(() => {})
+    flushThumbnailRegens(currentId)
   }
 
+  /**
+   * Write the option's masks and artworks — but only the parts that differ
+   * from what the database last saw. Moving one artwork used to PATCH the
+   * option row, bulk-PATCH its sibling options, and PATCH every artwork on
+   * the wall; now it PATCHes that one artwork.
+   */
   async function persistOption(s: StudioState) {
     const supabase = createClient()
     try {
-      // Update option foreground masks
+      let wrote = false
+
+      // Foreground masks — and, through onForegroundSaved, the sibling
+      // options that share this wall photo. Only when they actually changed.
       const masksValue = s.masks.length > 0 ? s.masks : null
-      const { error: maskErr } = await supabase.from('elevation_options').update({
-        foreground_masks: masksValue,
-      }).eq('id', optionId)
-      if (maskErr) throw maskErr
-      onForegroundSavedRef.current?.(s.masks)
-      // Update each artwork position/dims
+      const masksJson = JSON.stringify(masksValue)
+      if (masksJson !== lastSavedMasks.current) {
+        const { error: maskErr } = await supabase.from('elevation_options').update({
+          foreground_masks: masksValue,
+        }).eq('id', optionId)
+        if (maskErr) throw maskErr
+        lastSavedMasks.current = masksJson
+        wrote = true
+        onForegroundSavedRef.current?.(s.masks)
+      }
+
+      // Artworks whose saved columns differ from the snapshot.
+      const changed = s.artworks
+        .map(art => { const row = artworkRow(art); return { art, row, json: JSON.stringify(row) } })
+        .filter(({ art, json }) => lastSavedArts.current.get(art.id) !== json)
       const results = await Promise.all(
-        s.artworks.map(art =>
-          supabase.from('artworks').update({
-            x_fraction: art.xF,
-            y_fraction: art.yF,
-            w_cm: art.wCm,
-            h_cm: art.hCm,
-            visible: art.visible,
-            price: art.price,
-            artist: art.artist,
-            framing_status: art.framingStatus,
-            framing_cost: art.framingCost,
-            brightness: art.brightness ?? 1,
-            fade: art.fade ?? null,
-            name: art.name,
-            frame_type: art.frameType ?? null,
-            frame_width_mm: art.frameWidthMm ?? null,
-            shadow_angle: art.shadowAngle ?? null,
-            shadow_blur: art.shadowBlur ?? null,
-            shadow_opacity: art.shadowOpacity ?? null,
-          }).eq('id', art.id)
-        )
+        changed.map(({ art, row }) => supabase.from('artworks').update(row).eq('id', art.id))
       )
       const artErr = results.find(r => r.error)?.error
       if (artErr) throw artErr
+      changed.forEach(({ art, json }) => lastSavedArts.current.set(art.id, json))
+      if (changed.length > 0) wrote = true
+
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
-      scheduleThumbnailRegen()
+      // Only a real write changes the rendered wall, so only then re-render the thumbnail.
+      if (wrote) scheduleThumbnailRegen()
     } catch {
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 5000)

@@ -168,7 +168,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       }))
     },
     onForegroundSaved: (masks) => {
-      // Mirror saved masks into local state for the current option and any sibling options sharing the same image
+      // Mirror saved masks into local state for the current option and any sibling options sharing the same image.
+      // useStudio only calls this when the masks actually changed, so the bulk sibling update below is no longer
+      // triggered by every autosave — moving an artwork never touches elevation_options at all.
       setElevations(prev => {
         const elev = prev.find(e => e.id === activeElevId)
         if (!elev) return prev
