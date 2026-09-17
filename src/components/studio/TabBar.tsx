@@ -84,6 +84,7 @@ export default function TabBar({
   const [dragging, setDragging] = useState<{ elevId: string; key: string } | null>(null)
   const [dropTarget, setDropTarget] = useState<{ elevId: string; key: string; side: 'before' | 'after' } | null>(null)
   const [menu, setMenu] = useState<{ elevId: string; key: string; title: string; name: string | null; hasArtworks: boolean; x: number; y: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   function moveOption(elevId: string, key: string, delta: number) {
     const elev = elevations.find(e => e.id === elevId)
@@ -112,16 +113,24 @@ export default function TabBar({
     return e.clientX < r.left + r.width / 2 ? 'before' : 'after'
   }
 
-  // The context menu closes on any click elsewhere, on Escape, or on scroll.
+  // The context menu closes on any mouse press elsewhere, on Escape, or on scroll.
+  // Presses inside the menu are exempted by checking the target, not by
+  // stopPropagation: Next.js mounts React on the document, so a React
+  // handler's stopPropagation cannot stop a native listener on that same
+  // document, and the menu would unmount before the item's click arrived.
   useEffect(() => {
     if (!menu) return
     const close = () => setMenu(null)
+    const onPress = (e: MouseEvent) => {
+      if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return
+      close()
+    }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    document.addEventListener('mousedown', close)
+    document.addEventListener('mousedown', onPress)
     document.addEventListener('keydown', onKey)
     window.addEventListener('scroll', close, true)
     return () => {
-      document.removeEventListener('mousedown', close)
+      document.removeEventListener('mousedown', onPress)
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', close, true)
     }
@@ -289,10 +298,10 @@ export default function TabBar({
         const index = elevations.find(e => e.id === menu.elevId)?.options.findIndex(o => o.key === menu.key) ?? -1
         return (
           <div
+            ref={menuRef}
             className="studio-tab-menu"
             role="menu"
             style={{ left: menu.x, top: menu.y }}
-            onMouseDown={e => e.stopPropagation()}
           >
             <button role="menuitem" onClick={() => { openRenameOption(menu.elevId, menu.key, menu.title, menu.name); setMenu(null) }}>
               Rename option…
