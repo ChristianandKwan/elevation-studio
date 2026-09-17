@@ -8,6 +8,7 @@ import BudgetScreen from '@/components/budget/BudgetScreen'
 import { DrawLoader } from '@/components/ui/Spinner'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import type { ProjectBudget } from '@/types'
+import { optionTitleFor, optionTagClass } from '@/lib/options'
 
 interface ClientArtwork {
   id: string
@@ -28,7 +29,17 @@ interface ClientArtwork {
 
 interface ClientOption {
   id: string
+  /** Stored key — identity only (what a pick refers to). Never shown. */
   option: string
+  /** Position letter, derived by the loader */
+  letter: string
+  /** Tab text: the option's name, or its letter */
+  label: string
+  /** Sentence form: the name, or "Option A" */
+  title: string
+  name?: string | null
+  sort_order?: number | null
+  created_at?: string | null
   imageUrl: string | null
   orig_w: number
   orig_h: number
@@ -222,6 +233,11 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     setTimeout(() => setToast(''), 3000)
   }
 
+  /** How to refer to an option in a message to the client: its name, or "Option A". */
+  function titleFor(elevId: string, key: string) {
+    return optionTitleFor(elevations.find(e => e.id === elevId)?.elevation_options ?? [], key)
+  }
+
   /**
    * Every portal write goes through the server, which re-verifies the magic
    * link and that the IDs belong to this project. The browser holds no
@@ -266,6 +282,9 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     clientPickedOption: pickedOptions[elev.id] ?? elev.clientPickedOption,
     options: elev.elevation_options.map(opt => ({
       key: opt.option,
+      label: opt.label,
+      title: opt.title,
+      name: opt.name?.trim() || null,
       artworks: opt.artworks.map(a => ({
         id: a.id,
         name: a.name,
@@ -411,7 +430,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       await flushPositions(optionsState[elevId]?.[opt]?.artworks ?? [])
       // The server writes the pick and its activity-log entry.
       await callAction('pick_option', { elevationId: elevId, option: opt })
-      onStatus(`Option ${opt} selected`)
+      onStatus(`${titleFor(elevId, opt)} selected`)
     } catch {
       // Revert optimistic update
       setPickedOptions(prev => ({ ...prev, [elevId]: snapshotPicked }))
@@ -467,7 +486,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         },
       }))
 
-      onStatus(`Option ${activeOpt} approved!`)
+      onStatus(`${titleFor(activeElevId, activeOpt)} approved!`)
     } catch {
       // Revert local state to snapshot
       setOptionsState(prev => ({
@@ -547,15 +566,17 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
               <div key={elev.id} style={{ display: 'flex', alignItems: 'center' }}>
                 {i > 0 && <div className="client-tab-divider" />}
                 {visibleOpts.map(opt => {
-                  const tagClass = opt.option === 'A' ? 'tag tag-option-a' : opt.option === 'B' ? 'tag tag-option-b' : 'tag tag-option-other'
+                  const tagClass = optionTagClass(opt.letter)
                   return multiOption ? (
                     <button
                       key={opt.option}
                       className={`client-tab-btn${activeElevId === elev.id && activeOpt === opt.option ? ' active' : ''}`}
                       onClick={() => { setActiveElevId(elev.id); setActiveOpt(opt.option) }}
                     >
-                      <span className={tagClass} style={{ marginRight: 5 }}>{opt.option}</span>
-                      {elev.name}{picked === opt.option ? ' ✓' : ''}
+                      {opt.name
+                        ? opt.name
+                        : <><span className={tagClass} style={{ marginRight: 5 }}>{opt.letter}</span>{elev.name}</>}
+                      {picked === opt.option ? ' ✓' : ''}
                     </button>
                   ) : (
                     <button
@@ -578,6 +599,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
             optData={optData}
             elevationName={activeElev?.name ?? ''}
             activeOpt={activeOpt}
+            optionTitle={optData.title}
             projectId={project.id}
             rerenderKey={rerenderKey}
             approvalActivity={approvalActivity}

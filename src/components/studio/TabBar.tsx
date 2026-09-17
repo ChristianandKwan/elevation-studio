@@ -1,11 +1,17 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { optionTagClass, OPTION_NAME_MAX } from '@/lib/options'
 
 interface ElevationTab {
   id: string
   name: string
-  options: Array<{ key: string; hasArtworks: boolean; hasClientNotes: boolean }>
+  /**
+   * `key` is the stored identity. `letter` is the position letter, `name` the
+   * consultant's optional name, `label` / `title` whichever of those applies
+   * (tab text / sentence form). See src/lib/options.ts.
+   */
+  options: Array<{ key: string; letter: string; label: string; title: string; name: string | null; hasArtworks: boolean; hasClientNotes: boolean }>
 }
 
 interface Props {
@@ -18,18 +24,16 @@ interface Props {
   onDeleteElevation: (elevId: string) => void
   onAddOption: (elevId: string) => void
   onDeleteOption: (elevId: string, optKey: string) => void
-}
-
-function optionTagClass(key: string) {
-  if (key === 'A') return 'tag tag-option-a'
-  if (key === 'B') return 'tag tag-option-b'
-  return 'tag tag-option-other'
+  /** New left-to-right order of option keys for one elevation. Saved in one batched write. */
+  onReorderOptions: (elevId: string, orderedKeys: string[]) => void
+  /** Name (or clear, with '') one option. */
+  onRenameOption: (elevId: string, optKey: string, name: string) => void
 }
 
 export default function TabBar({
   elevations, activeElevId, activeOption, onSwitch,
   onAddElevation, onRenameElevation, onDeleteElevation,
-  onAddOption, onDeleteOption,
+  onAddOption, onDeleteOption, onReorderOptions, onRenameOption,
 }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -57,7 +61,80 @@ export default function TabBar({
   const [renameElevId, setRenameElevId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const [confirmDeleteElevId, setConfirmDeleteElevId] = useState<string | null>(null)
-  const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; hasArtworks: boolean } | null>(null)
+  const [confirmDeleteOpt, setConfirmDeleteOpt] = useState<{ elevId: string; optKey: string; title: string; hasArtworks: boolean } | null>(null)
+  const [renameOpt, setRenameOpt] = useState<{ elevId: string; key: string; title: string } | null>(null)
+  const [renameOptName, setRenameOptName] = useState('')
+
+  function openRenameOption(elevId: string, key: string, title: string, name: string | null) {
+    setRenameOpt({ elevId, key, title })
+    setRenameOptName(name ?? '')
+  }
+
+  function handleRenameOption() {
+    if (!renameOpt) return
+    onRenameOption(renameOpt.elevId, renameOpt.key, renameOptName)
+    setRenameOpt(null)
+  }
+
+  // ── Reordering ────────────────────────────────────────────────
+  // Tabs can be dragged within their elevation. Because letters are worked
+  // out from position, moving a tab re-letters the strip on the spot.
+  // Fallbacks for people who can't (or don't want to) drag: right-click a
+  // tab for "Move left / Move right", or focus it and press Alt+←/→.
+  const [dragging, setDragging] = useState<{ elevId: string; key: string } | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ elevId: string; key: string; side: 'before' | 'after' } | null>(null)
+  const [menu, setMenu] = useState<{ elevId: string; key: string; title: string; name: string | null; hasArtworks: boolean; x: number; y: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  function moveOption(elevId: string, key: string, delta: number) {
+    const elev = elevations.find(e => e.id === elevId)
+    if (!elev) return
+    const keys = elev.options.map(o => o.key)
+    const from = keys.indexOf(key)
+    const to = from + delta
+    if (from < 0 || to < 0 || to >= keys.length) return
+    keys.splice(from, 1)
+    keys.splice(to, 0, key)
+    onReorderOptions(elevId, keys)
+  }
+
+  function dropOption(elevId: string, key: string, targetKey: string, side: 'before' | 'after') {
+    const elev = elevations.find(e => e.id === elevId)
+    if (!elev || key === targetKey) return
+    const keys = elev.options.map(o => o.key).filter(k => k !== key)
+    const at = keys.indexOf(targetKey) + (side === 'after' ? 1 : 0)
+    keys.splice(at, 0, key)
+    if (keys.every((k, i) => k === elev.options[i]?.key)) return
+    onReorderOptions(elevId, keys)
+  }
+
+  function sideOf(e: React.DragEvent<HTMLElement>): 'before' | 'after' {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientX < r.left + r.width / 2 ? 'before' : 'after'
+  }
+
+  // The context menu closes on any mouse press elsewhere, on Escape, or on scroll.
+  // Presses inside the menu are exempted by checking the target, not by
+  // stopPropagation: Next.js mounts React on the document, so a React
+  // handler's stopPropagation cannot stop a native listener on that same
+  // document, and the menu would unmount before the item's click arrived.
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onPress = (e: MouseEvent) => {
+      if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return
+      close()
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    document.addEventListener('mousedown', onPress)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('mousedown', onPress)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [menu])
 
   function handleAdd() {
     const name = newName.trim() || 'New Elevation'
@@ -90,26 +167,70 @@ export default function TabBar({
 
               {multiOption ? (
                 // Multiple options: render a tab per option
-                elev.options.map(opt => {
+                elev.options.map((opt, optIndex) => {
                   const isActive = activeElevId === elev.id && activeOption === opt.key
+                  const isDragging = dragging?.elevId === elev.id && dragging.key === opt.key
+                  const dropSide = dropTarget?.elevId === elev.id && dropTarget.key === opt.key ? dropTarget.side : null
+                  const classes = ['studio-tab', isActive && 'active', isDragging && 'dragging', dropSide && `drop-${dropSide}`]
                   return (
                     <button
                       key={opt.key}
-                      className={`studio-tab${isActive ? ' active' : ''}`}
+                      className={classes.filter(Boolean).join(' ')}
                       onClick={() => onSwitch(elev.id, opt.key)}
+                      title="Drag to reorder · double-click to rename · right-click for more"
+                      aria-label={`${opt.title}, ${elev.name}, position ${optIndex + 1} of ${elev.options.length}. Alt+arrow keys to move.`}
+                      onDoubleClick={() => openRenameOption(elev.id, opt.key, opt.title, opt.name)}
+                      draggable
+                      onDragStart={e => {
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', opt.key)
+                        setDragging({ elevId: elev.id, key: opt.key })
+                      }}
+                      onDragEnd={() => { setDragging(null); setDropTarget(null) }}
+                      onDragOver={e => {
+                        // Only within the same elevation — options belong to their wall.
+                        if (!dragging || dragging.elevId !== elev.id) return
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
+                        const side = sideOf(e)
+                        if (dropTarget?.key !== opt.key || dropTarget.side !== side) {
+                          setDropTarget({ elevId: elev.id, key: opt.key, side })
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dropTarget?.key === opt.key) setDropTarget(null)
+                      }}
+                      onDrop={e => {
+                        if (!dragging || dragging.elevId !== elev.id) return
+                        e.preventDefault()
+                        dropOption(elev.id, dragging.key, opt.key, sideOf(e))
+                        setDragging(null)
+                        setDropTarget(null)
+                      }}
+                      onContextMenu={e => {
+                        e.preventDefault()
+                        setMenu({ elevId: elev.id, key: opt.key, title: opt.title, name: opt.name, hasArtworks: opt.hasArtworks, x: e.clientX, y: e.clientY })
+                      }}
+                      onKeyDown={e => {
+                        if (!e.altKey) return
+                        if (e.key === 'ArrowLeft') { e.preventDefault(); moveOption(elev.id, opt.key, -1) }
+                        if (e.key === 'ArrowRight') { e.preventDefault(); moveOption(elev.id, opt.key, 1) }
+                      }}
                     >
-                      <span className={optionTagClass(opt.key)} style={{ marginRight: 5 }}>{opt.key}</span>
-                      {elev.name}
+                      {/* A named option shows its name; an unnamed one its letter badge and the wall it belongs to */}
+                      {opt.name
+                        ? opt.name
+                        : <><span className={optionTagClass(opt.letter)} style={{ marginRight: 5 }}>{opt.letter}</span>{elev.name}</>}
                       {opt.hasClientNotes && !isActive && (
                         <span className="studio-tab-notes-dot" title="Client has left notes on this option" aria-label="Has client notes" />
                       )}
                       {elev.options.length > 1 && (
                         <span
                           className="studio-tab-del-opt"
-                          title={`Remove option ${opt.key}`}
+                          title={`Remove ${opt.title}`}
                           onClick={e => {
                             e.stopPropagation()
-                            setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, hasArtworks: opt.hasArtworks })
+                            setConfirmDeleteOpt({ elevId: elev.id, optKey: opt.key, title: opt.title, hasArtworks: opt.hasArtworks })
                           }}
                         >
                           ×
@@ -171,6 +292,38 @@ export default function TabBar({
         </button>
       </div>
 
+      {/* Option context menu: reorder without dragging, or remove */}
+      {menu && (() => {
+        const count = elevations.find(e => e.id === menu.elevId)?.options.length ?? 0
+        const index = elevations.find(e => e.id === menu.elevId)?.options.findIndex(o => o.key === menu.key) ?? -1
+        return (
+          <div
+            ref={menuRef}
+            className="studio-tab-menu"
+            role="menu"
+            style={{ left: menu.x, top: menu.y }}
+          >
+            <button role="menuitem" onClick={() => { openRenameOption(menu.elevId, menu.key, menu.title, menu.name); setMenu(null) }}>
+              Rename option…
+            </button>
+            <div className="studio-tab-menu-sep" />
+            <button role="menuitem" disabled={index <= 0} onClick={() => { moveOption(menu.elevId, menu.key, -1); setMenu(null) }}>
+              ← Move left
+            </button>
+            <button role="menuitem" disabled={index < 0 || index >= count - 1} onClick={() => { moveOption(menu.elevId, menu.key, 1); setMenu(null) }}>
+              Move right →
+            </button>
+            <div className="studio-tab-menu-sep" />
+            <button role="menuitem" className="danger" disabled={count <= 1} onClick={() => {
+              setConfirmDeleteOpt({ elevId: menu.elevId, optKey: menu.key, title: menu.title, hasArtworks: menu.hasArtworks })
+              setMenu(null)
+            }}>
+              Remove {menu.title}…
+            </button>
+          </div>
+        )
+      })()}
+
       {/* Add Elevation modal */}
       {showAddModal && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false) }}>
@@ -219,6 +372,32 @@ export default function TabBar({
         </div>
       )}
 
+      {/* Rename Option modal */}
+      {renameOpt && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setRenameOpt(null) }}>
+          <div className="modal">
+            <div className="modal-title">Name this option</div>
+            <div className="modal-sub">Shown instead of the letter everywhere this option appears, including to your client. Leave blank to go back to the letter.</div>
+            <div className="field">
+              <label className="field-label">Option Name</label>
+              <input
+                className="field-input"
+                value={renameOptName}
+                maxLength={OPTION_NAME_MAX}
+                onChange={e => setRenameOptName(e.target.value)}
+                placeholder={`e.g. Kandinsky 1 (currently ${renameOpt.title})`}
+                onKeyDown={e => e.key === 'Enter' && handleRenameOption()}
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setRenameOpt(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleRenameOption}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Elevation confirmation modal */}
       {confirmDeleteElevId && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteElevId(null) }}>
@@ -241,7 +420,7 @@ export default function TabBar({
       {confirmDeleteOpt && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteOpt(null) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Remove Option {confirmDeleteOpt.optKey}?</div>
+            <div className="modal-title">Remove {confirmDeleteOpt.title}?</div>
             <div className="modal-sub" style={{ color: 'var(--red)' }}>
               {confirmDeleteOpt.hasArtworks
                 ? 'This option has artworks. Removing it will permanently delete them and their images.'

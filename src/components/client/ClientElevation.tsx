@@ -51,7 +51,10 @@ interface ClientOption {
 interface Props {
   optData: ClientOption
   elevationName: string
+  /** Stored key of the active option — used for picks, never shown */
   activeOpt: string
+  /** How to refer to activeOpt: its name, or "Option A" */
+  optionTitle: string
   projectId: string
   rerenderKey: number
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
@@ -74,7 +77,7 @@ interface Props {
 }
 
 export default function ClientElevation({
-  optData, elevationName, activeOpt, rerenderKey,
+  optData, elevationName, activeOpt, optionTitle, rerenderKey,
   approvalActivity, clientBudget, isPicked, artworksLocked, onPick, onClearPick,
   zoom, onZoom,
   onArtworkMove, onArtworkMoveEnd, onToggleVisibility, onNotesChange, onApprove,
@@ -141,7 +144,7 @@ export default function ClientElevation({
         <div className="client-sidebar-scroll">
           {/* Option / elevation label */}
           <div className="client-sidebar-section">
-            <div className="client-sidebar-kicker">Option {activeOpt}</div>
+            <div className="client-sidebar-kicker">{optionTitle}</div>
             <div className="client-sidebar-elev-name">{elevationName}</div>
           </div>
 
@@ -198,7 +201,7 @@ export default function ClientElevation({
               <div className="approval-status-icon">✓</div>
               <div>
                 <div className="approval-status-text" style={{ color: 'var(--green)' }}>
-                  Option {activeOpt} approved
+                  {optionTitle} approved
                 </div>
                 <div className="approval-status-sub">Approved {formatApprovalTimestamp(optData.approved_at)}</div>
               </div>
@@ -208,7 +211,7 @@ export default function ClientElevation({
             <div className="client-pick-panel">
               <div className="client-pick-title">Choose your option</div>
               <div className="client-pick-hint">
-                Compare both options using the tabs above, then lock in your choice.
+                Compare the options using the tabs above, then lock in your choice.
               </div>
               {totalCost > 0 && (
                 <div className="approval-total-section" style={{ marginBottom: 12 }}>
@@ -234,7 +237,7 @@ export default function ClientElevation({
                 className="btn btn-primary btn-sm btn-full"
                 onClick={() => onPick(activeOpt)}
               >
-                Pick Option {activeOpt}
+                Pick {optionTitle}
               </button>
             </div>
           ) : (
@@ -243,7 +246,7 @@ export default function ClientElevation({
               <div className="approval-status-bar pending" style={{ margin: '0 0 12px' }}>
                 <div className="approval-status-icon">◌</div>
                 <div>
-                  <div className="approval-status-text">Option {activeOpt} selected</div>
+                  <div className="approval-status-text">{optionTitle} selected</div>
                   <div className="approval-status-sub">Adjust artworks, then approve when ready</div>
                 </div>
               </div>
@@ -271,7 +274,7 @@ export default function ClientElevation({
               )}
 
               <button className="btn btn-green btn-sm btn-full" onClick={handleApproveClick}>
-                ✓ Approve Option {activeOpt}
+                ✓ Approve {optionTitle}
               </button>
               {onClearPick && (
                 <>

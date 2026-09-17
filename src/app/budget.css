@@ -112,8 +112,23 @@
 /* Picked elevation artwork list */
 .budget-picked-artworks { padding: 0 20px; }
 
-/* Pending elevation: two option blocks side by side */
-.budget-options-row { display: flex; gap: 14px; }
+/* Pending elevation, up to three options: blocks side by side. A grid rather
+   than a flex row so each block keeps a readable minimum and drops to one
+   column on a phone instead of squeezing. */
+.budget-options-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+
+/* Four or more options: full-width cards stacked with air between them */
+.budget-options-stack { display: flex; flex-direction: column; gap: 10px; }
+.budget-option-header--toggle { cursor: pointer; border: none; border-bottom: 1px solid var(--border); align-items: center; }
+.budget-option-header--toggle:hover { background: #F1EDE6; }
+.budget-option-count { font-size: 12px; color: var(--mid); white-space: nowrap; }
+.budget-option-chevron {
+  width: 7px; height: 7px; margin-left: 10px; flex-shrink: 0;
+  border-right: 1.5px solid var(--mid); border-bottom: 1.5px solid var(--mid);
+  transform: rotate(45deg); transition: transform .15s;
+}
+.budget-option-chevron.open { transform: rotate(-135deg); }
+.budget-option-artworks--collapsed { display: none; }
 .budget-option-block { flex: 1; border: 1px solid var(--border); background: var(--warm-white); border-radius: var(--radius); overflow: hidden; }
 .budget-option-header {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -124,6 +139,8 @@
   font-size: 13px; font-weight: 600; letter-spacing: .08em;
   text-transform: uppercase; color: var(--charcoal);
 }
+/* A consultant-given name reads as written; only the "Option A" form is set in capitals */
+.budget-option-key--named { text-transform: none; letter-spacing: .01em; }
 .budget-option-subtotal {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
   font-size: 20px; font-weight: 500; color: var(--charcoal); margin-left: auto;
@@ -289,5 +306,6 @@
 
   /* Neutralise the option header button appearance */
   .budget-option-header { cursor: default; pointer-events: none; }
+  .budget-option-chevron { display: none; }
   .budget-option-header:hover { background: none; }
 }

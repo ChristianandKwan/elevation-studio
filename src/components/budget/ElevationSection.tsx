@@ -10,6 +10,13 @@ interface Props {
   vatMode: boolean
 }
 
+/**
+ * Up to this many options sit side by side. Beyond it they stack as cards:
+ * the side-by-side row was drawn for two, and at ten it squeezed every block
+ * to a sliver with prices printed over titles.
+ */
+const SIDE_BY_SIDE_MAX = 3
+
 export default function ElevationSection({ elevation, vatMode }: Props) {
   const picked = elevation.clientPickedOption
 
@@ -23,7 +30,7 @@ export default function ElevationSection({ elevation, vatMode }: Props) {
       <div className="budget-elev-block budget-elev-block--picked">
         <div className="budget-elev-header budget-elev-header--picked">
           <span className="budget-elev-name">{elevation.name}</span>
-          <span className="budget-elev-pick-badge">✓ Option {picked}</span>
+          <span className="budget-elev-pick-badge">✓ {opt?.title ?? `Option ${picked}`}</span>
           <span className="budget-elev-total">{fmtGbp(displayTotal)}</span>
         </div>
         <div className="budget-picked-artworks">
@@ -46,15 +53,21 @@ export default function ElevationSection({ elevation, vatMode }: Props) {
         <span className="budget-elev-name">{elevation.name}</span>
         <span className="budget-elev-pending-badge">● Selection pending</span>
       </div>
-      <div className="budget-options-row">
-        {elevation.options.length === 0 ? (
-          <p className="budget-empty-note">No options added</p>
-        ) : (
-          elevation.options.map(opt => (
+      {elevation.options.length === 0 ? (
+        <p className="budget-empty-note">No options added</p>
+      ) : elevation.options.length <= SIDE_BY_SIDE_MAX ? (
+        <div className="budget-options-row">
+          {elevation.options.map(opt => (
             <OptionBlock key={opt.key} option={opt} vatMode={vatMode} />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="budget-options-stack">
+          {elevation.options.map(opt => (
+            <OptionBlock key={opt.key} option={opt} vatMode={vatMode} layout="card" />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

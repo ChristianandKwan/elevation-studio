@@ -17,6 +17,7 @@ import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
+import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
 
 interface DbElevation {
   id: string
@@ -25,7 +26,12 @@ interface DbElevation {
   clientPickedOption: string | null
   elevation_options: Array<{
     id: string
+    /** Stored key — identity only. The letter shown is derived from position (src/lib/options.ts). */
     option: string
+    sort_order: number
+    created_at?: string | null
+    /** Optional consultant-given name shown instead of the letter */
+    name?: string | null
     imageUrl: string | null
     imagePath: string | null
     orig_w: number
@@ -104,6 +110,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
   const optionId = activeOptData?.id ?? ''
+  // How the active option is referred to: its name, or "Option" plus its position letter — never its stored key.
+  const activeOptionTitle = optionTitleFor(activeElev?.elevation_options ?? [], activeOption)
 
   const studio = useStudio({
     projectId: project.id,
@@ -111,7 +119,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     onStatus,
     projectName: project.name,
     elevationName: activeElev?.name ?? '',
-    optionKey: activeOption,
+    optionKey: activeOptionTitle,
     artworkDragLocked: !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption) || (activeOptData?.approved ?? false),
     onElevationUploaded: ({ imagePath, imageUrl, origW, origH }) => {
       setElevations(prev => prev.map(e => {
@@ -162,7 +170,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       }))
     },
     onForegroundSaved: (masks) => {
-      // Mirror saved masks into local state for the current option and any sibling options sharing the same image
+      // Mirror saved masks into local state for the current option and any sibling options sharing the same image.
+      // useStudio only calls this when the masks actually changed, so the bulk sibling update below is no longer
+      // triggered by every autosave — moving an artwork never touches elevation_options at all.
       setElevations(prev => {
         const elev = prev.find(e => e.id === activeElevId)
         if (!elev) return prev
@@ -424,13 +434,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (!elev) return
 
     const { data: optRow } = await supabase.from('elevation_options')
-      .insert({ elevation_id: elev.id, option: 'A' })
+      .insert({ elevation_id: elev.id, option: 'A', sort_order: 0 })
       .select().single()
 
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null,
       elevation_options: [
-        { id: optRow?.id ?? '', option: 'A', imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
+        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
@@ -441,8 +451,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   async function addOption(elevId: string) {
     const elev = elevations.find(e => e.id === elevId)
     if (!elev) return
-    const usedKeys = new Set(elev.elevation_options.map(o => o.option))
-    const nextKey = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(l => !usedKeys.has(l)) ?? 'X'
+    // `nextKey` is only the row's stable identity (lowest unused letter). The
+    // letter people see is its position — a new tab always goes on the end.
+    const nextKey = nextOptionKey(elev.elevation_options)
+    if (!nextKey) { onStatus('An elevation can have at most 26 options'); return }
+    const sortOrder = nextSortOrder(elev.elevation_options)
+    const newLabel = optionLabel(elev.elevation_options.length)
     // Inherit image + foreground from the currently active option (same room = same base photo)
     const srcOpt = elev.elevation_options.find(o => o.option === activeOption) ?? elev.elevation_options[0] ?? null
     const inheritedImagePath = srcOpt?.imagePath ?? null
@@ -451,7 +465,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const inheritedOrigH = srcOpt?.orig_h ?? 0
     const inheritedScale = srcOpt?.scale_px_per_cm ?? null
     const supabase = createClient()
-    const insertPayload: Record<string, unknown> = { elevation_id: elevId, option: nextKey }
+    const insertPayload: Record<string, unknown> = { elevation_id: elevId, option: nextKey, sort_order: sortOrder }
     if (inheritedImagePath) {
       insertPayload.image_path = inheritedImagePath
       insertPayload.orig_w = inheritedOrigW
@@ -471,7 +485,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       return {
         ...e,
         elevation_options: [...e.elevation_options, {
-          id: optRow.id, option: nextKey,
+          id: optRow.id, option: nextKey, sort_order: sortOrder,
           imageUrl: srcOpt?.imageUrl ?? null,
           imagePath: inheritedImagePath,
           orig_w: inheritedOrigW, orig_h: inheritedOrigH,
@@ -484,13 +498,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     }))
     setActiveElevId(elevId)
     setActiveOption(nextKey)
-    onStatus(`Option ${nextKey} added`)
+    onStatus(`Option ${newLabel} added`)
   }
 
   async function deleteOption(elevId: string, optKey: string) {
     const elev = elevations.find(e => e.id === elevId)
     const opt = elev?.elevation_options.find(o => o.option === optKey)
     if (!opt || !elev) return
+    const removedTitle = optionTitleFor(elev.elevation_options, optKey)
     const supabase = createClient()
     // Delete artwork images
     const artPaths = opt.artworks.map(a => (a as any).imagePath).filter(Boolean) as string[]
@@ -522,7 +537,62 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (activeElevId === elevId && activeOption === optKey && remaining.length > 0) {
       setActiveOption(remaining[0].option)
     }
-    onStatus(`Option ${optKey} removed`)
+    onStatus(`${removedTitle} removed`)
+  }
+
+  /**
+   * Give an option a name (or clear it with an empty string). The name
+   * replaces the position letter wherever the option is referred to; the
+   * stored key and the order are untouched.
+   */
+  async function renameOption(elevId: string, optKey: string, name: string) {
+    const elev = elevations.find(e => e.id === elevId)
+    const opt = elev?.elevation_options.find(o => o.option === optKey)
+    if (!opt) return
+    const value = cleanOptionName(name)
+    const previous = opt.name ?? null
+    if (value === previous) return
+    const apply = (v: string | null) => setElevations(prev => prev.map(e => e.id !== elevId ? e : {
+      ...e,
+      elevation_options: e.elevation_options.map(o => o.option === optKey ? { ...o, name: v } : o),
+    }))
+    apply(value)
+    const supabase = createClient()
+    const { error } = await supabase.from('elevation_options').update({ name: value }).eq('id', opt.id)
+    if (error) {
+      console.error('rename option failed:', error)
+      apply(previous)
+      onStatus('Could not save the option name — please try again')
+      return
+    }
+    onStatus(value ? `Option renamed to ${value}` : 'Option name cleared')
+  }
+
+  /**
+   * Save a new left-to-right order for one elevation's options.
+   * Optimistic: the strip re-letters at once, then a single RPC writes every
+   * sort_order in one statement (see migration 023). If that fails the old
+   * order comes back. Only the order changes — nothing is deleted or re-keyed.
+   */
+  async function reorderOptions(elevId: string, orderedKeys: string[]) {
+    const elev = elevations.find(e => e.id === elevId)
+    if (!elev) return
+    const byKey = new Map(elev.elevation_options.map(o => [o.option, o]))
+    if (orderedKeys.length !== byKey.size || orderedKeys.some(k => !byKey.has(k))) return
+    const previous = elev.elevation_options
+    const reordered = orderedKeys.map((k, i) => ({ ...byKey.get(k)!, sort_order: i }))
+    setElevations(prev => prev.map(e => e.id === elevId ? { ...e, elevation_options: reordered } : e))
+
+    const supabase = createClient()
+    const { error } = await supabase.rpc('reorder_elevation_options', {
+      p_elevation_id: elevId,
+      p_option_ids: reordered.map(o => o.id),
+    })
+    if (error) {
+      console.error('reorder_elevation_options failed:', error)
+      setElevations(prev => prev.map(e => e.id === elevId ? { ...e, elevation_options: previous } : e))
+      onStatus('Could not save the new tab order — please try again')
+    }
   }
 
   async function handleUnapprove() {
@@ -532,7 +602,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     await supabase.from('activity_logs').insert({
       project_id: project.id,
       type: 'unapprove',
-      text: `${PRACTICE_NAME} unapproved Option ${activeOption} of ${activeElev?.name ?? ''}`,
+      text: `${PRACTICE_NAME} unapproved ${activeOptionTitle} of ${activeElev?.name ?? ''}`,
     })
     setElevations(prev => prev.map(e => {
       if (e.id !== activeElevId) return e
@@ -644,7 +714,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     await supabase.from('activity_logs').insert({
       project_id: project.id,
       type: 'unapprove',
-      text: `${PRACTICE_NAME} unapproved Option ${activeOption} of ${activeElev?.name ?? ''}`,
+      text: `${PRACTICE_NAME} unapproved ${activeOptionTitle} of ${activeElev?.name ?? ''}`,
     })
     onStatus('Approval removed — client can make changes again')
   }
@@ -771,8 +841,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           elevations={elevations.map(e => ({
             id: e.id,
             name: e.name,
-            options: e.elevation_options.map(o => ({
+            options: labelOptions(e.elevation_options).map(o => ({
               key: o.option,
+              letter: o.letter,
+              label: o.label,
+              title: o.title,
+              name: cleanOptionName(o.name),
               hasArtworks: o.artworks.length > 0,
               hasClientNotes: (o.clientNotes ?? '').trim().length > 0,
             })),
@@ -785,6 +859,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onDeleteElevation={deleteElevation}
           onAddOption={addOption}
           onDeleteOption={deleteOption}
+          onReorderOptions={reorderOptions}
+          onRenameOption={renameOption}
         />
 
         {/* Main */}
@@ -799,6 +875,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             onRequestDeleteArtworks={requestDeleteArtworks}
             approvalStatus={{
               pickedOption: activeElev?.clientPickedOption ?? null,
+              pickedOptionTitle: optionTitleFor(activeElev?.elevation_options ?? [], activeElev?.clientPickedOption),
               approved: activeOptData?.approved ?? false,
               approvedAt: activeOptData?.approved_at ?? null,
             }}
@@ -825,8 +902,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             id: e.id,
             name: e.name,
             clientPickedOption: e.clientPickedOption,
-            options: e.elevation_options.map(o => ({
+            options: labelOptions(e.elevation_options).map(o => ({
               key: o.option,
+              label: o.label,
+              title: o.title,
+              name: cleanOptionName(o.name),
               artworks: o.artworks.map(a => ({
                 id: a.id,
                 name: a.name,

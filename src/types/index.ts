@@ -1,5 +1,6 @@
 export type ProjectStatus = 'draft' | 'sent' | 'approved'
-export type OptionKey = 'A' | 'B'
+/** Stored per-elevation key (A–Z). Identity only — the letter shown to people is derived from position, see src/lib/options.ts. */
+export type OptionKey = string
 export type FramingStatus = 'framed' | 'requires_framing'
 
 export interface Scale {
@@ -44,6 +45,8 @@ export interface Artwork {
 export interface ElevationOption {
   id: string
   option: OptionKey
+  /** Position within the elevation; the only field that decides order */
+  sortOrder: number
   imagePath: string | null
   imageUrl: string | null
   origW: number
