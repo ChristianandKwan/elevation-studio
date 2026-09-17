@@ -284,6 +284,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       key: opt.option,
       label: opt.label,
       title: opt.title,
+      name: opt.name?.trim() || null,
       artworks: opt.artworks.map(a => ({
         id: a.id,
         name: a.name,

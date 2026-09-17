@@ -906,6 +906,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               key: o.option,
               label: o.label,
               title: o.title,
+              name: cleanOptionName(o.name),
               artworks: o.artworks.map(a => ({
                 id: a.id,
                 name: a.name,

@@ -21,6 +21,8 @@ export interface BudgetOptionData {
   label: string
   /** Sentence form: the name, or "Option A". */
   title: string
+  /** Consultant-given name, or null when the option goes by its letter. */
+  name: string | null
   artworks: BudgetArtwork[]
 }
 

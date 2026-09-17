@@ -211,7 +211,7 @@ export default function ClientElevation({
             <div className="client-pick-panel">
               <div className="client-pick-title">Choose your option</div>
               <div className="client-pick-hint">
-                Compare both options using the tabs above, then lock in your choice.
+                Compare the options using the tabs above, then lock in your choice.
               </div>
               {totalCost > 0 && (
                 <div className="approval-total-section" style={{ marginBottom: 12 }}>
