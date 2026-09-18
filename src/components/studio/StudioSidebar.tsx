@@ -706,7 +706,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
           </div>
           {art.framingStatus === 'requires_framing' && (
             <div className="aw-field-row">
-              <label className="aw-f-label">Framing cost</label>
+              <label className="aw-f-label">Cost</label>
               <div className="aw-price-wrap">
                 <span className="aw-price-prefix">£</span>
                 <input

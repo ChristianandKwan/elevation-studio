@@ -272,7 +272,7 @@
 
 /* Framing status toggle (framed / requires framing) */
 .aw-framing-toggle { display: flex; gap: 4px; flex: 1; min-width: 0; }
-.aw-framing-toggle .btn-sm { flex: 1; justify-content: center; padding: 4px 6px; font-size: 10.5px; }
+.aw-framing-toggle .btn-sm { flex: 1 1 auto; min-width: 0; justify-content: center; padding: 4px 5px; font-size: 10px; letter-spacing: 0; }
 
 /* Frame select */
 .aw-frame-select {
