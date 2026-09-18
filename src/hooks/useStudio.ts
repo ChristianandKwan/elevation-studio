@@ -1882,6 +1882,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  function updateArtworkFraming(artId: string, framingStatus: 'framed' | 'requires_framing', framingCost: number | null) {
+    // A framed piece carries no framing cost, so switching back clears it
+    // rather than leaving a stale figure in the budget.
+    const cost = framingStatus === 'requires_framing' ? framingCost : null
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, framingStatus, framingCost: cost } : a)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
   function updateArtworkFrame(artId: string, frameType: string | null, frameWidthMm: number | null) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, frameType, frameWidthMm } : a)
@@ -2289,6 +2300,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkPrice,
     updateArtworkName,
     updateArtworkArtist,
+    updateArtworkFraming,
     updateArtworkFrame,
     updateArtworkBrightness,
     updateAllArtworksBrightness,
