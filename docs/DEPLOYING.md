@@ -41,16 +41,27 @@ Migration files in `supabase/migrations/` are a record of what *should* exist,
 not proof of what does. Before merging `dev` → `main`, confirm the live
 database is caught up.
 
-For a migration that adds a **function**, probe it over the REST API. Calling
-it with a deliberately wrong argument name never runs it:
+For a migration that adds a **function**, ask the REST API which functions it
+knows about. (An earlier version of this snippet called the function with a
+made-up argument, but a wrong argument and a missing function produce the same
+error code, so it said NOT APPLIED for functions that were there.) Nothing is
+run by this check:
 
 ```bash
 node --env-file=.env.local -e '
 const u=process.env.NEXT_PUBLIC_SUPABASE_URL, k=process.env.SUPABASE_SERVICE_ROLE_KEY;
-fetch(`${u}/rest/v1/rpc/YOUR_FUNCTION_NAME`,{method:"POST",
-  headers:{apikey:k,Authorization:`Bearer ${k}`,"Content-Type":"application/json"},
-  body:JSON.stringify({__probe:1})})
- .then(r=>r.json()).then(j=>console.log(j.code==="PGRST202"?"NOT APPLIED":"APPLIED"))'
+fetch(`${u}/rest/v1/`,{headers:{apikey:k,Authorization:`Bearer ${k}`}})
+ .then(r=>r.json()).then(j=>console.log("/rpc/YOUR_FUNCTION_NAME" in (j.paths||{})?"APPLIED":"NOT APPLIED"))'
+```
+
+For a migration that adds a **column**, select just that column with a limit
+of one. A missing column is a 400; anything else means it is there:
+
+```bash
+node --env-file=.env.local -e '
+const u=process.env.NEXT_PUBLIC_SUPABASE_URL, k=process.env.SUPABASE_SERVICE_ROLE_KEY;
+fetch(`${u}/rest/v1/YOUR_TABLE?select=YOUR_COLUMN&limit=1`,{headers:{apikey:k,Authorization:`Bearer ${k}`}})
+ .then(r=>console.log(r.status===400?"NOT APPLIED":"APPLIED"))'
 ```
 
 For a migration that changes **policies**, list what's live in the Supabase SQL

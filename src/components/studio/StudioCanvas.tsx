@@ -77,7 +77,6 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <image
                   id="fg-image"
-                  href=""
                   x="0"
                   y="0"
                   preserveAspectRatio="none"
