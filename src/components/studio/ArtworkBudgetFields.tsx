@@ -88,9 +88,11 @@ export default function ArtworkBudgetFields({
       )}
 
       {/* ── Discount ──────────────────────────────────────────────────── */}
-      <div className="aw-field-row">
+      {/* Stacked: three buttons do not fit beside a label in a 272px sidebar,
+          and "Confirmed" was being clipped. */}
+      <div className="aw-field-row aw-field-row--stack">
         <label className="aw-f-label">Discount</label>
-        <div className="aw-seg">
+        <div className="aw-seg aw-seg--full">
           {(['none', 'confirmed', 'tbc'] as DiscountStatus[]).map(s => (
             <button
               key={s}

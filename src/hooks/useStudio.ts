@@ -155,9 +155,11 @@ interface UseStudioOptions {
   onArtworkDeleted?: (id: string) => void
   /** Called only when foreground masks actually changed and were persisted, so sibling options sharing the wall photo can be synced */
   onForegroundSaved?: (masks: ForegroundMasks) => void
+  /** Called after the option's consultant note is written, so the screen's own copy can catch up */
+  onConsultantNoteSaved?: (note: string, shownToClient: boolean) => void
 }
 
-export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved, onConsultantNoteSaved }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -1956,12 +1958,28 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   async function saveConsultantNote(note: string, shownToClient: boolean) {
     if (!optionId) return
     const supabase = createClient()
-    const { error } = await supabase
+    // `select` matters: without it an update that matches no row, or that
+    // row-level security filters out, returns no error and no rows, and the
+    // save would report success having written nothing.
+    const { data, error } = await supabase
       .from('elevation_options')
       .update({ consultant_note: note, consultant_note_shown_to_client: shownToClient })
       .eq('id', optionId)
-    if (error) onStatus('Note not saved: ' + error.message)
-    else onStatus('Note saved')
+      .select('id')
+
+    if (error) {
+      onStatus('Note not saved: ' + error.message)
+      return
+    }
+    if (!data || data.length === 0) {
+      onStatus('Note not saved: this option could not be found')
+      return
+    }
+    onStatus('Note saved')
+    // The screen keeps its own copy of the option, and it feeds both this
+    // panel and the budget. Without this the note is in the database but
+    // gone from the box as soon as the panel remounts.
+    onConsultantNoteSaved?.(note, shownToClient)
   }
 
   /** Patch the note, VAT, discount or sub items on one artwork. */

@@ -592,3 +592,6 @@
 }
 .option-note-dirty { font-size: 9.5px; color: var(--accent); letter-spacing: .04em; }
 .option-note-toggle { margin-top: 7px; }
+
+/* A segmented control on its own row, using the panel's full width */
+.aw-seg--full { width: 100%; }

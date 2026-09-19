@@ -171,6 +171,19 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         }
       }))
     },
+    onConsultantNoteSaved: (note, shownToClient) => {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o =>
+            o.option === activeOption
+              ? { ...o, consultantNote: note, consultantNoteShownToClient: shownToClient }
+              : o,
+          ),
+        }
+      }))
+    },
     onForegroundSaved: (masks) => {
       // Mirror saved masks into local state for the current option and any sibling options sharing the same image.
       // useStudio only calls this when the masks actually changed, so the bulk sibling update below is no longer
@@ -282,41 +295,63 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     return () => window.removeEventListener('keydown', handler)
   }, [studio])
 
-  async function handleSwitch(elevId: string, opt: string) {
-    // Before switching: sync current artwork positions and foreground masks from studio state back into elevations
+  /**
+   * Copy the live studio state back into `elevations`.
+   *
+   * The studio edits `studio.state.artworks`; everything else on this screen
+   * reads `elevations`, which is the server snapshot. Anything the consultant
+   * changes is therefore invisible to the budget until the two are brought
+   * together. This used to run only when switching option, so a price, a
+   * discount or a note typed just before opening the budget did not show up
+   * there until the page was reloaded.
+   *
+   * Every field the sidebar can edit has to be listed here. A field left out
+   * saves to the database and still looks lost.
+   */
+  const syncStudioIntoElevations = useCallback(() => {
     const currentArts = studio.state.artworks
     const currentMasks = studio.state.masks
-    if (activeElevId && activeOption) {
-      setElevations(prev => prev.map(e => {
-        if (e.id !== activeElevId) return e
-        return {
-          ...e,
-          elevation_options: e.elevation_options.map(o => {
-            if (o.option !== activeOption) return o
-            return {
-              ...o,
-              foreground_masks: currentMasks.length > 0 ? currentMasks : null,
-              artworks: o.artworks.map(a => {
-                const cur = currentArts.find(ca => ca.id === a.id)
-                if (!cur) return a
-                return {
-                  ...a,
-                  xF: cur.xF, yF: cur.yF,
-                  name: cur.name,
-                  wCm: cur.wCm, hCm: cur.hCm,
-                  price: cur.price, artist: cur.artist, framingStatus: cur.framingStatus,
-                  frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
-                  brightness: cur.brightness,
-                  fade: cur.fade,
-                  shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
-                  visible: cur.visible,
-                }
-              }),
-            }
-          }),
-        }
-      }))
-    }
+    if (!activeElevId || !activeOption) return
+    setElevations(prev => prev.map(e => {
+      if (e.id !== activeElevId) return e
+      return {
+        ...e,
+        elevation_options: e.elevation_options.map(o => {
+          if (o.option !== activeOption) return o
+          return {
+            ...o,
+            foreground_masks: currentMasks.length > 0 ? currentMasks : null,
+            artworks: o.artworks.map(a => {
+              const cur = currentArts.find(ca => ca.id === a.id)
+              if (!cur) return a
+              return {
+                ...a,
+                xF: cur.xF, yF: cur.yF,
+                name: cur.name,
+                wCm: cur.wCm, hCm: cur.hCm,
+                price: cur.price, artist: cur.artist, framingStatus: cur.framingStatus,
+                frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
+                brightness: cur.brightness,
+                fade: cur.fade,
+                shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
+                visible: cur.visible,
+                note: cur.note,
+                noteShownToClient: cur.noteShownToClient,
+                vatApplies: cur.vatApplies,
+                discountStatus: cur.discountStatus,
+                discountPercent: cur.discountPercent,
+                subLineItems: cur.subLineItems,
+              }
+            }),
+          }
+        }),
+      }
+    }))
+  }, [studio.state.artworks, studio.state.masks, activeElevId, activeOption])
+
+  async function handleSwitch(elevId: string, opt: string) {
+    // Before switching: bring the studio's live edits into `elevations`.
+    syncStudioIntoElevations()
 
     // If target option has no image but another option does, copy from the first with an image
     const elev = elevations.find(e => e.id === elevId)
@@ -783,7 +818,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             </button>
             <button
               className={`budget-view-tab${view === 'budget' ? ' active' : ''}`}
-              onClick={() => setView('budget')}
+              onClick={() => { syncStudioIntoElevations(); setView('budget') }}
             >
               Budget
             </button>
