@@ -93,15 +93,7 @@
   border-radius: var(--radius-sm);
 }
 .studio-tab-add:hover { border-color: var(--accent); color: var(--accent); }
-.studio-tab-add-option {
-  width: 22px; height: 22px; padding: 0; font-size: 14px; cursor: pointer; line-height: 1;
-  border: 1px dashed var(--border); background: none; font-family: var(--font-karla, 'Karla'); color: var(--mid);
-  transition: all .15s; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-  margin-left: 2px; border-radius: var(--radius-xs);
-}
-.studio-tab-add-option:hover { border-color: var(--accent); color: var(--accent); }
 .studio-tab-group { display: flex; align-items: center; position: relative; }
-.studio-tab-group:hover .studio-tab-rename-btn { opacity: 1; }
 .studio-tab-del-opt {
   display: inline-flex; align-items: center; justify-content: center;
   margin-left: 5px; width: 14px; height: 14px; font-size: 12px; line-height: 1;
@@ -114,13 +106,25 @@
   background: var(--accent); margin-left: 6px; flex-shrink: 0;
   vertical-align: middle;
 }
-.studio-tab-rename-btn {
-  opacity: 0; transition: opacity .15s;
-  padding: 3px 4px; background: none; border: none; cursor: pointer;
-  color: var(--mid); display: flex; align-items: center;
-  flex-shrink: 0;
+/* One "more" button per elevation (rename, client visibility, delete). Always
+   present but quiet, so the strip has no hover-only gap. */
+.studio-tab-more {
+  width: 22px; height: 22px; padding: 0; margin-left: 2px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid transparent; border-radius: var(--radius-xs);
+  color: var(--mid); opacity: .5; cursor: pointer; transition: opacity .15s, color .15s, border-color .15s;
 }
-.studio-tab-rename-btn:hover { color: var(--accent); }
+.studio-tab-group:hover .studio-tab-more,
+.studio-tab-more:focus-visible,
+.studio-tab-more.open { opacity: 1; }
+.studio-tab-more:hover,
+.studio-tab-more.open { color: var(--accent); border-color: var(--border); }
+.studio-tab-menu button svg { vertical-align: -1px; margin-right: 8px; }
+/* Hidden from client: names fade and italicise, and the first tab carries a
+   crossed-out eye. */
+.studio-tab-group--hidden .studio-tab { font-style: italic; opacity: .55; }
+.studio-tab-group--hidden .studio-tab.active { opacity: .8; }
+.studio-tab-hidden-mark { display: inline-flex; vertical-align: -1px; margin-right: 6px; color: var(--mid); }
 .tag { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 9px; font-weight: 700; }
 .tag-option-a { background: var(--charcoal); color: white; }
 .tag-option-b { background: var(--accent); color: white; }

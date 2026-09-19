@@ -105,6 +105,12 @@ export interface BudgetElevationData {
   id: string
   name: string
   clientPickedOption: string | null
+  /**
+   * Consultant side only. A hidden elevation is still listed for the
+   * consultant to price, but stays out of every total. The client portal never
+   * receives hidden elevations, so there it is always absent.
+   */
+  hiddenFromClient?: boolean
   options: BudgetOptionData[]
 }
 

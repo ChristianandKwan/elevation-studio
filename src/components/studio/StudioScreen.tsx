@@ -26,6 +26,8 @@ interface DbElevation {
   name: string
   display_order: number
   clientPickedOption: string | null
+  /** Off = the consultant is still working on it; the client portal and its budget leave it out. */
+  visibleToClient: boolean
   elevation_options: Array<{
     id: string
     /** Stored key — identity only. The letter shown is derived from position (src/lib/options.ts). */
@@ -573,6 +575,17 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     onStatus('Elevation renamed')
   }
 
+  async function setElevationVisibleToClient(elevId: string, visible: boolean) {
+    const supabase = createClient()
+    const { error } = await supabase.from('elevations').update({ visible_to_client: visible }).eq('id', elevId)
+    if (error) {
+      onStatus('Failed to change client visibility — please try again')
+      return
+    }
+    setElevations(prev => prev.map(e => e.id === elevId ? { ...e, visibleToClient: visible } : e))
+    onStatus(visible ? 'Elevation now visible to client' : 'Elevation hidden from client')
+  }
+
   async function addElevation(name: string) {
     const supabase = createClient()
     const { data: elev } = await supabase.from('elevations').insert({
@@ -587,7 +600,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       .select().single()
 
     const newElev: DbElevation = {
-      id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null,
+      id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null, visibleToClient: true,
       elevation_options: [
         { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
       ],
@@ -990,6 +1003,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           elevations={elevations.map(e => ({
             id: e.id,
             name: e.name,
+            visibleToClient: e.visibleToClient,
             options: labelOptions(e.elevation_options).map(o => ({
               key: o.option,
               letter: o.letter,
@@ -1006,6 +1020,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onAddElevation={addElevation}
           onRenameElevation={renameElevation}
           onDeleteElevation={deleteElevation}
+          onSetVisibleToClient={setElevationVisibleToClient}
           onAddOption={addOption}
           onDeleteOption={deleteOption}
           onReorderOptions={reorderOptions}
@@ -1051,6 +1066,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             id: e.id,
             name: e.name,
             clientPickedOption: e.clientPickedOption,
+            hiddenFromClient: !e.visibleToClient,
             options: labelOptions(e.elevation_options).map(o => ({
               key: o.option,
               label: o.label,

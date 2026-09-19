@@ -46,14 +46,18 @@ const ACTIONS: readonly Action[] = [
 // rather than joined so the chain is obvious and doesn't depend on PostgREST
 // picking the right embedded relationship.
 
-/** Elevation must belong to the token's project. */
+/**
+ * Elevation must belong to the token's project and be visible to the client.
+ * A hidden elevation is treated exactly like a foreign one: the portal never
+ * received it, so any request naming it is refused.
+ */
 async function elevationInProject(svc: Svc, elevationId: string, projectId: string) {
   const { data } = await svc
     .from('elevations')
-    .select('id, name, project_id')
+    .select('id, name, project_id, visible_to_client')
     .eq('id', elevationId)
     .maybeSingle()
-  if (!data || data.project_id !== projectId) return null
+  if (!data || data.project_id !== projectId || !data.visible_to_client) return null
   return data as { id: string; name: string; project_id: string }
 }
 
@@ -115,13 +119,14 @@ async function artworksInProject(svc: Svc, ids: string[], projectId: string) {
   const elevationIds = [...new Set(opts.map(o => o.elevation_id as string))]
   const { data: elevs } = await svc
     .from('elevations')
-    .select('id, project_id')
+    .select('id, project_id, visible_to_client')
     .in('id', elevationIds)
   if (!elevs) return null
 
-  // Any elevation outside the token's project poisons the whole batch.
+  // Any elevation outside the token's project, or hidden from the client,
+  // poisons the whole batch.
   const ownedElevations = new Set(
-    elevs.filter(e => e.project_id === projectId).map(e => e.id as string)
+    elevs.filter(e => e.project_id === projectId && e.visible_to_client).map(e => e.id as string)
   )
   if (ownedElevations.size !== elevationIds.length) return null
 
@@ -143,8 +148,9 @@ async function logActivity(svc: Svc, projectId: string, type: string, text: stri
 
 /**
  * Mirrors ClientPortal's old client-side `allDone` check, but from freshly
- * written DB state: every elevation has a resolved option and that option is
- * approved. An elevation "needs picking" when more than one option has an
+ * written DB state: every elevation the client can see has a resolved option
+ * and that option is approved. Hidden elevations don't count — the client
+ * can't act on them, so they must not hold the project back. An elevation "needs picking" when more than one option has an
  * image; otherwise the single imaged option stands in.
  */
 async function allElevationsApproved(svc: Svc, projectId: string): Promise<boolean> {
@@ -152,6 +158,7 @@ async function allElevationsApproved(svc: Svc, projectId: string): Promise<boole
     .from('elevations')
     .select('id, client_picked_option, elevation_options(option, image_path, approved, sort_order, created_at)')
     .eq('project_id', projectId)
+    .eq('visible_to_client', true)
   if (!elevs?.length) return false
 
   return elevs.every(elev => {
