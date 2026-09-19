@@ -2142,8 +2142,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         const dist = blur * 0.55 * dispToOrig
         const shadowX = -Math.sin(rad) * dist
         const shadowY = Math.cos(rad) * dist
-        const shadowBlur = blur * dispToOrig
-        const pad = Math.ceil(shadowBlur + Math.max(Math.abs(shadowX), Math.abs(shadowY)))
+        // Doubled: CSS drop-shadow reads its blur as the Gaussian's standard
+        // deviation, canvas shadowBlur as twice it. Taken at face value, the
+        // export's shadow came out half as soft as the one on screen.
+        const shadowBlur = blur * 2 * dispToOrig
+        // A canvas shadow reaches about 1.5× its shadowBlur before it fades out.
+        const pad = Math.ceil(shadowBlur * 1.5 + Math.max(Math.abs(shadowX), Math.abs(shadowY)))
         const shadowed = document.createElement('canvas')
         shadowed.width = tile.width + pad * 2
         shadowed.height = tile.height + pad * 2
