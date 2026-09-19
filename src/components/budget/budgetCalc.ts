@@ -13,7 +13,6 @@ export interface BudgetArtwork {
   hCm: number
   /** The list price, ex-VAT, before any discount. */
   price: number
-  framingStatus: 'framed' | 'requires_framing'
   visible: boolean
   note: string
   noteShownToClient: boolean
@@ -22,6 +21,19 @@ export interface BudgetArtwork {
   discountPercent: number | null
   subLineItems: SubLineItem[]
 }
+
+/**
+ * The fields a consultant can change from the budget.
+ *
+ * Everything here is money or the words around it. Placement, size, frame and
+ * lighting stay in the studio, where the consultant is looking at the wall
+ * rather than at the numbers.
+ */
+export type BudgetArtworkPatch = Partial<Pick<
+  BudgetArtwork,
+  'price' | 'vatApplies' | 'discountStatus' | 'discountPercent'
+  | 'subLineItems' | 'note' | 'noteShownToClient'
+>>
 
 // ── Discounts and sub line items ──────────────────────────────────────────────
 

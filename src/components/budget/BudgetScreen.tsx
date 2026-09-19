@@ -9,7 +9,7 @@ import CustomLineItems from './CustomLineItems'
 import TotalsPanel from './TotalsPanel'
 import { useBudgetState } from './useBudgetState'
 import { computeProjectTotals } from './budgetCalc'
-import type { BudgetElevationData } from './budgetCalc'
+import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 import type { ProjectBudget } from '@/types'
 import { ArcSpinner } from '@/components/ui/Spinner'
 
@@ -29,6 +29,12 @@ interface Props {
    * read-only and skips the Supabase load. Omit on the consultant side.
    */
   initialBudget?: ProjectBudget | null
+  /**
+   * Editing the money. Supplied by the consultant's studio and left out of the
+   * client portal, which makes every line read-only there.
+   */
+  onArtworkChange?: (artworkId: string, patch: BudgetArtworkPatch) => void
+  onOptionNoteChange?: (elevationId: string, optionKey: string, note: string, shownToClient: boolean) => void
 }
 
 const VAT_STORAGE_KEY = (pid: string) => `elevation_budget_vat_mode_${pid}`
@@ -58,6 +64,8 @@ export default function BudgetScreen({
   clientBudget,
   onClientBudgetChange,
   initialBudget,
+  onArtworkChange,
+  onOptionNoteChange,
 }: Props) {
   // VAT toggle — persisted per project in localStorage
   const [vatMode, setVatMode] = useState(false)
@@ -140,6 +148,8 @@ export default function BudgetScreen({
                     elevation={elev}
                     vatMode={vatMode}
                     isConsultant={effectiveIsConsultant}
+                    onArtworkChange={effectiveIsConsultant ? onArtworkChange : undefined}
+                    onNoteChange={effectiveIsConsultant ? onOptionNoteChange : undefined}
                   />
                 ))
               )}

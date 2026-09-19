@@ -17,7 +17,6 @@ interface ClientArtwork {
   visible: boolean
   price: number
   artist: string
-  framingStatus: string
   frameType?: string | null
   frameWidthMm?: number | null
   brightness?: number | null

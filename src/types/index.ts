@@ -1,7 +1,6 @@
 export type ProjectStatus = 'draft' | 'sent' | 'approved'
 /** Stored per-elevation key (A–Z). Identity only — the letter shown to people is derived from position, see src/lib/options.ts. */
 export type OptionKey = string
-export type FramingStatus = 'framed' | 'requires_framing'
 
 /**
  * Where a discount stands with the gallery.
@@ -57,7 +56,6 @@ export interface Artwork {
   visible: boolean
   price: number
   artist: string
-  framingStatus: FramingStatus
   /** Free text against the line: gallery, availability, advice, caveats. */
   note: string
   /** Unticked keeps the note in the consultant's view only. */

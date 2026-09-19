@@ -10,8 +10,6 @@ export interface ArtMeta {
   hCm: number
   price: number
   artist: string
-  framingStatus: 'framed' | 'requires_framing'
-  framingCost: number | null
 }
 
 // Internal row type uses strings for numeric inputs to allow free editing
@@ -21,8 +19,6 @@ interface RowMeta {
   hStr: string
   price: number
   artist: string
-  framingStatus: 'framed' | 'requires_framing'
-  framingCostStr: string
 }
 
 interface Props {
@@ -75,8 +71,6 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
   const [hCm, setHCm] = useState('')
   const [price, setPrice] = useState('')
   const [artist, setArtist] = useState('')
-  const [framingStatus, setFramingStatus] = useState<'framed' | 'requires_framing'>('framed')
-  const [framingCost, setFramingCost] = useState('')
   // Multi-file per-row metas
   const [rowMetas, setRowMetas] = useState<RowMeta[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -128,8 +122,6 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
       hStr: String(DEFAULT_H),
       price: 0,
       artist: '',
-      framingStatus: 'framed',
-      framingCostStr: '',
     })))
     const readers = selected.map(f => new Promise<string>((resolve, reject) => {
       const r = new FileReader()
@@ -163,8 +155,6 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
           hCm: parseFloat(hCm) || DEFAULT_H,
           price: parseFloat(price) || 0,
           artist: artist.trim(),
-          framingStatus,
-          framingCost: framingStatus === 'requires_framing' ? (parseFloat(framingCost) || null) : null,
         }]
       : rowMetas.map(m => ({
           name: m.name,
@@ -172,8 +162,6 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
           hCm: parseFloat(m.hStr) || DEFAULT_H,
           price: m.price,
           artist: m.artist.trim(),
-          framingStatus: m.framingStatus,
-          framingCost: m.framingStatus === 'requires_framing' ? (parseFloat(m.framingCostStr) || null) : null,
         }))
 
     setSubmitting(true)
@@ -219,7 +207,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
           )}
         </div>
 
-        {/* Single file: original layout + artist & framing fields */}
+        {/* Single file: original layout plus the artist field */}
         {!isMulti && (
           <>
             {previews.length > 0 && (
@@ -258,31 +246,6 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
               </label>
               <input type="number" className="field-input" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 4500" min={0} step={50} />
             </div>
-            <div className="field">
-              <label className="field-label">Framing</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button
-                  type="button"
-                  className={`btn btn-sm${framingStatus === 'framed' ? ' btn-primary' : ''}`}
-                  onClick={() => setFramingStatus('framed')}
-                >
-                  Framed
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-sm${framingStatus === 'requires_framing' ? ' btn-primary' : ''}`}
-                  onClick={() => setFramingStatus('requires_framing')}
-                >
-                  Requires framing
-                </button>
-              </div>
-            </div>
-            {framingStatus === 'requires_framing' && (
-              <div className="field">
-                <label className="field-label">Framing Cost (£)</label>
-                <input type="number" className="field-input" value={framingCost} onChange={e => setFramingCost(e.target.value)} placeholder="e.g. 350" min={0} step={50} />
-              </div>
-            )}
           </>
         )}
 
@@ -333,40 +296,6 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
                     </div>
                   </div>
                   <DetailNote filePx={naturalWidths[i]} wCm={parseFloat(meta.wStr) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />
-                  {/* Framing */}
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className={`btn btn-sm${meta.framingStatus === 'framed' ? ' btn-primary' : ''}`}
-                      style={{ fontSize: 11, padding: '2px 8px' }}
-                      onClick={() => updateRow(i, { framingStatus: 'framed' })}
-                    >
-                      Framed
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm${meta.framingStatus === 'requires_framing' ? ' btn-primary' : ''}`}
-                      style={{ fontSize: 11, padding: '2px 8px' }}
-                      onClick={() => updateRow(i, { framingStatus: 'requires_framing' })}
-                    >
-                      Requires framing
-                    </button>
-                    {meta.framingStatus === 'requires_framing' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: 'var(--mid)' }}>Framing £</span>
-                        <input
-                          type="number"
-                          className="field-input"
-                          value={meta.framingCostStr}
-                          onChange={e => updateRow(i, { framingCostStr: e.target.value })}
-                          placeholder="0"
-                          min={0}
-                          step={50}
-                          style={{ fontSize: 12, width: 80 }}
-                        />
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
             ))}

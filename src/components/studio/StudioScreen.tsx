@@ -18,6 +18,8 @@ import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
+import { toArtworkColumns } from '@/lib/lineItems'
+import type { BudgetArtworkPatch } from '@/components/budget/budgetCalc'
 
 interface DbElevation {
   id: string
@@ -171,19 +173,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         }
       }))
     },
-    onConsultantNoteSaved: (note, shownToClient) => {
-      setElevations(prev => prev.map(e => {
-        if (e.id !== activeElevId) return e
-        return {
-          ...e,
-          elevation_options: e.elevation_options.map(o =>
-            o.option === activeOption
-              ? { ...o, consultantNote: note, consultantNoteShownToClient: shownToClient }
-              : o,
-          ),
-        }
-      }))
-    },
     onForegroundSaved: (masks) => {
       // Mirror saved masks into local state for the current option and any sibling options sharing the same image.
       // useStudio only calls this when the masks actually changed, so the bulk sibling update below is no longer
@@ -329,7 +318,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                 xF: cur.xF, yF: cur.yF,
                 name: cur.name,
                 wCm: cur.wCm, hCm: cur.hCm,
-                price: cur.price, artist: cur.artist, framingStatus: cur.framingStatus,
+                price: cur.price, artist: cur.artist,
                 frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
                 brightness: cur.brightness,
                 fade: cur.fade,
@@ -348,6 +337,129 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       }
     }))
   }, [studio.state.artworks, studio.state.masks, activeElevId, activeOption])
+
+  // ─── EDITING THE MONEY FROM THE BUDGET ────────────────────────────
+  // The budget owns price, VAT, discounts, sub items and notes. Writes go
+  // straight to the row by id, because the budget spans every elevation while
+  // the studio hook only knows the option currently open.
+  //
+  // Debounced: the note fields fire on every keystroke, and one request per
+  // character would be both wasteful and out of order.
+
+  const WRITE_DELAY_MS = 600
+  const artworkPending = useRef(new Map<string, BudgetArtworkPatch>())
+  const artworkTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const notePending = useRef(new Map<string, { note: string; shownToClient: boolean }>())
+  const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  const flushArtworkWrite = useCallback(async (artworkId: string) => {
+    const patch = artworkPending.current.get(artworkId)
+    artworkPending.current.delete(artworkId)
+    artworkTimers.current.delete(artworkId)
+    if (!patch) return
+
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('artworks')
+      .update(toArtworkColumns(patch))
+      .eq('id', artworkId)
+      .select('id')
+
+    // `select` matters: without it an update that matches nothing, or that
+    // row-level security filters out, comes back with no error at all.
+    if (error) onStatus('Not saved: ' + error.message)
+    else if (!data || data.length === 0) onStatus('Not saved: this artwork could not be found')
+  }, [onStatus])
+
+  const handleArtworkChange = useCallback((artworkId: string, patch: BudgetArtworkPatch) => {
+    // Optimistic: the budget reads `elevations`, so it has to move now.
+    setElevations(prev => prev.map(e => ({
+      ...e,
+      elevation_options: e.elevation_options.map(o => ({
+        ...o,
+        artworks: o.artworks.map(a => (a.id === artworkId ? { ...a, ...patch } : a)),
+      })),
+    })))
+
+    // If this work is in the option the studio has open, its copy has to agree,
+    // or the next autosave from a drag would write the old figures back.
+    if (studio.state.artworks.some(a => a.id === artworkId)) {
+      studio.patchArtworkLocal(artworkId, patch)
+    }
+
+    const merged = { ...artworkPending.current.get(artworkId), ...patch }
+    artworkPending.current.set(artworkId, merged)
+    const existing = artworkTimers.current.get(artworkId)
+    if (existing) clearTimeout(existing)
+    artworkTimers.current.set(
+      artworkId,
+      setTimeout(() => { void flushArtworkWrite(artworkId) }, WRITE_DELAY_MS),
+    )
+  }, [studio, flushArtworkWrite])
+
+  const flushNoteWrite = useCallback(async (optionRowId: string) => {
+    const pending = notePending.current.get(optionRowId)
+    notePending.current.delete(optionRowId)
+    noteTimers.current.delete(optionRowId)
+    if (!pending) return
+
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('elevation_options')
+      .update({
+        consultant_note: pending.note,
+        consultant_note_shown_to_client: pending.shownToClient,
+      })
+      .eq('id', optionRowId)
+      .select('id')
+
+    if (error) onStatus('Note not saved: ' + error.message)
+    else if (!data || data.length === 0) onStatus('Note not saved: this option could not be found')
+  }, [onStatus])
+
+  const handleOptionNoteChange = useCallback((
+    elevationId: string, optionKey: string, note: string, shownToClient: boolean,
+  ) => {
+    let optionRowId: string | null = null
+    setElevations(prev => prev.map(e => {
+      if (e.id !== elevationId) return e
+      return {
+        ...e,
+        elevation_options: e.elevation_options.map(o => {
+          if (o.option !== optionKey) return o
+          optionRowId = o.id
+          return { ...o, consultantNote: note, consultantNoteShownToClient: shownToClient }
+        }),
+      }
+    }))
+
+    // The id is read out of the state update above, so resolve it separately
+    // for the write rather than relying on when that callback runs.
+    const rowId = elevations
+      .find(e => e.id === elevationId)?.elevation_options
+      .find(o => o.option === optionKey)?.id ?? optionRowId
+    if (!rowId) return
+
+    notePending.current.set(rowId, { note, shownToClient })
+    const existing = noteTimers.current.get(rowId)
+    if (existing) clearTimeout(existing)
+    noteTimers.current.set(
+      rowId,
+      setTimeout(() => { void flushNoteWrite(rowId) }, WRITE_DELAY_MS),
+    )
+  }, [elevations, flushNoteWrite])
+
+  // Leaving the page with a write still queued would lose it.
+  useEffect(() => {
+    const artTimers = artworkTimers.current
+    const nTimers = noteTimers.current
+    return () => {
+      artTimers.forEach(t => clearTimeout(t))
+      nTimers.forEach(t => clearTimeout(t))
+      artworkPending.current.forEach((_, id) => { void flushArtworkWrite(id) })
+      notePending.current.forEach((_, id) => { void flushNoteWrite(id) })
+    }
+  }, [flushArtworkWrite, flushNoteWrite])
 
   async function handleSwitch(elevId: string, opt: string) {
     // Before switching: bring the studio's live edits into `elevations`.
@@ -908,8 +1020,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             projectId={project.id}
             onStatus={onStatus}
             clientNotes={activeOptData?.clientNotes ?? ''}
-            consultantNote={activeOptData?.consultantNote ?? ''}
-            consultantNoteShownToClient={activeOptData?.consultantNoteShownToClient ?? true}
             activityLogs={activityLogs}
             onRequestDeleteArtworks={requestDeleteArtworks}
             approvalStatus={{
@@ -955,7 +1065,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                 wCm: a.wCm,
                 hCm: a.hCm,
                 price: a.price,
-                framingStatus: a.framingStatus,
                 visible: a.visible,
                 note: a.note ?? '',
                 noteShownToClient: a.noteShownToClient ?? true,
@@ -971,6 +1080,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onPreviewToggle={() => setIsPreviewingClientView(v => !v)}
           clientBudget={budget}
           onClientBudgetChange={updateBudget}
+          onArtworkChange={handleArtworkChange}
+          onOptionNoteChange={handleOptionNoteChange}
         />
       )}
 

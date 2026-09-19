@@ -4,12 +4,14 @@ import ArtworkLine from './ArtworkLine'
 import OptionBlock from './OptionBlock'
 import OptionNote from './OptionNote'
 import { fmtGbp, optionTotal } from './budgetCalc'
-import type { BudgetElevationData } from './budgetCalc'
+import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 
 interface Props {
   elevation: BudgetElevationData
   vatMode: boolean
   isConsultant: boolean
+  onArtworkChange?: (artworkId: string, patch: BudgetArtworkPatch) => void
+  onNoteChange?: (elevationId: string, optionKey: string, note: string, shownToClient: boolean) => void
 }
 
 /**
@@ -19,7 +21,7 @@ interface Props {
  */
 const SIDE_BY_SIDE_MAX = 3
 
-export default function ElevationSection({ elevation, vatMode, isConsultant }: Props) {
+export default function ElevationSection({ elevation, vatMode, isConsultant, onArtworkChange, onNoteChange }: Props) {
   const picked = elevation.clientPickedOption
 
   if (picked) {
@@ -38,6 +40,7 @@ export default function ElevationSection({ elevation, vatMode, isConsultant }: P
             note={opt.consultantNote}
             shownToClient={opt.consultantNoteShownToClient}
             isConsultant={isConsultant}
+            onChange={onNoteChange && ((n, shown) => onNoteChange(elevation.id, opt.key, n, shown))}
           />
         )}
         <div className="budget-picked-artworks">
@@ -45,7 +48,13 @@ export default function ElevationSection({ elevation, vatMode, isConsultant }: P
             <p className="budget-empty-note">No artworks added</p>
           ) : (
             opt.artworks.map(a => (
-              <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} isConsultant={isConsultant} />
+              <ArtworkLine
+                key={a.id}
+                artwork={a}
+                vatMode={vatMode}
+                isConsultant={isConsultant}
+                onChange={onArtworkChange && (patch => onArtworkChange(a.id, patch))}
+              />
             ))
           )}
         </div>
@@ -65,13 +74,28 @@ export default function ElevationSection({ elevation, vatMode, isConsultant }: P
       ) : elevation.options.length <= SIDE_BY_SIDE_MAX ? (
         <div className="budget-options-row">
           {elevation.options.map(opt => (
-            <OptionBlock key={opt.key} option={opt} vatMode={vatMode} isConsultant={isConsultant} />
+            <OptionBlock
+              key={opt.key}
+              option={opt}
+              vatMode={vatMode}
+              isConsultant={isConsultant}
+              onArtworkChange={onArtworkChange}
+              onNoteChange={onNoteChange && ((k, n, shown) => onNoteChange(elevation.id, k, n, shown))}
+            />
           ))}
         </div>
       ) : (
         <div className="budget-options-stack">
           {elevation.options.map(opt => (
-            <OptionBlock key={opt.key} option={opt} vatMode={vatMode} isConsultant={isConsultant} layout="card" />
+            <OptionBlock
+              key={opt.key}
+              option={opt}
+              vatMode={vatMode}
+              isConsultant={isConsultant}
+              onArtworkChange={onArtworkChange}
+              onNoteChange={onNoteChange && ((k, n, shown) => onNoteChange(elevation.id, k, n, shown))}
+              layout="card"
+            />
           ))}
         </div>
       )}

@@ -155,11 +155,9 @@ interface UseStudioOptions {
   onArtworkDeleted?: (id: string) => void
   /** Called only when foreground masks actually changed and were persisted, so sibling options sharing the wall photo can be synced */
   onForegroundSaved?: (masks: ForegroundMasks) => void
-  /** Called after the option's consultant note is written, so the screen's own copy can catch up */
-  onConsultantNoteSaved?: (note: string, shownToClient: boolean) => void
 }
 
-export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved, onConsultantNoteSaved }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -299,7 +297,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       visible: art.visible,
       price: art.price,
       artist: art.artist,
-      framing_status: art.framingStatus,
       note: art.note,
       note_shown_to_client: art.noteShownToClient,
       vat_applies: art.vatApplies,
@@ -1648,7 +1645,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // ─── ADD ARTWORKS ─────────────────────────────────────────────────
   async function addArtworks(files: File[], metas: Array<{
     name: string; wCm: number; hCm: number; price: number
-    artist: string; framingStatus: 'framed' | 'requires_framing'; framingCost: number | null
+    artist: string
   }>) {
     const supabase = createClient()
     let completed = 0
@@ -1678,19 +1675,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         visible: true,
         price: meta.price,
         artist: meta.artist,
-        framing_status: meta.framingStatus,
-        // A framing cost typed at upload starts life as a sub line item.
-        sub_line_items: meta.framingStatus === 'requires_framing' && meta.framingCost
-          ? [{
-              id: crypto.randomUUID(),
-              label: 'Framing',
-              kind: 'framing',
-              mode: 'fixed',
-              amount: meta.framingCost,
-              percent: 0,
-              vatApplies: true,
-            }]
-          : [],
         display_order: i,
       }).select().single()
 
@@ -1716,23 +1700,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         visible: true,
         price: meta.price,
         artist: meta.artist,
-        framingStatus: meta.framingStatus,
         note: '',
         noteShownToClient: true,
         vatApplies: true,
         discountStatus: 'none',
         discountPercent: null,
-        subLineItems: meta.framingStatus === 'requires_framing' && meta.framingCost
-          ? [{
-              id: crypto.randomUUID(),
-              label: 'Framing',
-              kind: 'framing' as const,
-              mode: 'fixed' as const,
-              amount: meta.framingCost,
-              percent: 0,
-              vatApplies: true,
-            }]
-          : [],
+        subLineItems: [],
         frameType: null,
         frameWidthMm: null,
         brightness: 1,
@@ -1921,65 +1894,20 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
-  function updateArtworkFraming(artId: string, framingStatus: 'framed' | 'requires_framing', framingCost: number | null) {
-    // Framing is a sub line item like any other now. A framed piece carries
-    // none, so switching back removes it rather than leaving a stale figure
-    // in the budget.
+  /**
+   * Update one artwork in studio state without saving it.
+   *
+   * The budget writes these fields to the database itself, by artwork id,
+   * across every elevation. If the studio's copy were left behind, the next
+   * autosave triggered by dragging that artwork would write the stale figures
+   * straight back over them.
+   */
+  function patchArtworkLocal(artId: string, patch: Partial<Artwork>) {
     setState(s => {
-      const newArts = s.artworks.map(a => {
-        if (a.id !== artId) return a
-        const others = a.subLineItems.filter(i => i.kind !== 'framing')
-        if (framingStatus !== 'requires_framing') {
-          return { ...a, framingStatus, subLineItems: others }
-        }
-        const existing = a.subLineItems.find(i => i.kind === 'framing')
-        const framing: SubLineItem = {
-          id: existing?.id ?? crypto.randomUUID(),
-          label: existing?.label || 'Framing',
-          kind: 'framing',
-          mode: 'fixed',
-          amount: framingCost ?? 0,
-          percent: 0,
-          vatApplies: existing?.vatApplies ?? true,
-        }
-        return { ...a, framingStatus, subLineItems: [framing, ...others] }
-      })
-      debounceSave({ ...s, artworks: newArts })
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
+      rememberSaved(s.masks, newArts)
       return { ...s, artworks: newArts }
     })
-  }
-
-  /**
-   * The consultant's note on the current option, saved straight away.
-   *
-   * Written on blur rather than on every keystroke: it is a paragraph, not a
-   * slider, and the artwork debounce does not cover option-level columns.
-   */
-  async function saveConsultantNote(note: string, shownToClient: boolean) {
-    if (!optionId) return
-    const supabase = createClient()
-    // `select` matters: without it an update that matches no row, or that
-    // row-level security filters out, returns no error and no rows, and the
-    // save would report success having written nothing.
-    const { data, error } = await supabase
-      .from('elevation_options')
-      .update({ consultant_note: note, consultant_note_shown_to_client: shownToClient })
-      .eq('id', optionId)
-      .select('id')
-
-    if (error) {
-      onStatus('Note not saved: ' + error.message)
-      return
-    }
-    if (!data || data.length === 0) {
-      onStatus('Note not saved: this option could not be found')
-      return
-    }
-    onStatus('Note saved')
-    // The screen keeps its own copy of the option, and it feeds both this
-    // panel and the budget. Without this the note is in the database but
-    // gone from the box as soon as the panel remounts.
-    onConsultantNoteSaved?.(note, shownToClient)
   }
 
   /** Patch the note, VAT, discount or sub items on one artwork. */
@@ -2396,11 +2324,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     toggleVisibility,
     updateArtworkDims,
     updateArtworkPrice,
+    patchArtworkLocal,
     updateArtworkName,
     updateArtworkArtist,
-    updateArtworkFraming,
     updateArtworkLineItems,
-    saveConsultantNote,
     updateArtworkFrame,
     updateArtworkBrightness,
     updateAllArtworksBrightness,

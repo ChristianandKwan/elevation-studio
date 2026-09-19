@@ -1,13 +1,17 @@
 'use client'
 
+import { useState } from 'react'
+import ArtworkLineEditor from './ArtworkLineEditor'
 import { fmtGbp, netPrice, tbcNetPrice, subItemAmount, applyVat } from './budgetCalc'
-import type { BudgetArtwork } from './budgetCalc'
+import type { BudgetArtwork, BudgetArtworkPatch } from './budgetCalc'
 
 interface Props {
   artwork: BudgetArtwork
   vatMode: boolean
   /** A client never sees a note the consultant kept back. */
   isConsultant: boolean
+  /** Omitted in the client portal and in the consultant's client preview. */
+  onChange?: (patch: BudgetArtworkPatch) => void
 }
 
 function NoteIcon({ hidden }: { hidden: boolean }) {
@@ -28,7 +32,22 @@ function NoteIcon({ hidden }: { hidden: boolean }) {
   )
 }
 
-export default function ArtworkLine({ artwork, vatMode, isConsultant }: Props) {
+export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }: Props) {
+  const [editing, setEditing] = useState(false)
+
+  if (editing && onChange) {
+    return (
+      <div className="budget-artwork-line">
+        <ArtworkLineEditor
+          artwork={artwork}
+          vatMode={vatMode}
+          onChange={onChange}
+          onDone={() => setEditing(false)}
+        />
+      </div>
+    )
+  }
+
   const net = netPrice(artwork)
   const discounted = artwork.discountStatus === 'confirmed' && net !== artwork.price
   const tbcNet = tbcNetPrice(artwork)
@@ -58,6 +77,15 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant }: Props) {
           {discounted && <span className="budget-price-was">{fmtGbp(displayWas)}</span>}
           {fmtGbp(displayPrice)}
         </span>
+        {onChange && (
+          <button
+            type="button"
+            className="budget-line-edit"
+            onClick={() => setEditing(true)}
+          >
+            Edit
+          </button>
+        )}
       </div>
 
       {subs.map(({ item, amount }) => (

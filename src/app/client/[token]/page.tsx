@@ -58,7 +58,7 @@ export default async function ClientPortalPage({ params }: Props) {
         id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, framing_status, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity,
+          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity,
           note, note_shown_to_client, vat_applies, discount_status, discount_percent, sub_line_items
         )
       )
@@ -75,7 +75,7 @@ export default async function ClientPortalPage({ params }: Props) {
         elevation_options(
           id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
           artworks(
-            id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, framing_status, display_order, frame_type, frame_width_mm,
+            id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, display_order, frame_type, frame_width_mm,
             note, note_shown_to_client, vat_applies, discount_status, discount_percent, sub_line_items
           )
         )
@@ -113,7 +113,7 @@ export default async function ClientPortalPage({ params }: Props) {
       artworks: Array<{
         id: string; name: string; image_path: string;
         w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
-        visible: boolean; price: number; artist: string; framing_status: string; display_order: number;
+        visible: boolean; price: number; artist: string; display_order: number;
       }>;
     }) => {
       const imageUrl = opt.image_path ? (elevMap.get(opt.image_path) ?? null) : null
@@ -128,7 +128,6 @@ export default async function ClientPortalPage({ params }: Props) {
           wCm: art.w_cm,
           hCm: art.h_cm,
           artist: (art as any).artist ?? '',
-          framingStatus: (art as any).framing_status ?? 'framed',
           frameType: (art as any).frame_type ?? null,
           frameWidthMm: (art as any).frame_width_mm ?? null,
           brightness: (art as any).brightness ?? 1,

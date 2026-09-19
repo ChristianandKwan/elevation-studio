@@ -21,7 +21,6 @@ interface ClientArtwork {
   visible: boolean
   price: number
   artist: string
-  framingStatus: string
   note: string
   noteShownToClient: boolean
   vatApplies: boolean
@@ -301,7 +300,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         wCm: a.wCm,
         hCm: a.hCm,
         price: a.price,
-        framingStatus: (a.framingStatus === 'requires_framing' ? 'requires_framing' : 'framed') as 'framed' | 'requires_framing',
         visible: a.visible,
         note: a.note ?? '',
         noteShownToClient: a.noteShownToClient ?? true,

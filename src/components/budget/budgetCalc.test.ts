@@ -47,7 +47,6 @@ function art(partial: Partial<BudgetArtwork> = {}): BudgetArtwork {
     wCm: 100,
     hCm: 100,
     price: 0,
-    framingStatus: 'framed',
     visible: true,
     note: '',
     noteShownToClient: true,
