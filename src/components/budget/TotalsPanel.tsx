@@ -117,6 +117,15 @@ export default function TotalsPanel({
 
   const grandIsRange = isRange || installIsRange || (dispFeeMin !== dispFeeMax)
 
+  /**
+   * Two figures on a line means two whole options the client could pick, not
+   * the ends of a span, so they get a column each rather than a dash between
+   * them. "From" and "Up to" rather than best and worst: the dearer column is
+   * a choice the client may well want, and nothing on a page they read should
+   * call their own taste the worst case.
+   */
+  const twoColumn = grandIsRange
+
   // Grand totals derived from display line items so the column always adds up
   const totalInstallMin = showInstallLine ? dispInstallMin : 0
   const totalInstallMax = showInstallLine ? dispInstallMax : 0
@@ -140,26 +149,23 @@ export default function TotalsPanel({
 
   function renderVariance() {
     if (budgetDisplay == null) return null
-    if (grandIsRange) {
-      const bestDiff = budgetDisplay - totalMin   // positive = under budget
-      const worstDiff = budgetDisplay - totalMax
-      const bestLabel = bestDiff >= 0
-        ? `${fmtGbp(bestDiff)} under budget`
-        : `${fmtGbp(-bestDiff)} over budget`
-      const worstLabel = worstDiff >= 0
-        ? `${fmtGbp(worstDiff)} under budget`
-        : `${fmtGbp(-worstDiff)} over budget`
-      const bestColor = bestDiff >= 0 ? 'var(--green)' : 'var(--red)'
-      const worstColor = worstDiff >= 0 ? 'var(--green)' : 'var(--red)'
+    if (twoColumn) {
+      // One row under the same two headings rather than two labelled lines.
+      // "Up to: £13,125 over budget" would have read as its own riddle.
+      const cell = (diff: number) => {  // positive = under budget
+        if (diff === 0) return { label: 'On budget', color: 'var(--mid)' }
+        return diff > 0
+          ? { label: `${fmtGbp(diff)} under`, color: 'var(--green)' }
+          : { label: `${fmtGbp(-diff)} over`, color: 'var(--red)' }
+      }
+      const low = cell(budgetDisplay - totalMin)
+      const high = cell(budgetDisplay - totalMax)
       return (
-        <>
-          <div className="budget-variance-row" style={{ color: bestColor }}>
-            Best case: {bestLabel}
-          </div>
-          <div className="budget-variance-row" style={{ color: worstColor }}>
-            Worst case: {worstLabel}
-          </div>
-        </>
+        <div className="budget-totals-row budget-totals-row--split budget-variance-split">
+          <span className="budget-totals-label">Against budget</span>
+          <span className="budget-variance-cell" style={{ color: low.color }}>{low.label}</span>
+          <span className="budget-variance-cell" style={{ color: high.color }}>{high.label}</span>
+        </div>
       )
     }
     const diff = budgetDisplay - totalMin
@@ -170,10 +176,6 @@ export default function TotalsPanel({
     const label = diff > 0 ? `${fmtGbp(diff)} under budget` : `${fmtGbp(-diff)} over budget`
     return <div className="budget-variance-row" style={{ color }}>{label}</div>
   }
-
-  // Two figures per line means two scenarios, not a range. See the comment on
-  // the header row below.
-  const twoColumn = grandIsRange
 
   function summaryRow(label: ReactNode, min: number, max: number) {
     return (
@@ -189,16 +191,13 @@ export default function TotalsPanel({
     <div className="budget-totals">
       <div className="budget-section-kicker">Summary</div>
 
-      {/* When the project is still a range, each figure below belongs to one
-          of two whole options the client could pick, not to a span. Printing
-          them as "min – max" read backwards wherever the cheaper option
-          carried the larger cost, which framing often does. Two labelled
-          columns say what they are, and each column adds up on its own. */}
+      {/* Each column adds up on its own, so the total still equals the
+          lines above it. See `twoColumn` for why there are two. */}
       {twoColumn && (
         <div className="budget-totals-row budget-totals-row--split budget-totals-row--heads">
           <span className="budget-totals-label" />
-          <span className="budget-totals-head">Best case</span>
-          <span className="budget-totals-head">Worst case</span>
+          <span className="budget-totals-head">From</span>
+          <span className="budget-totals-head">Up to</span>
         </div>
       )}
 
