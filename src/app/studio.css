@@ -93,13 +93,6 @@
   border-radius: var(--radius-sm);
 }
 .studio-tab-add:hover { border-color: var(--accent); color: var(--accent); }
-.studio-tab-add-option {
-  width: 22px; height: 22px; padding: 0; font-size: 14px; cursor: pointer; line-height: 1;
-  border: 1px dashed var(--border); background: none; font-family: var(--font-karla, 'Karla'); color: var(--mid);
-  transition: all .15s; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-  margin-left: 2px; border-radius: var(--radius-xs);
-}
-.studio-tab-add-option:hover { border-color: var(--accent); color: var(--accent); }
 .studio-tab-group { display: flex; align-items: center; position: relative; }
 .studio-tab-del-opt {
   display: inline-flex; align-items: center; justify-content: center;
