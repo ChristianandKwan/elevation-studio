@@ -14,11 +14,11 @@ export const FRAME_LIP_SPREAD = 2 / 3
 
 /**
  * How far every shadow is pushed away from the light, as a multiple of its
- * blur. Below about 1 the blur still reaches past the artwork on the sun side;
- * 0.9 leaves the soft halo diffuse room light gives, without the heavy band
- * the old 0.55 left there.
+ * blur. Below about 1 the blur still reaches past the artwork on the sun side.
+ * 1.075 (chosen by eye, halfway between two mocked-up options) leaves a faint
+ * halo there, without the heavy band the old 0.55 left.
  */
-export const SHADOW_PUSH = 0.9
+export const SHADOW_PUSH = 1.075
 
 /**
  * Offset and blur of the lip shadow, in the same pixels as `blur` (display
