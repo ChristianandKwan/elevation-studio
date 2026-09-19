@@ -638,7 +638,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       </div>
 
       {/* Budget view — kept mounted so it updates reactively when picks change */}
-      <div style={{ display: portalView === 'budget' ? '' : 'none' }}>
+      <div className="client-budget-wrap" style={{ display: portalView === 'budget' ? '' : 'none' }}>
         <BudgetScreen
           projectId={project.id}
           projectName={project.name}
