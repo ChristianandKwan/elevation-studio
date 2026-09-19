@@ -18,6 +18,7 @@
 // components, route handlers, and server actions may import from here.
 import sharp from 'sharp'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
 
 const THUMB_W = 600 // max thumbnail width in pixels
 
@@ -54,6 +55,39 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
   } catch {
     return null
   }
+}
+
+/**
+ * The frame lip's shadow on an artwork `w` × `h` pixels, as a PNG to lay over
+ * it. Built as a solid ring around the artwork, shifted by the shadow offset
+ * and blurred; whatever of it spills inside the artwork's box is the shadow.
+ * `blur` is in thumbnail pixels.
+ */
+async function frameLipShade(
+  w: number, h: number, angle: number | null | undefined, blur: number, opacity: number
+): Promise<Buffer> {
+  const lip = frameLipShadow(angle, blur)
+  // lip.blur is twice the standard deviation; 0.55 matches the wall shadow's sigma above.
+  const sigma = Math.max(0.3, (lip.blur / 2) * 0.55)
+  const ox = Math.round(lip.x)
+  const oy = Math.round(lip.y)
+  const pad = Math.ceil(sigma * 3) + Math.abs(ox) + Math.abs(oy) + 1
+  const W = w + pad * 2
+  const H = h + pad * 2
+  const alpha = Math.round(opacity * 255)
+  const pixels = new Uint8Array(W * H * 4)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const inHole = x >= pad + ox && x < pad + ox + w && y >= pad + oy && y < pad + oy + h
+      if (!inHole) pixels[(y * W + x) * 4 + 3] = alpha
+    }
+  }
+  // Blurred on its own before the crop, so the crop can't be planned first.
+  const blurred = await sharp(Buffer.from(pixels.buffer), { raw: { width: W, height: H, channels: 4 } })
+    .blur(sigma)
+    .png()
+    .toBuffer()
+  return await sharp(blurred).extract({ left: pad, top: pad, width: w, height: h }).png().toBuffer()
 }
 
 /**
@@ -95,10 +129,19 @@ export async function buildThumbnailBuffer(
         const left = Math.round(art.xF * THUMB_W)
         const top  = Math.round(art.yF * thumbH)
 
-        // ── 1. Drop shadow ───────────────────────────────────────────
         const shadowBlur    = art.shadowBlur    ?? 0
         const shadowOpacity = art.shadowOpacity ?? 0
-        if (shadowBlur > 0 && shadowOpacity > 0) {
+        const hasShadow = shadowBlur > 0 && shadowOpacity > 0
+
+        const frameType = art.frameType
+        const frameWidthMm = art.frameWidthMm
+        const framePxThumb = frameType && frameWidthMm && scalePxPerCm
+          ? Math.max(1, Math.round((frameWidthMm / 10) * scalePxPerCm * scale))
+          : 0
+
+        // ── 1. Drop shadow ───────────────────────────────────────────
+        // Cast by the artwork and its frame together, as on the canvas.
+        if (hasShadow) {
           try {
             const { data: rawPixels, info } = await sharp(artBuf)
               .resize(artThumbW, artThumbH, { fit: 'fill' })
@@ -114,20 +157,52 @@ export async function buildThumbnailBuffer(
               pixels[i + 3] = Math.round(pixels[i + 3] * shadowOpacity)
             }
 
+            // The framed silhouette, then a transparent margin for the blur to
+            // spread into — without one the blur stops dead at the edge and
+            // the shadow shows as a hard grey line. Each step is materialised
+            // because sharp would otherwise plan the extends after the blur.
             const blurSigma = Math.max(0.3, shadowBlur * 0.55 * scale)
-            const shadowBuf = await sharp(Buffer.from(pixels.buffer), {
+            const margin = Math.ceil(blurSigma * 3)
+            const silhouette = await sharp(Buffer.from(pixels.buffer), {
               raw: { width: info.width, height: info.height, channels: 4 },
-            }).blur(blurSigma).png().toBuffer()
+            })
+              .extend({
+                top: framePxThumb, bottom: framePxThumb, left: framePxThumb, right: framePxThumb,
+                background: { r: 0, g: 0, b: 0, alpha: shadowOpacity },
+              })
+              .png()
+              .toBuffer()
+            const padded = await sharp(silhouette)
+              .extend({
+                top: margin, bottom: margin, left: margin, right: margin,
+                background: { r: 0, g: 0, b: 0, alpha: 0 },
+              })
+              .png()
+              .toBuffer()
+            const shadowBuf = await sharp(padded).blur(blurSigma).png().toBuffer()
 
             const rad  = ((art.shadowAngle ?? 225) * Math.PI) / 180
-            const dist = shadowBlur * 0.55 * scale
+            const dist = shadowBlur * SHADOW_PUSH * scale
             const oX   = Math.round(-Math.sin(rad) * dist)
             const oY   = Math.round(Math.cos(rad) * dist)
 
+            // sharp can't place an overlay past the image's top-left corner,
+            // so trim whatever of the shadow would fall off that edge.
+            const sLeft = left - framePxThumb - margin + oX
+            const sTop  = top  - framePxThumb - margin + oY
+            const meta = await sharp(shadowBuf).metadata()
+            const cutX = Math.max(0, -sLeft)
+            const cutY = Math.max(0, -sTop)
+            const visible = cutX || cutY
+              ? await sharp(shadowBuf)
+                  .extract({ left: cutX, top: cutY, width: meta.width! - cutX, height: meta.height! - cutY })
+                  .png()
+                  .toBuffer()
+              : shadowBuf
             compositeInputs.push({
-              input: shadowBuf,
-              left: Math.max(0, left + oX),
-              top:  Math.max(0, top  + oY),
+              input: visible,
+              left: sLeft + cutX,
+              top:  sTop  + cutY,
               blend: 'over',
             })
           } catch { /* skip shadow */ }
@@ -139,14 +214,20 @@ export async function buildThumbnailBuffer(
         const brightness = art.brightness ?? 1
         if (brightness !== 1) pipeline = pipeline.modulate({ brightness })
 
+        // The frame's lip shades the artwork itself, not just the wall.
+        if (framePxThumb > 0 && hasShadow) {
+          try {
+            const shade = await frameLipShade(artThumbW, artThumbH, art.shadowAngle, shadowBlur * scale, shadowOpacity)
+            pipeline = sharp(await pipeline.png().toBuffer()).composite([{ input: shade, blend: 'over' }])
+          } catch { /* skip lip shadow */ }
+        }
+
         let frameOffset = 0
-        const frameType = art.frameType
-        const frameWidthMm = art.frameWidthMm
-        if (frameType && frameWidthMm && scalePxPerCm) {
-          const framePxOrig  = (frameWidthMm / 10) * scalePxPerCm
-          const framePxThumb = Math.max(1, Math.round(framePxOrig * scale))
-          const fc = FRAME_COLORS[frameType] ?? FRAME_COLORS.black
-          pipeline = pipeline.extend({
+        if (framePxThumb > 0) {
+          const fc = FRAME_COLORS[frameType!] ?? FRAME_COLORS.black
+          // Materialised first so the extend can't be planned ahead of the
+          // lip shadow's composite.
+          pipeline = sharp(await pipeline.png().toBuffer()).extend({
             top:    framePxThumb,
             bottom: framePxThumb,
             left:   framePxThumb,
