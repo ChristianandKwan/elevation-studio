@@ -36,7 +36,7 @@ export default async function ProjectPage({ params }: Props) {
   const { data: elevations } = await supabase
     .from('elevations')
     .select(`
-      id, name, display_order, client_picked_option,
+      id, name, display_order, client_picked_option, visible_to_client,
       elevation_options(
         id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
@@ -109,7 +109,7 @@ export default async function ProjectPage({ params }: Props) {
       return { ...opt, imageUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
     })
     // Display order is decided in exactly one place — see src/lib/options.ts.
-    return { ...elev, elevation_options: sortOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null }
+    return { ...elev, elevation_options: sortOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null, visibleToClient: (elev as any).visible_to_client ?? true }
   })
 
   // Most recent client token, expired or not. The expiry filter used to live in

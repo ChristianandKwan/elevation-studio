@@ -48,7 +48,10 @@ export default async function ClientPortalPage({ params }: Props) {
     .eq('id', project.consultant_id)
     .single()
 
-  // Fetch elevations with options and artworks
+  // Fetch elevations with options and artworks. Elevations the consultant has
+  // hidden are filtered out here, not in the browser, so nothing about them
+  // (images, prices, names) ever reaches the client. The Budget tab is built
+  // from this same list, so hidden elevations drop out of it too.
   // Try full query (requires migrations 009 + 010). On failure, fall back to base query.
   let { data: elevations, error: elevError } = await supabase
     .from('elevations')
@@ -64,6 +67,7 @@ export default async function ClientPortalPage({ params }: Props) {
       )
     `)
     .eq('project_id', projectId)
+    .eq('visible_to_client', true)
     .order('display_order', { ascending: true })
 
   // If query failed (e.g. brightness / skew / shadow columns not yet migrated), fall back without them
@@ -81,6 +85,7 @@ export default async function ClientPortalPage({ params }: Props) {
         )
       `)
       .eq('project_id', projectId)
+      .eq('visible_to_client', true)
       .order('display_order', { ascending: true })
     elevations = fallback as typeof elevations
   }

@@ -94,8 +94,13 @@ export default function BudgetScreen({
     removeCustomLineItem,
   } = useBudgetState(projectId, initialBudget)
 
+  // Totals are always what the client would see: hidden elevations are listed
+  // for the consultant below but never counted, so the consultant's figure and
+  // the client's figure are the same number.
+  const clientElevations = elevations.filter(e => !e.hiddenFromClient)
+
   // Compute artwork counts for installation tier
-  const pt = computeProjectTotals(elevations, vatMode)
+  const pt = computeProjectTotals(clientElevations, vatMode)
 
   function handleExportPdf() {
     const prev = document.title
@@ -105,6 +110,8 @@ export default function BudgetScreen({
   }
 
   const effectiveIsConsultant = isConsultant && !isPreviewingClientView
+  // "Client view" preview drops hidden elevations entirely, as the portal does.
+  const listedElevations = effectiveIsConsultant ? elevations : clientElevations
 
   return (
     <div className="budget-view">
@@ -139,10 +146,10 @@ export default function BudgetScreen({
             {/* ── Elevations ──────────────────────────────────────────── */}
             <section className="budget-section">
               <div className="budget-section-kicker">Elevations</div>
-              {elevations.length === 0 ? (
+              {listedElevations.length === 0 ? (
                 <p className="budget-empty-note">No elevations added to this project yet.</p>
               ) : (
-                elevations.map(elev => (
+                listedElevations.map(elev => (
                   <ElevationSection
                     key={elev.id}
                     elevation={elev}
@@ -196,7 +203,7 @@ export default function BudgetScreen({
 
             {/* ── Totals ───────────────────────────────────────────────── */}
             <TotalsPanel
-              elevations={elevations}
+              elevations={clientElevations}
               installation={budget.installation}
               consultantFee={budget.consultantFee}
               customLineItems={budget.customLineItems}

@@ -121,6 +121,15 @@
   flex-shrink: 0;
 }
 .studio-tab-rename-btn:hover { color: var(--accent); }
+/* Hidden from client: names fade and italicise; the "Hidden" marker stays on
+   screen rather than appearing only on hover. */
+.studio-tab-group--hidden .studio-tab { font-style: italic; opacity: .55; }
+.studio-tab-group--hidden .studio-tab.active { opacity: .8; }
+.studio-tab-visibility { gap: 4px; }
+.studio-tab-visibility.is-hidden {
+  opacity: 1; font-size: 10px; font-family: var(--font-karla, 'Karla');
+  letter-spacing: .04em; text-transform: uppercase; color: var(--mid);
+}
 .tag { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 9px; font-weight: 700; }
 .tag-option-a { background: var(--charcoal); color: white; }
 .tag-option-b { background: var(--accent); color: white; }

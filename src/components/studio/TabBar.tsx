@@ -6,6 +6,8 @@ import { optionTagClass, OPTION_NAME_MAX } from '@/lib/options'
 interface ElevationTab {
   id: string
   name: string
+  /** False while the consultant is still working on it: the client can't see it or its prices. */
+  visibleToClient: boolean
   /**
    * `key` is the stored identity. `letter` is the position letter, `name` the
    * consultant's optional name, `label` / `title` whichever of those applies
@@ -22,6 +24,7 @@ interface Props {
   onAddElevation: (name: string) => void
   onRenameElevation: (elevId: string, newName: string) => void
   onDeleteElevation: (elevId: string) => void
+  onSetVisibleToClient: (elevId: string, visible: boolean) => void
   onAddOption: (elevId: string) => void
   onDeleteOption: (elevId: string, optKey: string) => void
   /** New left-to-right order of option keys for one elevation. Saved in one batched write. */
@@ -32,7 +35,7 @@ interface Props {
 
 export default function TabBar({
   elevations, activeElevId, activeOption, onSwitch,
-  onAddElevation, onRenameElevation, onDeleteElevation,
+  onAddElevation, onRenameElevation, onDeleteElevation, onSetVisibleToClient,
   onAddOption, onDeleteOption, onReorderOptions, onRenameOption,
 }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
@@ -162,7 +165,7 @@ export default function TabBar({
         {elevations.map((elev, i) => {
           const multiOption = elev.options.length > 1
           return (
-            <div key={elev.id} className="studio-tab-group">
+            <div key={elev.id} className={`studio-tab-group${elev.visibleToClient ? '' : ' studio-tab-group--hidden'}`}>
               {i > 0 && <div className="studio-tab-divider" />}
 
               {multiOption ? (
@@ -265,6 +268,20 @@ export default function TabBar({
                 onClick={() => onAddOption(elev.id)}
               >
                 +
+              </button>
+
+              {/* Client visibility. Hidden stays on screen (not hover-only) so a
+                  consultant can always tell at a glance what the client can't see. */}
+              <button
+                className={`studio-tab-rename-btn studio-tab-visibility${elev.visibleToClient ? '' : ' is-hidden'}`}
+                title={elev.visibleToClient
+                  ? 'Visible to client · click to hide it while you work on it'
+                  : 'Hidden from client · not in their budget · click to show it'}
+                aria-label={elev.visibleToClient ? `Hide ${elev.name} from client` : `Show ${elev.name} to client`}
+                aria-pressed={!elev.visibleToClient}
+                onClick={() => onSetVisibleToClient(elev.id, !elev.visibleToClient)}
+              >
+                {elev.visibleToClient ? <EyeIcon /> : <><EyeOffIcon /><span>Hidden</span></>}
               </button>
 
               {/* Rename / delete elevation controls */}
@@ -448,6 +465,26 @@ function PencilIcon() {
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  )
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19"/>
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
     </svg>
   )
 }

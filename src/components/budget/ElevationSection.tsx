@@ -23,15 +23,23 @@ const SIDE_BY_SIDE_MAX = 3
 
 export default function ElevationSection({ elevation, vatMode, isConsultant, onArtworkChange, onNoteChange }: Props) {
   const picked = elevation.clientPickedOption
+  const hidden = !!elevation.hiddenFromClient
+  const hiddenClass = hidden ? ' budget-elev-block--hidden' : ''
+  const hiddenBadge = hidden && (
+    <span className="budget-elev-hidden-badge" title="Switch it back on from the elevation's tab in the studio">
+      Hidden from client · not in client total
+    </span>
+  )
 
   if (picked) {
     const opt = elevation.options.find(o => o.key === picked)
     const displayTotal = opt ? optionTotal(opt.artworks, vatMode) : 0
 
     return (
-      <div className="budget-elev-block budget-elev-block--picked">
+      <div className={`budget-elev-block budget-elev-block--picked${hiddenClass}`}>
         <div className="budget-elev-header budget-elev-header--picked">
           <span className="budget-elev-name">{elevation.name}</span>
+          {hiddenBadge}
           <span className="budget-elev-pick-badge">✓ {opt?.title ?? `Option ${picked}`}</span>
           <span className="budget-elev-total">{fmtGbp(displayTotal)}</span>
         </div>
@@ -64,10 +72,10 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
 
   // Pending: client hasn't picked yet
   return (
-    <div className="budget-elev-block">
+    <div className={`budget-elev-block${hiddenClass}`}>
       <div className="budget-elev-header budget-elev-header--pending">
         <span className="budget-elev-name">{elevation.name}</span>
-        <span className="budget-elev-pending-badge">● Selection pending</span>
+        {hiddenBadge ?? <span className="budget-elev-pending-badge">● Selection pending</span>}
       </div>
       {elevation.options.length === 0 ? (
         <p className="budget-empty-note">No options added</p>
