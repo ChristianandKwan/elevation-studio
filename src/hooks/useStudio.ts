@@ -1905,7 +1905,11 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function patchArtworkLocal(artId: string, patch: Partial<Artwork>) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
-      rememberSaved(s.masks, newArts)
+      // Mark only this artwork as already written, never the whole option: a
+      // sibling may have an unsaved drag still sitting in the debounce, and
+      // calling rememberSaved for all of them would drop it.
+      const saved = newArts.find(a => a.id === artId)
+      if (saved) lastSavedArts.current.set(artId, JSON.stringify(artworkRow(saved)))
       return { ...s, artworks: newArts }
     })
   }
