@@ -12,6 +12,7 @@ export type ArtworkLineItemPatch = Partial<Pick<
 import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
+import { frameLipShadeElement, frameLipShadow } from '@/lib/frameShadow'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -858,6 +859,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         }
 
         div.appendChild(img)
+
+        // The frame's lip shades the artwork itself, not just the wall.
+        if (art.frameType && art.frameWidthMm && sc &&
+            art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
+          div.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur, art.shadowOpacity))
+        }
       }
 
       // Build div-level CSS filter: brightness (covers image + frame) + drop-shadow
@@ -2098,6 +2105,31 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       }
       tctx.drawImage(art.img, frame, frame, w, h)
 
+      const blur = art.shadowBlur ?? 0
+      const shadowOpacity = art.shadowOpacity ?? 0
+
+      // The frame's lip shades the artwork, as the overlay's inset box-shadow
+      // does. A ring around the artwork is filled outside the clip, so only
+      // the shadow it throws inwards lands on the tile.
+      if (frame > 0 && blur > 0 && shadowOpacity > 0) {
+        const lip = frameLipShadow(art.shadowAngle, blur * dispToOrig)
+        const reach = Math.ceil(lip.blur + Math.abs(lip.x) + Math.abs(lip.y)) + 1
+        tctx.save()
+        tctx.beginPath()
+        tctx.rect(frame, frame, w, h)
+        tctx.clip()
+        tctx.shadowColor = `rgba(0,0,0,${shadowOpacity})`
+        tctx.shadowBlur = lip.blur
+        tctx.shadowOffsetX = lip.x
+        tctx.shadowOffsetY = lip.y
+        tctx.fillStyle = '#000'
+        tctx.beginPath()
+        tctx.rect(frame - reach, frame - reach, w + reach * 2, h + reach * 2)
+        tctx.rect(frame, frame, w, h)
+        tctx.fill('evenodd')
+        tctx.restore()
+      }
+
       // Drop shadow, baked into its own layer. CSS paints the shadow behind an
       // opaque artwork and only then applies the element's opacity, so drawing
       // the shadow straight onto the elevation under a `globalAlpha` would let
@@ -2105,8 +2137,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       let layer = tile
       let offX = 0
       let offY = 0
-      const blur = art.shadowBlur ?? 0
-      const shadowOpacity = art.shadowOpacity ?? 0
       if (blur > 0 && shadowOpacity > 0) {
         const rad = ((art.shadowAngle ?? 225) * Math.PI) / 180
         const dist = blur * 0.55 * dispToOrig

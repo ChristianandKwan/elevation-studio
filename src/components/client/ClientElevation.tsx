@@ -4,6 +4,7 @@ import { useRef, useEffect, useState } from 'react'
 import NextImage from 'next/image'
 import { formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
+import { frameLipShadeElement } from '@/lib/frameShadow'
 import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface ClientArtwork {
@@ -21,6 +22,9 @@ interface ClientArtwork {
   frameWidthMm?: number | null
   brightness?: number | null
   fade?: number | null
+  shadowAngle?: number | null
+  shadowBlur?: number | null
+  shadowOpacity?: number | null
 }
 
 interface ClientOption {
@@ -471,6 +475,12 @@ function ClientCanvas({
         }
 
         aw.appendChild(ai)
+
+        // The frame's lip shades the artwork itself, not just the wall.
+        if (art.frameType && art.frameWidthMm && sc &&
+            art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
+          aw.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur, art.shadowOpacity))
+        }
 
         const tag = document.createElement('div')
         tag.className = 'client-aw-tag'
