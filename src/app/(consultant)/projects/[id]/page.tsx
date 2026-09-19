@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/supabase/auth'
 import StudioScreen from '@/components/studio/StudioScreen'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 import { sortOptions } from '@/lib/options'
+import { readLineItemFields, readOptionNoteFields } from '@/lib/lineItems'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -37,10 +38,11 @@ export default async function ProjectPage({ params }: Props) {
     .select(`
       id, name, display_order, client_picked_option,
       elevation_options(
-        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes,
+        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, framing_status, framing_cost, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity
+          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity,
+          note, note_shown_to_client, vat_applies, discount_status, discount_percent, sub_line_items
         )
       )
     `)
@@ -77,7 +79,7 @@ export default async function ProjectPage({ params }: Props) {
       artworks: Array<{
         id: string; name: string; image_path: string;
         w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
-        visible: boolean; price: number; artist: string; framing_status: string; framing_cost: number | null; display_order: number;
+        visible: boolean; price: number; artist: string; display_order: number;
       }>;
       foreground_masks: unknown;
     }) => {
@@ -94,8 +96,6 @@ export default async function ProjectPage({ params }: Props) {
           wCm: art.w_cm,
           hCm: art.h_cm,
           artist: (art as any).artist ?? '',
-          framingStatus: ((art as any).framing_status ?? 'framed') as 'framed' | 'requires_framing',
-          framingCost: (art as any).framing_cost ?? null,
           frameType: (art as any).frame_type ?? null,
           frameWidthMm: (art as any).frame_width_mm ?? null,
           brightness: (art as any).brightness ?? 1,
@@ -103,9 +103,10 @@ export default async function ProjectPage({ params }: Props) {
           shadowAngle: (art as any).shadow_angle ?? null,
           shadowBlur: (art as any).shadow_blur ?? null,
           shadowOpacity: (art as any).shadow_opacity ?? null,
+          ...readLineItemFields(art as unknown as Record<string, unknown>),
         }))
 
-      return { ...opt, imageUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '' }
+      return { ...opt, imageUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
     })
     // Display order is decided in exactly one place — see src/lib/options.ts.
     return { ...elev, elevation_options: sortOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null }

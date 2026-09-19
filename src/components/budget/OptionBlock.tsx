@@ -2,12 +2,16 @@
 
 import { useState } from 'react'
 import ArtworkLine from './ArtworkLine'
-import { fmtGbp, getOptionTotals } from './budgetCalc'
-import type { BudgetOptionData } from './budgetCalc'
+import OptionNote from './OptionNote'
+import { fmtGbp, optionTotal } from './budgetCalc'
+import type { BudgetOptionData, BudgetArtworkPatch } from './budgetCalc'
 
 interface Props {
   option: BudgetOptionData
   vatMode: boolean
+  isConsultant: boolean
+  onArtworkChange?: (artworkId: string, patch: BudgetArtworkPatch) => void
+  onNoteChange?: (optionKey: string, note: string, shownToClient: boolean) => void
   /**
    * `block`: one of up to three side-by-side blocks (the original layout).
    * `card`: one of a stack of full-width cards, used from four options up,
@@ -17,11 +21,9 @@ interface Props {
   layout?: 'block' | 'card'
 }
 
-export default function OptionBlock({ option, vatMode, layout = 'block' }: Props) {
+export default function OptionBlock({ option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block' }: Props) {
   const [open, setOpen] = useState(true)
-  const totals = getOptionTotals(option.artworks)
-  const subtotal = totals.artworks + totals.framing
-  const displayTotal = vatMode ? Math.round(subtotal * 1.2) : subtotal
+  const displayTotal = optionTotal(option.artworks, vatMode)
   const keyClass = `budget-option-key${option.name ? ' budget-option-key--named' : ''}`
   const count = option.artworks.length
 
@@ -31,7 +33,13 @@ export default function OptionBlock({ option, vatMode, layout = 'block' }: Props
         <p className="budget-empty-note">No artworks added</p>
       ) : (
         option.artworks.map(a => (
-          <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} />
+          <ArtworkLine
+            key={a.id}
+            artwork={a}
+            vatMode={vatMode}
+            isConsultant={isConsultant}
+            onChange={onArtworkChange && (patch => onArtworkChange(a.id, patch))}
+          />
         ))
       )}
     </div>
@@ -51,6 +59,12 @@ export default function OptionBlock({ option, vatMode, layout = 'block' }: Props
           <span className="budget-option-subtotal">{fmtGbp(displayTotal)}</span>
           <span className={`budget-option-chevron${open ? ' open' : ''}`} aria-hidden="true" />
         </button>
+        <OptionNote
+          note={option.consultantNote}
+          shownToClient={option.consultantNoteShownToClient}
+          isConsultant={isConsultant}
+          onChange={onNoteChange && ((n, shown) => onNoteChange(option.key, n, shown))}
+        />
         {artworks}
       </div>
     )
@@ -62,6 +76,12 @@ export default function OptionBlock({ option, vatMode, layout = 'block' }: Props
         <span className={keyClass}>{option.title}</span>
         <span className="budget-option-subtotal">{fmtGbp(displayTotal)}</span>
       </div>
+      <OptionNote
+        note={option.consultantNote}
+        shownToClient={option.consultantNoteShownToClient}
+        isConsultant={isConsultant}
+        onChange={onNoteChange && ((n, shown) => onNoteChange(option.key, n, shown))}
+      />
       {artworks}
     </div>
   )

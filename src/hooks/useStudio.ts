@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
+import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState, SubLineItem } from '@/types'
+
+/** The line-item fields an edit panel may patch on one artwork. */
+export type ArtworkLineItemPatch = Partial<Pick<
+  Artwork,
+  'note' | 'noteShownToClient' | 'vatApplies' | 'discountStatus' | 'discountPercent' | 'subLineItems'
+>>
 import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
@@ -291,8 +297,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       visible: art.visible,
       price: art.price,
       artist: art.artist,
-      framing_status: art.framingStatus,
-      framing_cost: art.framingCost,
+      note: art.note,
+      note_shown_to_client: art.noteShownToClient,
+      vat_applies: art.vatApplies,
+      discount_status: art.discountStatus,
+      discount_percent: art.discountPercent,
+      sub_line_items: art.subLineItems,
       brightness: art.brightness ?? 1,
       fade: art.fade ?? null,
       name: art.name,
@@ -1635,7 +1645,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // ─── ADD ARTWORKS ─────────────────────────────────────────────────
   async function addArtworks(files: File[], metas: Array<{
     name: string; wCm: number; hCm: number; price: number
-    artist: string; framingStatus: 'framed' | 'requires_framing'; framingCost: number | null
+    artist: string
   }>) {
     const supabase = createClient()
     let completed = 0
@@ -1665,8 +1675,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         visible: true,
         price: meta.price,
         artist: meta.artist,
-        framing_status: meta.framingStatus,
-        framing_cost: meta.framingCost,
         display_order: i,
       }).select().single()
 
@@ -1692,8 +1700,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         visible: true,
         price: meta.price,
         artist: meta.artist,
-        framingStatus: meta.framingStatus,
-        framingCost: meta.framingCost,
+        note: '',
+        noteShownToClient: true,
+        vatApplies: true,
+        discountStatus: 'none',
+        discountPercent: null,
+        subLineItems: [],
         frameType: null,
         frameWidthMm: null,
         brightness: 1,
@@ -1882,12 +1894,30 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
-  function updateArtworkFraming(artId: string, framingStatus: 'framed' | 'requires_framing', framingCost: number | null) {
-    // A framed piece carries no framing cost, so switching back clears it
-    // rather than leaving a stale figure in the budget.
-    const cost = framingStatus === 'requires_framing' ? framingCost : null
+  /**
+   * Update one artwork in studio state without saving it.
+   *
+   * The budget writes these fields to the database itself, by artwork id,
+   * across every elevation. If the studio's copy were left behind, the next
+   * autosave triggered by dragging that artwork would write the stale figures
+   * straight back over them.
+   */
+  function patchArtworkLocal(artId: string, patch: Partial<Artwork>) {
     setState(s => {
-      const newArts = s.artworks.map(a => a.id === artId ? { ...a, framingStatus, framingCost: cost } : a)
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
+      // Mark only this artwork as already written, never the whole option: a
+      // sibling may have an unsaved drag still sitting in the debounce, and
+      // calling rememberSaved for all of them would drop it.
+      const saved = newArts.find(a => a.id === artId)
+      if (saved) lastSavedArts.current.set(artId, JSON.stringify(artworkRow(saved)))
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  /** Patch the note, VAT, discount or sub items on one artwork. */
+  function updateArtworkLineItems(artId: string, patch: ArtworkLineItemPatch) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
       debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
     })
@@ -2298,9 +2328,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     toggleVisibility,
     updateArtworkDims,
     updateArtworkPrice,
+    patchArtworkLocal,
     updateArtworkName,
     updateArtworkArtist,
-    updateArtworkFraming,
+    updateArtworkLineItems,
     updateArtworkFrame,
     updateArtworkBrightness,
     updateAllArtworksBrightness,

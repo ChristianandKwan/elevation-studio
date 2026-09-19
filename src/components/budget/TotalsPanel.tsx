@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import {
-  fmtGbp, fmtRange,
+  fmtGbp,
   computeProjectTotals, installCostDisplay, consultantFeeRange,
-  displayFrozenAmount,
+  displayFrozenAmount, applyVat,
 } from './budgetCalc'
 import type { BudgetElevationData } from './budgetCalc'
 import type { BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem } from '@/types'
@@ -34,8 +35,16 @@ export default function TotalsPanel({
   const [budgetDraft, setBudgetDraft] = useState('')
 
   // ── Compute project totals ──────────────────────────────────────────────────
-  const pt = computeProjectTotals(elevations)
-  const { artMin, artMax, framingMin, framingMax, artCountMin, artCountMax, isRange, hasFraming } = pt
+  const pt = computeProjectTotals(elevations, vatMode)
+  const { min, max, isRange, hasFraming, hasOther } = pt
+
+  // Artwork spend drives the percentage fee and nothing else. Framing, duty
+  // and shipping are excluded, as framing always was.
+  const artMin = min.artVatable + min.artExempt
+  const artMax = max.artVatable + max.artExempt
+
+  const artCountMin = min.artCount
+  const artCountMax = max.artCount
 
   const install = installCostDisplay(installation, artCountMin, artCountMax)
   const installIsRange = install.isIndicative && install.min !== install.max
@@ -46,12 +55,27 @@ export default function TotalsPanel({
   const showFee = !!consultantFee && (isConsultant || consultantFee.shownToClient)
   const feeVatApplies = consultantFee?.vatApplies ?? true
 
-  // Artworks and framing are stored ex-VAT; follow the toggle uniformly.
-  const baseVatMult = vatMode ? 1.2 : 1
-  const dispArtMin = Math.round(artMin * baseVatMult)
-  const dispArtMax = Math.round(artMax * baseVatMult)
-  const dispFramingMin = Math.round(framingMin * baseVatMult)
-  const dispFramingMax = Math.round(framingMax * baseVatMult)
+  // Artworks and the costs hanging off them are stored ex-VAT, but each line
+  // carries its own VAT treatment now: a work bought outside the UK is not
+  // multiplied by 1.2 just because the toggle is on.
+  const dispArtVatMin = applyVat(min.artVatable, true, vatMode)
+  const dispArtVatMax = applyVat(max.artVatable, true, vatMode)
+  const dispArtExMin = min.artExempt
+  const dispArtExMax = max.artExempt
+
+  const dispFramingMin = applyVat(min.framingVatable, true, vatMode) + min.framingExempt
+  const dispFramingMax = applyVat(max.framingVatable, true, vatMode) + max.framingExempt
+
+  const dispOtherMin = applyVat(min.otherVatable, true, vatMode) + min.otherExempt
+  const dispOtherMax = applyVat(max.otherVatable, true, vatMode) + max.otherExempt
+
+  // How the artwork rows are laid out depends on what is actually in them.
+  const anyExempt = max.artExempt > 0
+  const anyVatable = max.artVatable > 0
+  const splitArtRows = anyExempt && anyVatable
+
+  const dispArtAllMin = dispArtVatMin + dispArtExMin
+  const dispArtAllMax = dispArtVatMax + dispArtExMax
 
   // Installation: indicative is always VAT-applicable and stored ex-VAT;
   // confirmed uses frozen-entry semantics.
@@ -93,11 +117,22 @@ export default function TotalsPanel({
 
   const grandIsRange = isRange || installIsRange || (dispFeeMin !== dispFeeMax)
 
+  /**
+   * Two figures on a line means two whole options the client could pick, not
+   * the ends of a span, so they get a column each rather than a dash between
+   * them. "From" and "Up to" rather than best and worst: the dearer column is
+   * a choice the client may well want, and nothing on a page they read should
+   * call their own taste the worst case.
+   */
+  const twoColumn = grandIsRange
+
   // Grand totals derived from display line items so the column always adds up
   const totalInstallMin = showInstallLine ? dispInstallMin : 0
   const totalInstallMax = showInstallLine ? dispInstallMax : 0
-  const totalMin = dispArtMin + dispFramingMin + totalInstallMin + dispCustomTotal + dispFeeMin
-  const totalMax = dispArtMax + dispFramingMax + totalInstallMax + dispCustomTotal + dispFeeMax
+  const totalMin = dispArtAllMin + dispFramingMin + dispOtherMin
+    + totalInstallMin + dispCustomTotal + dispFeeMin
+  const totalMax = dispArtAllMax + dispFramingMax + dispOtherMax
+    + totalInstallMax + dispCustomTotal + dispFeeMax
 
   // ── Client budget variance ──────────────────────────────────────────────────
   const budgetDisplay = clientBudget != null && vatMode
@@ -114,26 +149,23 @@ export default function TotalsPanel({
 
   function renderVariance() {
     if (budgetDisplay == null) return null
-    if (grandIsRange) {
-      const bestDiff = budgetDisplay - totalMin   // positive = under budget
-      const worstDiff = budgetDisplay - totalMax
-      const bestLabel = bestDiff >= 0
-        ? `${fmtGbp(bestDiff)} under budget`
-        : `${fmtGbp(-bestDiff)} over budget`
-      const worstLabel = worstDiff >= 0
-        ? `${fmtGbp(worstDiff)} under budget`
-        : `${fmtGbp(-worstDiff)} over budget`
-      const bestColor = bestDiff >= 0 ? 'var(--green)' : 'var(--red)'
-      const worstColor = worstDiff >= 0 ? 'var(--green)' : 'var(--red)'
+    if (twoColumn) {
+      // One row under the same two headings rather than two labelled lines.
+      // "Up to: £13,125 over budget" would have read as its own riddle.
+      const cell = (diff: number) => {  // positive = under budget
+        if (diff === 0) return { label: 'On budget', color: 'var(--mid)' }
+        return diff > 0
+          ? { label: `${fmtGbp(diff)} under`, color: 'var(--green)' }
+          : { label: `${fmtGbp(-diff)} over`, color: 'var(--red)' }
+      }
+      const low = cell(budgetDisplay - totalMin)
+      const high = cell(budgetDisplay - totalMax)
       return (
-        <>
-          <div className="budget-variance-row" style={{ color: bestColor }}>
-            Best case: {bestLabel}
-          </div>
-          <div className="budget-variance-row" style={{ color: worstColor }}>
-            Worst case: {worstLabel}
-          </div>
-        </>
+        <div className="budget-totals-row budget-totals-row--split budget-variance-split">
+          <span className="budget-totals-label">Against budget</span>
+          <span className="budget-variance-cell" style={{ color: low.color }}>{low.label}</span>
+          <span className="budget-variance-cell" style={{ color: high.color }}>{high.label}</span>
+        </div>
       )
     }
     const diff = budgetDisplay - totalMin
@@ -145,69 +177,88 @@ export default function TotalsPanel({
     return <div className="budget-variance-row" style={{ color }}>{label}</div>
   }
 
+  function summaryRow(label: ReactNode, min: number, max: number) {
+    return (
+      <div className={`budget-totals-row${twoColumn ? ' budget-totals-row--split' : ''}`}>
+        <span className="budget-totals-label">{label}</span>
+        <span className="budget-totals-value">{fmtGbp(min)}</span>
+        {twoColumn && <span className="budget-totals-value">{fmtGbp(max)}</span>}
+      </div>
+    )
+  }
+
   return (
     <div className="budget-totals">
       <div className="budget-section-kicker">Summary</div>
 
-      <div className="budget-totals-rows">
-        {/* Artworks */}
-        <div className="budget-totals-row">
-          <span className="budget-totals-label">Artworks</span>
-          <span className="budget-totals-value">
-            {fmtRange(dispArtMin, dispArtMax)}
-          </span>
+      {/* Each column adds up on its own, so the total still equals the
+          lines above it. See `twoColumn` for why there are two. */}
+      {twoColumn && (
+        <div className="budget-totals-row budget-totals-row--split budget-totals-row--heads">
+          <span className="budget-totals-label" />
+          <span className="budget-totals-head">From</span>
+          <span className="budget-totals-head">Up to</span>
         </div>
+      )}
 
-        {/* Framing — conditional */}
-        {hasFraming && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">Framing</span>
-            <span className="budget-totals-value">
-              {fmtRange(dispFramingMin, dispFramingMax)}
-            </span>
-          </div>
-        )}
-
-        {/* Installation */}
-        {showInstallLine && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">
-              Installation
-              {install.isIndicative && (
-                <span className="budget-badge budget-badge--indicative budget-badge--inline">Indicative</span>
+      <div className="budget-totals-rows">
+        {/* Artworks — split only when the project really has both kinds */}
+        {splitArtRows ? (
+          <>
+            {summaryRow('Artworks', dispArtVatMin, dispArtVatMax)}
+            {summaryRow(
+              <>
+                Artworks
+                <span className="budget-badge budget-badge--novat budget-badge--inline">No VAT</span>
+              </>,
+              dispArtExMin, dispArtExMax,
+            )}
+          </>
+        ) : (
+          summaryRow(
+            <>
+              Artworks
+              {anyExempt && !anyVatable && (
+                <span className="budget-badge budget-badge--novat budget-badge--inline">No VAT</span>
               )}
-            </span>
-            <span className="budget-totals-value">
-              {fmtRange(dispInstallMin, dispInstallMax)}
-            </span>
-          </div>
+            </>,
+            dispArtAllMin, dispArtAllMax,
+          )
         )}
 
-        {/* Custom items */}
-        {dispCustomTotal > 0 && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">Other</span>
-            <span className="budget-totals-value">{fmtGbp(dispCustomTotal)}</span>
-          </div>
+        {hasFraming && summaryRow('Framing', dispFramingMin, dispFramingMax)}
+
+        {/* Duty, shipping and anything else hanging off an artwork */}
+        {hasOther && summaryRow('Other artwork costs', dispOtherMin, dispOtherMax)}
+
+        {showInstallLine && summaryRow(
+          <>
+            Installation
+            {install.isIndicative && (
+              <span className="budget-badge budget-badge--indicative budget-badge--inline">Indicative</span>
+            )}
+          </>,
+          dispInstallMin, dispInstallMax,
         )}
 
-        {/* Consultant fee */}
-        {showFee && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">Consultant fee</span>
-            <span className="budget-totals-value">{fmtRange(dispFeeMin, dispFeeMax)}</span>
-          </div>
-        )}
+        {dispCustomTotal > 0 && summaryRow('Other', dispCustomTotal, dispCustomTotal)}
+
+        {showFee && summaryRow('Consultant fee', dispFeeMin, dispFeeMax)}
       </div>
 
       {/* Grand total */}
-      <div className="budget-grand-total">
+      <div className={`budget-grand-total${twoColumn ? ' budget-grand-total--split' : ''}`}>
         <span className="budget-grand-total-label">
           {vatMode ? 'Total inc. VAT' : 'Total'}
         </span>
-        <span className="budget-grand-total-value">
-          {grandIsRange ? fmtRange(totalMin, totalMax) : fmtGbp(totalMin)}
-        </span>
+        {twoColumn ? (
+          <>
+            <span className="budget-grand-total-value">{fmtGbp(totalMin)}</span>
+            <span className="budget-grand-total-value">{fmtGbp(totalMax)}</span>
+          </>
+        ) : (
+          <span className="budget-grand-total-value">{fmtGbp(totalMin)}</span>
+        )}
       </div>
 
       {/* Client budget */}

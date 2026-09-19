@@ -27,7 +27,7 @@ interface Props {
   onBudgetChange?: (budget: number | null) => void
 }
 
-export default function StudioSidebar({ studio, onStatus, clientNotes, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange }: Props) {
+export default function StudioSidebar({ studio, onStatus, optionId, clientNotes, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange }: Props) {
   const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -65,11 +65,6 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
 
   const visibleArtworksWithPrice = state.artworks.filter(a => a.visible && a.price)
   const elevationTotal = visibleArtworksWithPrice.reduce((s, a) => s + a.price, 0)
-  const hasMixedPricing = (() => {
-    if (visibleArtworksWithPrice.length < 2) return false
-    const first = visibleArtworksWithPrice[0].framingStatus
-    return visibleArtworksWithPrice.some(a => a.framingStatus !== first)
-  })()
 
   return (
     <div className="studio-sidebar" onClick={e => { if (e.target === e.currentTarget) studio.selectArtwork(null) }}>
@@ -161,11 +156,9 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
                   onToggleVis={() => studio.toggleVisibility(art.id)}
                   onDelete={() => onRequestDeleteArtworks(new Set([art.id]))}
                   onDimsChange={(w, h) => studio.updateArtworkDims(art.id, w, h)}
-                  onPriceChange={(p) => studio.updateArtworkPrice(art.id, p)}
                   onNameChange={(n) => studio.updateArtworkName(art.id, n)}
                   onArtistChange={(a) => studio.updateArtworkArtist(art.id, a)}
                   onFrameChange={(ft, fw) => studio.updateArtworkFrame(art.id, ft, fw)}
-                  onFramingChange={(fs, fc) => studio.updateArtworkFraming(art.id, fs, fc)}
                   onBrightnessChange={(b) => studio.updateArtworkBrightness(art.id, b)}
                   onBrightnessApplyAll={(b) => studio.updateAllArtworksBrightness(b)}
                   onFadeChange={(f) => studio.updateArtworkFade(art.id, f)}
@@ -449,11 +442,6 @@ export default function StudioSidebar({ studio, onStatus, clientNotes, activityL
               </button>
             )
           )}
-          {hasMixedPricing && (
-            <div style={{ marginTop: 8, padding: '7px 9px', background: '#FFF8F0', border: '1px solid rgba(139,111,71,.3)', fontSize: 10.5, color: 'var(--accent)', lineHeight: 1.5 }}>
-              ⚠ Mixed pricing — some artworks include framing &amp; installation, others don't.
-            </div>
-          )}
         </div>
       )}
 
@@ -496,7 +484,7 @@ const FRAME_COLORS: Record<string, string> = {
 }
 
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; framingStatus: 'framed' | 'requires_framing'; framingCost: number | null; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null; img?: HTMLImageElement | null }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null; img?: HTMLImageElement | null }
   isSelected: boolean
   isExpanded: boolean
   hasScale: boolean
@@ -509,11 +497,9 @@ interface ArtworkItemProps {
   onToggleVis: () => void
   onDelete: () => void
   onDimsChange: (w: number, h: number) => void
-  onPriceChange: (p: number) => void
   onNameChange: (name: string) => void
   onArtistChange: (artist: string) => void
   onFrameChange: (frameType: string | null, frameWidthMm: number | null) => void
-  onFramingChange: (framingStatus: 'framed' | 'requires_framing', framingCost: number | null) => void
   onBrightnessChange: (b: number) => void
   onBrightnessApplyAll: (b: number) => void
   onFadeChange: (f: number) => void
@@ -522,7 +508,7 @@ interface ArtworkItemProps {
   onShadowApplyAll: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, wallPxPerCm, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onPriceChange, onNameChange, onArtistChange, onFrameChange, onFramingChange, onBrightnessChange, onBrightnessApplyAll, onFadeChange, onFadeApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
+const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, wallPxPerCm, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onFadeChange, onFadeApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -647,7 +633,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
           </div>
         </div>
 
-        {/* Group 2: Size & Price */}
+        {/* Group 2: Size — everything to do with money lives on the budget */}
         <div className="aw-edit-group">
           <div className="aw-field-row">
             <label className="aw-f-label">Size</label>
@@ -670,55 +656,6 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
               <span className="dim-unit">cm</span>
             </div>
           </div>
-          <div className="aw-field-row">
-            <label className="aw-f-label">Price</label>
-            <div className="aw-price-wrap">
-              <span className="aw-price-prefix">£</span>
-              <input
-                type="number" className="aw-price-input" defaultValue={art.price || ''} placeholder="ex-VAT"
-                disabled={isLocked}
-                onClick={e => e.stopPropagation()}
-                onBlur={e => onPriceChange(parseFloat(e.target.value) || 0)}
-                onKeyDown={e => { if (e.key === 'Enter') onPriceChange(parseFloat((e.target as HTMLInputElement).value) || 0) }}
-              />
-            </div>
-          </div>
-          <div className="aw-field-row">
-            <label className="aw-f-label">Framing</label>
-            <div className="aw-framing-toggle">
-              <button
-                type="button"
-                className={`btn btn-sm${art.framingStatus === 'framed' ? ' btn-primary' : ''}`}
-                disabled={isLocked}
-                onClick={e => { e.stopPropagation(); onFramingChange('framed', null) }}
-              >
-                Framed
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm${art.framingStatus === 'requires_framing' ? ' btn-primary' : ''}`}
-                disabled={isLocked}
-                onClick={e => { e.stopPropagation(); onFramingChange('requires_framing', art.framingCost) }}
-              >
-                Requires framing
-              </button>
-            </div>
-          </div>
-          {art.framingStatus === 'requires_framing' && (
-            <div className="aw-field-row">
-              <label className="aw-f-label">Cost</label>
-              <div className="aw-price-wrap">
-                <span className="aw-price-prefix">£</span>
-                <input
-                  type="number" className="aw-price-input" defaultValue={art.framingCost ?? ''} placeholder="ex-VAT" min={0} step={50}
-                  disabled={isLocked}
-                  onClick={e => e.stopPropagation()}
-                  onBlur={e => onFramingChange('requires_framing', parseFloat(e.target.value) || null)}
-                  onKeyDown={e => { if (e.key === 'Enter') { onFramingChange('requires_framing', parseFloat((e.target as HTMLInputElement).value) || null); (e.target as HTMLInputElement).blur() } }}
-                />
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Group 3: Frame */}

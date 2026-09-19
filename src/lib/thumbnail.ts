@@ -158,14 +158,28 @@ export async function buildThumbnailBuffer(
           artThumbH   += framePxThumb * 2
         }
 
-        // Fade: multiply alpha so the elevation behind shows through (slider 0–1 → up to 25 % reduction)
+        // Fade: multiply alpha so the elevation behind shows through
+        // (slider 0–1 → up to 25 % reduction).
+        //
+        // The alpha band has to exist before it can be scaled. sharp plans the
+        // whole pipeline against the *input* metadata, so a four-element
+        // linear() chained after ensureAlpha() on a three-band JPEG is
+        // rejected with "Band expansion using linear is unsupported". That
+        // threw inside the per-artwork try below, the artwork was skipped
+        // without a word, and the thumbnail showed its drop shadow sitting on
+        // a bare wall. So render the alpha in, then scale it in a second pass.
         const fade = art.fade ?? 0
+        let artFinal: Buffer
         if (fade > 0) {
           const alphaMul = 1 - fade * 0.25
-          pipeline = pipeline.ensureAlpha().linear([1, 1, 1, alphaMul], [0, 0, 0, 0])
+          const withAlpha = await pipeline.ensureAlpha().png().toBuffer()
+          artFinal = await sharp(withAlpha)
+            .linear([1, 1, 1, alphaMul], [0, 0, 0, 0])
+            .png()
+            .toBuffer()
+        } else {
+          artFinal = await pipeline.png().toBuffer()
         }
-
-        const artFinal = await pipeline.png().toBuffer()
 
         compositeInputs.push({
           input: artFinal,
@@ -173,7 +187,11 @@ export async function buildThumbnailBuffer(
           top:  Math.max(0, top  - frameOffset),
           blend: 'over',
         })
-      } catch { /* skip failed artwork */ }
+      } catch (err) {
+        // Carry on with the other artworks, but say so: a silent skip here
+        // produces a thumbnail that looks plausible and is quietly wrong.
+        console.error('[thumbnail] artwork skipped', { url: art.url, err })
+      }
     }
 
     const elevResized = await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
