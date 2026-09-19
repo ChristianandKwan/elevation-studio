@@ -87,6 +87,7 @@ export default function TabBar({
   const [dragging, setDragging] = useState<{ elevId: string; key: string } | null>(null)
   const [dropTarget, setDropTarget] = useState<{ elevId: string; key: string; side: 'before' | 'after' } | null>(null)
   const [menu, setMenu] = useState<{ elevId: string; key: string; title: string; name: string | null; hasArtworks: boolean; x: number; y: number } | null>(null)
+  const [elevMenu, setElevMenu] = useState<{ elevId: string; x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   function moveOption(elevId: string, key: string, delta: number) {
@@ -122,8 +123,8 @@ export default function TabBar({
   // handler's stopPropagation cannot stop a native listener on that same
   // document, and the menu would unmount before the item's click arrived.
   useEffect(() => {
-    if (!menu) return
-    const close = () => setMenu(null)
+    if (!menu && !elevMenu) return
+    const close = () => { setMenu(null); setElevMenu(null) }
     const onPress = (e: MouseEvent) => {
       if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return
       close()
@@ -137,7 +138,7 @@ export default function TabBar({
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', close, true)
     }
-  }, [menu])
+  }, [menu, elevMenu])
 
   function handleAdd() {
     const name = newName.trim() || 'New Elevation'
@@ -164,6 +165,13 @@ export default function TabBar({
         <div className={`studio-tab-bar-fade studio-tab-bar-fade--right${canScrollRight ? ' visible' : ''}`} />
         {elevations.map((elev, i) => {
           const multiOption = elev.options.length > 1
+          // Faded italic tabs alone are easy to miss, so the first tab of a
+          // hidden elevation also carries a crossed-out eye.
+          const hiddenMark = !elev.visibleToClient && (
+            <span className="studio-tab-hidden-mark" title="Hidden from client · not in their budget" aria-label="Hidden from client">
+              <EyeOffIcon />
+            </span>
+          )
           return (
             <div key={elev.id} className={`studio-tab-group${elev.visibleToClient ? '' : ' studio-tab-group--hidden'}`}>
               {i > 0 && <div className="studio-tab-divider" />}
@@ -212,6 +220,7 @@ export default function TabBar({
                       }}
                       onContextMenu={e => {
                         e.preventDefault()
+                        setElevMenu(null)
                         setMenu({ elevId: elev.id, key: opt.key, title: opt.title, name: opt.name, hasArtworks: opt.hasArtworks, x: e.clientX, y: e.clientY })
                       }}
                       onKeyDown={e => {
@@ -220,6 +229,7 @@ export default function TabBar({
                         if (e.key === 'ArrowRight') { e.preventDefault(); moveOption(elev.id, opt.key, 1) }
                       }}
                     >
+                      {optIndex === 0 && hiddenMark}
                       {/* A named option shows its name; an unnamed one its letter badge and the wall it belongs to */}
                       {opt.name
                         ? opt.name
@@ -252,6 +262,7 @@ export default function TabBar({
                       className={`studio-tab${isActive ? ' active' : ''}`}
                       onClick={() => onSwitch(elev.id, onlyOpt?.key ?? 'A')}
                     >
+                      {hiddenMark}
                       {elev.name}
                       {onlyOpt?.hasClientNotes && !isActive && (
                         <span className="studio-tab-notes-dot" title="Client has left notes on this elevation" aria-label="Has client notes" />
@@ -270,37 +281,23 @@ export default function TabBar({
                 +
               </button>
 
-              {/* Client visibility. Hidden stays on screen (not hover-only) so a
-                  consultant can always tell at a glance what the client can't see. */}
+              {/* Everything else about the elevation lives behind one "more" button,
+                  so the strip has no hover-only gap waiting for icons to appear. */}
               <button
-                className={`studio-tab-rename-btn studio-tab-visibility${elev.visibleToClient ? '' : ' is-hidden'}`}
-                title={elev.visibleToClient
-                  ? 'Visible to client · click to hide it while you work on it'
-                  : 'Hidden from client · not in their budget · click to show it'}
-                aria-label={elev.visibleToClient ? `Hide ${elev.name} from client` : `Show ${elev.name} to client`}
-                aria-pressed={!elev.visibleToClient}
-                onClick={() => onSetVisibleToClient(elev.id, !elev.visibleToClient)}
+                className={`studio-tab-more${elevMenu?.elevId === elev.id ? ' open' : ''}`}
+                title="Elevation options"
+                aria-label={`Options for ${elev.name}`}
+                aria-haspopup="menu"
+                aria-expanded={elevMenu?.elevId === elev.id}
+                onClick={e => {
+                  if (elevMenu?.elevId === elev.id) { setElevMenu(null); return }
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setMenu(null)
+                  setElevMenu({ elevId: elev.id, x: r.left, y: r.bottom + 4 })
+                }}
               >
-                {elev.visibleToClient ? <EyeIcon /> : <><EyeOffIcon /><span>Hidden</span></>}
+                <MoreIcon />
               </button>
-
-              {/* Rename / delete elevation controls */}
-              <button
-                className="studio-tab-rename-btn"
-                title="Rename elevation"
-                onClick={() => openRename(elev)}
-              >
-                <PencilIcon />
-              </button>
-              {elevations.length > 1 && (
-                <button
-                  className="studio-tab-rename-btn"
-                  title="Delete elevation"
-                  onClick={() => setConfirmDeleteElevId(elev.id)}
-                >
-                  <TrashIcon />
-                </button>
-              )}
             </div>
           )
         })}
@@ -308,6 +305,37 @@ export default function TabBar({
           + Add Elevation
         </button>
       </div>
+
+      {/* Elevation menu: rename, client visibility, delete */}
+      {elevMenu && (() => {
+        const elev = elevations.find(e => e.id === elevMenu.elevId)
+        if (!elev) return null
+        return (
+          <div
+            ref={menuRef}
+            className="studio-tab-menu"
+            role="menu"
+            style={{ left: elevMenu.x, top: elevMenu.y }}
+          >
+            <button role="menuitem" onClick={() => { openRename(elev); setElevMenu(null) }}>
+              <PencilIcon /> Rename elevation…
+            </button>
+            <button role="menuitem" onClick={() => { onSetVisibleToClient(elev.id, !elev.visibleToClient); setElevMenu(null) }}>
+              {elev.visibleToClient
+                ? <><EyeOffIcon /> Hide from client</>
+                : <><EyeIcon /> Show to client</>}
+            </button>
+            {elevations.length > 1 && (
+              <>
+                <div className="studio-tab-menu-sep" />
+                <button role="menuitem" className="danger" onClick={() => { setConfirmDeleteElevId(elev.id); setElevMenu(null) }}>
+                  <TrashIcon /> Delete elevation…
+                </button>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Option context menu: reorder without dragging, or remove */}
       {menu && (() => {
@@ -465,6 +493,16 @@ function PencilIcon() {
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+
+function MoreIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="5" cy="12" r="1.8"/>
+      <circle cx="12" cy="12" r="1.8"/>
+      <circle cx="19" cy="12" r="1.8"/>
     </svg>
   )
 }
