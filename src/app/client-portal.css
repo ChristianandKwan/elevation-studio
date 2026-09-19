@@ -50,6 +50,11 @@
 
 /* Main two-column layout */
 .client-main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+/* The layout is locked to the window height with overflow hidden, so the
+   budget must be given exactly the space left and scroll inside it (its
+   .budget-view does the scrolling). Without this the wrapper grew to the
+   budget's full height and everything below the fold was clipped. */
+.client-budget-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .client-canvas-wrap { flex: 1; position: relative; display: flex; min-width: 0; overflow: hidden; }
 .client-canvas-area {
