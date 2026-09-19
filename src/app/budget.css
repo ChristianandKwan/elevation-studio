@@ -512,3 +512,31 @@
 @media print {
   .budget-line-edit, .ble, .budget-note-row--empty { display: none !important; }
 }
+
+/* ── SUMMARY AS TWO SCENARIOS ────────────────────────────────
+   While any elevation is undecided, each line carries a figure
+   from the cheapest option the client could pick and one from
+   the dearest. They are two whole options, not the ends of a
+   range, so they get a column each and a heading that says so.
+   Printed as "min – max" they read backwards whenever the
+   cheaper option happened to carry the larger cost. */
+.budget-totals-row--split,
+.budget-grand-total--split {
+  display: grid;
+  grid-template-columns: 1fr minmax(84px, auto) minmax(84px, auto);
+  column-gap: 18px;
+}
+.budget-totals-row--split .budget-totals-value,
+.budget-grand-total--split .budget-grand-total-value { text-align: right; }
+
+.budget-totals-row--heads { padding: 0 0 6px; border-bottom: none; }
+.budget-totals-head {
+  font-size: 10px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--mid); text-align: right; white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .budget-totals-row--split,
+  .budget-grand-total--split { column-gap: 10px; }
+  .budget-totals-head { font-size: 9px; letter-spacing: .05em; }
+}

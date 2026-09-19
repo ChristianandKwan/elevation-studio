@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import {
-  fmtGbp, fmtRange,
+  fmtGbp,
   computeProjectTotals, installCostDisplay, consultantFeeRange,
   displayFrozenAmount, applyVat,
 } from './budgetCalc'
@@ -170,104 +171,95 @@ export default function TotalsPanel({
     return <div className="budget-variance-row" style={{ color }}>{label}</div>
   }
 
+  // Two figures per line means two scenarios, not a range. See the comment on
+  // the header row below.
+  const twoColumn = grandIsRange
+
+  function summaryRow(label: ReactNode, min: number, max: number) {
+    return (
+      <div className={`budget-totals-row${twoColumn ? ' budget-totals-row--split' : ''}`}>
+        <span className="budget-totals-label">{label}</span>
+        <span className="budget-totals-value">{fmtGbp(min)}</span>
+        {twoColumn && <span className="budget-totals-value">{fmtGbp(max)}</span>}
+      </div>
+    )
+  }
+
   return (
     <div className="budget-totals">
       <div className="budget-section-kicker">Summary</div>
+
+      {/* When the project is still a range, each figure below belongs to one
+          of two whole options the client could pick, not to a span. Printing
+          them as "min – max" read backwards wherever the cheaper option
+          carried the larger cost, which framing often does. Two labelled
+          columns say what they are, and each column adds up on its own. */}
+      {twoColumn && (
+        <div className="budget-totals-row budget-totals-row--split budget-totals-row--heads">
+          <span className="budget-totals-label" />
+          <span className="budget-totals-head">Best case</span>
+          <span className="budget-totals-head">Worst case</span>
+        </div>
+      )}
 
       <div className="budget-totals-rows">
         {/* Artworks — split only when the project really has both kinds */}
         {splitArtRows ? (
           <>
-            <div className="budget-totals-row">
-              <span className="budget-totals-label">Artworks</span>
-              <span className="budget-totals-value">
-                {fmtRange(dispArtVatMin, dispArtVatMax)}
-              </span>
-            </div>
-            <div className="budget-totals-row">
-              <span className="budget-totals-label">
+            {summaryRow('Artworks', dispArtVatMin, dispArtVatMax)}
+            {summaryRow(
+              <>
                 Artworks
                 <span className="budget-badge budget-badge--novat budget-badge--inline">No VAT</span>
-              </span>
-              <span className="budget-totals-value">
-                {fmtRange(dispArtExMin, dispArtExMax)}
-              </span>
-            </div>
+              </>,
+              dispArtExMin, dispArtExMax,
+            )}
           </>
         ) : (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">
+          summaryRow(
+            <>
               Artworks
               {anyExempt && !anyVatable && (
                 <span className="budget-badge budget-badge--novat budget-badge--inline">No VAT</span>
               )}
-            </span>
-            <span className="budget-totals-value">
-              {fmtRange(dispArtAllMin, dispArtAllMax)}
-            </span>
-          </div>
+            </>,
+            dispArtAllMin, dispArtAllMax,
+          )
         )}
 
-        {/* Framing — conditional */}
-        {hasFraming && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">Framing</span>
-            <span className="budget-totals-value">
-              {fmtRange(dispFramingMin, dispFramingMax)}
-            </span>
-          </div>
-        )}
+        {hasFraming && summaryRow('Framing', dispFramingMin, dispFramingMax)}
 
         {/* Duty, shipping and anything else hanging off an artwork */}
-        {hasOther && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">Other artwork costs</span>
-            <span className="budget-totals-value">
-              {fmtRange(dispOtherMin, dispOtherMax)}
-            </span>
-          </div>
+        {hasOther && summaryRow('Other artwork costs', dispOtherMin, dispOtherMax)}
+
+        {showInstallLine && summaryRow(
+          <>
+            Installation
+            {install.isIndicative && (
+              <span className="budget-badge budget-badge--indicative budget-badge--inline">Indicative</span>
+            )}
+          </>,
+          dispInstallMin, dispInstallMax,
         )}
 
-        {/* Installation */}
-        {showInstallLine && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">
-              Installation
-              {install.isIndicative && (
-                <span className="budget-badge budget-badge--indicative budget-badge--inline">Indicative</span>
-              )}
-            </span>
-            <span className="budget-totals-value">
-              {fmtRange(dispInstallMin, dispInstallMax)}
-            </span>
-          </div>
-        )}
+        {dispCustomTotal > 0 && summaryRow('Other', dispCustomTotal, dispCustomTotal)}
 
-        {/* Custom items */}
-        {dispCustomTotal > 0 && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">Other</span>
-            <span className="budget-totals-value">{fmtGbp(dispCustomTotal)}</span>
-          </div>
-        )}
-
-        {/* Consultant fee */}
-        {showFee && (
-          <div className="budget-totals-row">
-            <span className="budget-totals-label">Consultant fee</span>
-            <span className="budget-totals-value">{fmtRange(dispFeeMin, dispFeeMax)}</span>
-          </div>
-        )}
+        {showFee && summaryRow('Consultant fee', dispFeeMin, dispFeeMax)}
       </div>
 
       {/* Grand total */}
-      <div className="budget-grand-total">
+      <div className={`budget-grand-total${twoColumn ? ' budget-grand-total--split' : ''}`}>
         <span className="budget-grand-total-label">
           {vatMode ? 'Total inc. VAT' : 'Total'}
         </span>
-        <span className="budget-grand-total-value">
-          {grandIsRange ? fmtRange(totalMin, totalMax) : fmtGbp(totalMin)}
-        </span>
+        {twoColumn ? (
+          <>
+            <span className="budget-grand-total-value">{fmtGbp(totalMin)}</span>
+            <span className="budget-grand-total-value">{fmtGbp(totalMax)}</span>
+          </>
+        ) : (
+          <span className="budget-grand-total-value">{fmtGbp(totalMin)}</span>
+        )}
       </div>
 
       {/* Client budget */}
