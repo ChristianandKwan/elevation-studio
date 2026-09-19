@@ -2,12 +2,14 @@
 
 import ArtworkLine from './ArtworkLine'
 import OptionBlock from './OptionBlock'
-import { fmtGbp, getOptionTotals } from './budgetCalc'
+import OptionNote from './OptionNote'
+import { fmtGbp, optionTotal } from './budgetCalc'
 import type { BudgetElevationData } from './budgetCalc'
 
 interface Props {
   elevation: BudgetElevationData
   vatMode: boolean
+  isConsultant: boolean
 }
 
 /**
@@ -17,14 +19,12 @@ interface Props {
  */
 const SIDE_BY_SIDE_MAX = 3
 
-export default function ElevationSection({ elevation, vatMode }: Props) {
+export default function ElevationSection({ elevation, vatMode, isConsultant }: Props) {
   const picked = elevation.clientPickedOption
 
   if (picked) {
     const opt = elevation.options.find(o => o.key === picked)
-    const totals = opt ? getOptionTotals(opt.artworks) : null
-    const subtotal = totals ? (totals.artworks + totals.framing) : 0
-    const displayTotal = vatMode ? Math.round(subtotal * 1.2) : subtotal
+    const displayTotal = opt ? optionTotal(opt.artworks, vatMode) : 0
 
     return (
       <div className="budget-elev-block budget-elev-block--picked">
@@ -33,12 +33,19 @@ export default function ElevationSection({ elevation, vatMode }: Props) {
           <span className="budget-elev-pick-badge">✓ {opt?.title ?? `Option ${picked}`}</span>
           <span className="budget-elev-total">{fmtGbp(displayTotal)}</span>
         </div>
+        {opt && (
+          <OptionNote
+            note={opt.consultantNote}
+            shownToClient={opt.consultantNoteShownToClient}
+            isConsultant={isConsultant}
+          />
+        )}
         <div className="budget-picked-artworks">
           {!opt || opt.artworks.length === 0 ? (
             <p className="budget-empty-note">No artworks added</p>
           ) : (
             opt.artworks.map(a => (
-              <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} />
+              <ArtworkLine key={a.id} artwork={a} vatMode={vatMode} isConsultant={isConsultant} />
             ))
           )}
         </div>
@@ -58,13 +65,13 @@ export default function ElevationSection({ elevation, vatMode }: Props) {
       ) : elevation.options.length <= SIDE_BY_SIDE_MAX ? (
         <div className="budget-options-row">
           {elevation.options.map(opt => (
-            <OptionBlock key={opt.key} option={opt} vatMode={vatMode} />
+            <OptionBlock key={opt.key} option={opt} vatMode={vatMode} isConsultant={isConsultant} />
           ))}
         </div>
       ) : (
         <div className="budget-options-stack">
           {elevation.options.map(opt => (
-            <OptionBlock key={opt.key} option={opt} vatMode={vatMode} layout="card" />
+            <OptionBlock key={opt.key} option={opt} vatMode={vatMode} isConsultant={isConsultant} layout="card" />
           ))}
         </div>
       )}

@@ -87,7 +87,7 @@ export default function BudgetScreen({
   } = useBudgetState(projectId, initialBudget)
 
   // Compute artwork counts for installation tier
-  const pt = computeProjectTotals(elevations)
+  const pt = computeProjectTotals(elevations, vatMode)
 
   function handleExportPdf() {
     const prev = document.title
@@ -139,6 +139,7 @@ export default function BudgetScreen({
                     key={elev.id}
                     elevation={elev}
                     vatMode={vatMode}
+                    isConsultant={effectiveIsConsultant}
                   />
                 ))
               )}
@@ -155,8 +156,8 @@ export default function BudgetScreen({
               <div className="budget-costs-panel">
                 <InstallationRow
                   installation={budget.installation}
-                  artCountMin={pt.artCountMin}
-                  artCountMax={pt.artCountMax}
+                  artCountMin={pt.min.artCount}
+                  artCountMax={pt.max.artCount}
                   isConsultant={effectiveIsConsultant}
                   vatMode={vatMode}
                   onChange={setInstallation}
@@ -164,8 +165,8 @@ export default function BudgetScreen({
 
                 <ConsultantFeeRow
                   fee={budget.consultantFee}
-                  artMin={pt.artMin}
-                  artMax={pt.artMax}
+                  artMin={pt.min.artVatable + pt.min.artExempt}
+                  artMax={pt.max.artVatable + pt.max.artExempt}
                   isConsultant={effectiveIsConsultant}
                   vatMode={vatMode}
                   onChange={setConsultantFee}

@@ -3,6 +3,40 @@ export type ProjectStatus = 'draft' | 'sent' | 'approved'
 export type OptionKey = string
 export type FramingStatus = 'framed' | 'requires_framing'
 
+/**
+ * Where a discount stands with the gallery.
+ *
+ * `confirmed` is agreed and moves the money: the line shows the list price
+ * struck through and every total uses the net figure.
+ * `tbc` is expected but not settled. The percentage is shown so the client can
+ * see what is being chased, but no total moves, because nothing is promised.
+ * A consultant who doubts a discount will happen at all picks `none`.
+ */
+export type DiscountStatus = 'none' | 'confirmed' | 'tbc'
+
+export type SubLineItemKind = 'framing' | 'duty' | 'shipping' | 'other'
+
+/**
+ * A cost that belongs to one artwork: framing, import duty, crating.
+ *
+ * It lives on the artwork rather than on the project so that it leaves with
+ * the artwork. A project-level line for duty on works the client did not pick
+ * would sit there being quietly wrong.
+ */
+export interface SubLineItem {
+  id: string
+  label: string
+  kind: SubLineItemKind
+  /** `fixed` uses `amount`; `percent` takes `percent` of the discounted price. */
+  mode: 'fixed' | 'percent'
+  /** Pounds, ex-VAT. Ignored when mode is `percent`. */
+  amount: number
+  /** 0–100, of the artwork's discounted price. Ignored when mode is `fixed`. */
+  percent: number
+  /** Duty and overseas shipping often carry none, even beside a VATable frame. */
+  vatApplies: boolean
+}
+
 export interface Scale {
   origPxPerCm: number
   dispPxPerCm: number
@@ -24,7 +58,17 @@ export interface Artwork {
   price: number
   artist: string
   framingStatus: FramingStatus
-  framingCost: number | null
+  /** Free text against the line: gallery, availability, advice, caveats. */
+  note: string
+  /** Unticked keeps the note in the consultant's view only. */
+  noteShownToClient: boolean
+  /** False for works bought outside the UK. Defaults true. */
+  vatApplies: boolean
+  discountStatus: DiscountStatus
+  /** 0–100. Null when no discount has been named. */
+  discountPercent: number | null
+  /** Framing, duty, crating: costs that belong to this work. */
+  subLineItems: SubLineItem[]
   /** Optional frame: type and width in mm (requires scale to be set) */
   frameType?: string | null
   frameWidthMm?: number | null
@@ -54,6 +98,14 @@ export interface ElevationOption {
   scalePxPerCm: number | null
   approved: boolean
   approvedAt: string | null
+  /**
+   * The consultant writing to the client. Distinct from `clientNotes`, which
+   * runs the other way. This is where pair and set pricing gets explained,
+   * since a rate agreed for two works belongs to the combination, not to
+   * either work on its own.
+   */
+  consultantNote: string
+  consultantNoteShownToClient: boolean
   artworks: Artwork[]
   foregroundMasks: ForegroundMasks | null
   /** Perspective correction corners (fractional 0-1 relative to display dimensions) */

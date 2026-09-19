@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   fmtGbp, fmtRange,
   computeProjectTotals, installCostDisplay, consultantFeeRange,
-  displayFrozenAmount,
+  displayFrozenAmount, applyVat,
 } from './budgetCalc'
 import type { BudgetElevationData } from './budgetCalc'
 import type { BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem } from '@/types'
@@ -34,8 +34,16 @@ export default function TotalsPanel({
   const [budgetDraft, setBudgetDraft] = useState('')
 
   // ── Compute project totals ──────────────────────────────────────────────────
-  const pt = computeProjectTotals(elevations)
-  const { artMin, artMax, framingMin, framingMax, artCountMin, artCountMax, isRange, hasFraming } = pt
+  const pt = computeProjectTotals(elevations, vatMode)
+  const { min, max, isRange, hasFraming, hasOther } = pt
+
+  // Artwork spend drives the percentage fee and nothing else. Framing, duty
+  // and shipping are excluded, as framing always was.
+  const artMin = min.artVatable + min.artExempt
+  const artMax = max.artVatable + max.artExempt
+
+  const artCountMin = min.artCount
+  const artCountMax = max.artCount
 
   const install = installCostDisplay(installation, artCountMin, artCountMax)
   const installIsRange = install.isIndicative && install.min !== install.max
@@ -46,12 +54,27 @@ export default function TotalsPanel({
   const showFee = !!consultantFee && (isConsultant || consultantFee.shownToClient)
   const feeVatApplies = consultantFee?.vatApplies ?? true
 
-  // Artworks and framing are stored ex-VAT; follow the toggle uniformly.
-  const baseVatMult = vatMode ? 1.2 : 1
-  const dispArtMin = Math.round(artMin * baseVatMult)
-  const dispArtMax = Math.round(artMax * baseVatMult)
-  const dispFramingMin = Math.round(framingMin * baseVatMult)
-  const dispFramingMax = Math.round(framingMax * baseVatMult)
+  // Artworks and the costs hanging off them are stored ex-VAT, but each line
+  // carries its own VAT treatment now: a work bought outside the UK is not
+  // multiplied by 1.2 just because the toggle is on.
+  const dispArtVatMin = applyVat(min.artVatable, true, vatMode)
+  const dispArtVatMax = applyVat(max.artVatable, true, vatMode)
+  const dispArtExMin = min.artExempt
+  const dispArtExMax = max.artExempt
+
+  const dispFramingMin = applyVat(min.framingVatable, true, vatMode) + min.framingExempt
+  const dispFramingMax = applyVat(max.framingVatable, true, vatMode) + max.framingExempt
+
+  const dispOtherMin = applyVat(min.otherVatable, true, vatMode) + min.otherExempt
+  const dispOtherMax = applyVat(max.otherVatable, true, vatMode) + max.otherExempt
+
+  // How the artwork rows are laid out depends on what is actually in them.
+  const anyExempt = max.artExempt > 0
+  const anyVatable = max.artVatable > 0
+  const splitArtRows = anyExempt && anyVatable
+
+  const dispArtAllMin = dispArtVatMin + dispArtExMin
+  const dispArtAllMax = dispArtVatMax + dispArtExMax
 
   // Installation: indicative is always VAT-applicable and stored ex-VAT;
   // confirmed uses frozen-entry semantics.
@@ -96,8 +119,10 @@ export default function TotalsPanel({
   // Grand totals derived from display line items so the column always adds up
   const totalInstallMin = showInstallLine ? dispInstallMin : 0
   const totalInstallMax = showInstallLine ? dispInstallMax : 0
-  const totalMin = dispArtMin + dispFramingMin + totalInstallMin + dispCustomTotal + dispFeeMin
-  const totalMax = dispArtMax + dispFramingMax + totalInstallMax + dispCustomTotal + dispFeeMax
+  const totalMin = dispArtAllMin + dispFramingMin + dispOtherMin
+    + totalInstallMin + dispCustomTotal + dispFeeMin
+  const totalMax = dispArtAllMax + dispFramingMax + dispOtherMax
+    + totalInstallMax + dispCustomTotal + dispFeeMax
 
   // ── Client budget variance ──────────────────────────────────────────────────
   const budgetDisplay = clientBudget != null && vatMode
@@ -150,13 +175,38 @@ export default function TotalsPanel({
       <div className="budget-section-kicker">Summary</div>
 
       <div className="budget-totals-rows">
-        {/* Artworks */}
-        <div className="budget-totals-row">
-          <span className="budget-totals-label">Artworks</span>
-          <span className="budget-totals-value">
-            {fmtRange(dispArtMin, dispArtMax)}
-          </span>
-        </div>
+        {/* Artworks — split only when the project really has both kinds */}
+        {splitArtRows ? (
+          <>
+            <div className="budget-totals-row">
+              <span className="budget-totals-label">Artworks</span>
+              <span className="budget-totals-value">
+                {fmtRange(dispArtVatMin, dispArtVatMax)}
+              </span>
+            </div>
+            <div className="budget-totals-row">
+              <span className="budget-totals-label">
+                Artworks
+                <span className="budget-badge budget-badge--novat budget-badge--inline">No VAT</span>
+              </span>
+              <span className="budget-totals-value">
+                {fmtRange(dispArtExMin, dispArtExMax)}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="budget-totals-row">
+            <span className="budget-totals-label">
+              Artworks
+              {anyExempt && !anyVatable && (
+                <span className="budget-badge budget-badge--novat budget-badge--inline">No VAT</span>
+              )}
+            </span>
+            <span className="budget-totals-value">
+              {fmtRange(dispArtAllMin, dispArtAllMax)}
+            </span>
+          </div>
+        )}
 
         {/* Framing — conditional */}
         {hasFraming && (
@@ -164,6 +214,16 @@ export default function TotalsPanel({
             <span className="budget-totals-label">Framing</span>
             <span className="budget-totals-value">
               {fmtRange(dispFramingMin, dispFramingMax)}
+            </span>
+          </div>
+        )}
+
+        {/* Duty, shipping and anything else hanging off an artwork */}
+        {hasOther && (
+          <div className="budget-totals-row">
+            <span className="budget-totals-label">Other artwork costs</span>
+            <span className="budget-totals-value">
+              {fmtRange(dispOtherMin, dispOtherMax)}
             </span>
           </div>
         )}

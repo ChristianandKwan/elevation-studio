@@ -7,7 +7,7 @@ import StatusToast from '@/components/ui/StatusToast'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { DrawLoader } from '@/components/ui/Spinner'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
-import type { ProjectBudget } from '@/types'
+import type { ProjectBudget, DiscountStatus, SubLineItem } from '@/types'
 import { optionTitleFor, optionTagClass } from '@/lib/options'
 
 interface ClientArtwork {
@@ -22,7 +22,12 @@ interface ClientArtwork {
   price: number
   artist: string
   framingStatus: string
-  framingCost: number | null
+  note: string
+  noteShownToClient: boolean
+  vatApplies: boolean
+  discountStatus: DiscountStatus
+  discountPercent: number | null
+  subLineItems: SubLineItem[]
   brightness?: number | null
   fade?: number | null
 }
@@ -49,6 +54,8 @@ interface ClientOption {
   foreground_masks?: unknown
   artworks: ClientArtwork[]
   clientNotes: string
+  consultantNote: string
+  consultantNoteShownToClient: boolean
   skew_tl_x?: number | null
   skew_tl_y?: number | null
   skew_tr_x?: number | null
@@ -285,6 +292,8 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       label: opt.label,
       title: opt.title,
       name: opt.name?.trim() || null,
+      consultantNote: opt.consultantNote ?? '',
+      consultantNoteShownToClient: opt.consultantNoteShownToClient ?? true,
       artworks: opt.artworks.map(a => ({
         id: a.id,
         name: a.name,
@@ -293,8 +302,13 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         hCm: a.hCm,
         price: a.price,
         framingStatus: (a.framingStatus === 'requires_framing' ? 'requires_framing' : 'framed') as 'framed' | 'requires_framing',
-        framingCost: a.framingCost ?? null,
         visible: a.visible,
+        note: a.note ?? '',
+        noteShownToClient: a.noteShownToClient ?? true,
+        vatApplies: a.vatApplies ?? true,
+        discountStatus: a.discountStatus ?? 'none',
+        discountPercent: a.discountPercent ?? null,
+        subLineItems: a.subLineItems ?? [],
       })),
     })),
   }))

@@ -41,6 +41,8 @@ interface DbElevation {
     approved_at: string | null
     foreground_masks: unknown
     clientNotes: string
+    consultantNote: string
+    consultantNoteShownToClient: boolean
     skew_tl_x?: number | null
     skew_tl_y?: number | null
     skew_tr_x?: number | null
@@ -302,7 +304,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   xF: cur.xF, yF: cur.yF,
                   name: cur.name,
                   wCm: cur.wCm, hCm: cur.hCm,
-                  price: cur.price, artist: cur.artist, framingStatus: cur.framingStatus, framingCost: cur.framingCost,
+                  price: cur.price, artist: cur.artist, framingStatus: cur.framingStatus,
                   frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
                   brightness: cur.brightness,
                   fade: cur.fade,
@@ -440,7 +442,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null,
       elevation_options: [
-        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', artworks: [] },
+        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
@@ -492,7 +494,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           scale_px_per_cm: inheritedScale,
           approved: false, approved_at: null,
           foreground_masks: inheritedMasks,
-          clientNotes: '', artworks: [],
+          clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [],
         }],
       }
     }))
@@ -871,6 +873,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             projectId={project.id}
             onStatus={onStatus}
             clientNotes={activeOptData?.clientNotes ?? ''}
+            consultantNote={activeOptData?.consultantNote ?? ''}
+            consultantNoteShownToClient={activeOptData?.consultantNoteShownToClient ?? true}
             activityLogs={activityLogs}
             onRequestDeleteArtworks={requestDeleteArtworks}
             approvalStatus={{
@@ -907,6 +911,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               label: o.label,
               title: o.title,
               name: cleanOptionName(o.name),
+              consultantNote: o.consultantNote ?? '',
+              consultantNoteShownToClient: o.consultantNoteShownToClient ?? true,
               artworks: o.artworks.map(a => ({
                 id: a.id,
                 name: a.name,
@@ -915,8 +921,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                 hCm: a.hCm,
                 price: a.price,
                 framingStatus: a.framingStatus,
-                framingCost: a.framingCost,
                 visible: a.visible,
+                note: a.note ?? '',
+                noteShownToClient: a.noteShownToClient ?? true,
+                vatApplies: a.vatApplies ?? true,
+                discountStatus: a.discountStatus ?? 'none',
+                discountPercent: a.discountPercent ?? null,
+                subLineItems: a.subLineItems ?? [],
               })),
             })),
           }))}

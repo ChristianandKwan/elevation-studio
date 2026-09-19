@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState } from '@/types'
+import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState, SubLineItem } from '@/types'
+
+/** The line-item fields an edit panel may patch on one artwork. */
+export type ArtworkLineItemPatch = Partial<Pick<
+  Artwork,
+  'note' | 'noteShownToClient' | 'vatApplies' | 'discountStatus' | 'discountPercent' | 'subLineItems'
+>>
 import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
@@ -292,7 +298,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       price: art.price,
       artist: art.artist,
       framing_status: art.framingStatus,
-      framing_cost: art.framingCost,
+      note: art.note,
+      note_shown_to_client: art.noteShownToClient,
+      vat_applies: art.vatApplies,
+      discount_status: art.discountStatus,
+      discount_percent: art.discountPercent,
+      sub_line_items: art.subLineItems,
       brightness: art.brightness ?? 1,
       fade: art.fade ?? null,
       name: art.name,
@@ -1666,7 +1677,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         price: meta.price,
         artist: meta.artist,
         framing_status: meta.framingStatus,
-        framing_cost: meta.framingCost,
+        // A framing cost typed at upload starts life as a sub line item.
+        sub_line_items: meta.framingStatus === 'requires_framing' && meta.framingCost
+          ? [{
+              id: crypto.randomUUID(),
+              label: 'Framing',
+              kind: 'framing',
+              mode: 'fixed',
+              amount: meta.framingCost,
+              percent: 0,
+              vatApplies: true,
+            }]
+          : [],
         display_order: i,
       }).select().single()
 
@@ -1693,7 +1715,22 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         price: meta.price,
         artist: meta.artist,
         framingStatus: meta.framingStatus,
-        framingCost: meta.framingCost,
+        note: '',
+        noteShownToClient: true,
+        vatApplies: true,
+        discountStatus: 'none',
+        discountPercent: null,
+        subLineItems: meta.framingStatus === 'requires_framing' && meta.framingCost
+          ? [{
+              id: crypto.randomUUID(),
+              label: 'Framing',
+              kind: 'framing' as const,
+              mode: 'fixed' as const,
+              amount: meta.framingCost,
+              percent: 0,
+              vatApplies: true,
+            }]
+          : [],
         frameType: null,
         frameWidthMm: null,
         brightness: 1,
@@ -1883,11 +1920,54 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   function updateArtworkFraming(artId: string, framingStatus: 'framed' | 'requires_framing', framingCost: number | null) {
-    // A framed piece carries no framing cost, so switching back clears it
-    // rather than leaving a stale figure in the budget.
-    const cost = framingStatus === 'requires_framing' ? framingCost : null
+    // Framing is a sub line item like any other now. A framed piece carries
+    // none, so switching back removes it rather than leaving a stale figure
+    // in the budget.
     setState(s => {
-      const newArts = s.artworks.map(a => a.id === artId ? { ...a, framingStatus, framingCost: cost } : a)
+      const newArts = s.artworks.map(a => {
+        if (a.id !== artId) return a
+        const others = a.subLineItems.filter(i => i.kind !== 'framing')
+        if (framingStatus !== 'requires_framing') {
+          return { ...a, framingStatus, subLineItems: others }
+        }
+        const existing = a.subLineItems.find(i => i.kind === 'framing')
+        const framing: SubLineItem = {
+          id: existing?.id ?? crypto.randomUUID(),
+          label: existing?.label || 'Framing',
+          kind: 'framing',
+          mode: 'fixed',
+          amount: framingCost ?? 0,
+          percent: 0,
+          vatApplies: existing?.vatApplies ?? true,
+        }
+        return { ...a, framingStatus, subLineItems: [framing, ...others] }
+      })
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  /**
+   * The consultant's note on the current option, saved straight away.
+   *
+   * Written on blur rather than on every keystroke: it is a paragraph, not a
+   * slider, and the artwork debounce does not cover option-level columns.
+   */
+  async function saveConsultantNote(note: string, shownToClient: boolean) {
+    if (!optionId) return
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('elevation_options')
+      .update({ consultant_note: note, consultant_note_shown_to_client: shownToClient })
+      .eq('id', optionId)
+    if (error) onStatus('Note not saved: ' + error.message)
+    else onStatus('Note saved')
+  }
+
+  /** Patch the note, VAT, discount or sub items on one artwork. */
+  function updateArtworkLineItems(artId: string, patch: ArtworkLineItemPatch) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
       debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
     })
@@ -2301,6 +2381,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkName,
     updateArtworkArtist,
     updateArtworkFraming,
+    updateArtworkLineItems,
+    saveConsultantNote,
     updateArtworkFrame,
     updateArtworkBrightness,
     updateAllArtworksBrightness,
