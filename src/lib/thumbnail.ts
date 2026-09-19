@@ -18,7 +18,7 @@
 // components, route handlers, and server actions may import from here.
 import sharp from 'sharp'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { frameLipShadow } from '@/lib/frameShadow'
+import { frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
 
 const THUMB_W = 600 // max thumbnail width in pixels
 
@@ -182,7 +182,7 @@ export async function buildThumbnailBuffer(
             const shadowBuf = await sharp(padded).blur(blurSigma).png().toBuffer()
 
             const rad  = ((art.shadowAngle ?? 225) * Math.PI) / 180
-            const dist = shadowBlur * 0.55 * scale
+            const dist = shadowBlur * SHADOW_PUSH * scale
             const oX   = Math.round(-Math.sin(rad) * dist)
             const oY   = Math.round(Math.cos(rad) * dist)
 

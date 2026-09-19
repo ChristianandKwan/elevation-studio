@@ -12,7 +12,7 @@ export type ArtworkLineItemPatch = Partial<Pick<
 import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
-import { frameLipShadeElement, frameLipShadow } from '@/lib/frameShadow'
+import { frameLipShadeElement, frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -874,7 +874,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       }
       if (art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
         const rad = ((art.shadowAngle ?? 225) * Math.PI) / 180
-        const dist = art.shadowBlur * 0.55
+        const dist = art.shadowBlur * SHADOW_PUSH
         const oX = (-Math.sin(rad) * dist).toFixed(1)
         const oY = (Math.cos(rad) * dist).toFixed(1)
         divFilters.push(`drop-shadow(${oX}px ${oY}px ${art.shadowBlur.toFixed(1)}px rgba(0,0,0,${art.shadowOpacity.toFixed(2)}))`)
@@ -2139,7 +2139,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       let offY = 0
       if (blur > 0 && shadowOpacity > 0) {
         const rad = ((art.shadowAngle ?? 225) * Math.PI) / 180
-        const dist = blur * 0.55 * dispToOrig
+        const dist = blur * SHADOW_PUSH * dispToOrig
         const shadowX = -Math.sin(rad) * dist
         const shadowY = Math.cos(rad) * dist
         // Doubled: CSS drop-shadow reads its blur as the Gaussian's standard

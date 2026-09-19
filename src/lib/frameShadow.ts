@@ -13,9 +13,17 @@
 export const FRAME_LIP_SPREAD = 2 / 3
 
 /**
+ * How far every shadow is pushed away from the light, as a multiple of its
+ * blur. Below about 1 the blur still reaches past the artwork on the sun side;
+ * 0.9 leaves the soft halo diffuse room light gives, without the heavy band
+ * the old 0.55 left there.
+ */
+export const SHADOW_PUSH = 0.9
+
+/**
  * Offset and blur of the lip shadow, in the same pixels as `blur` (display
- * pixels as stored). Follows the wall shadow's geometry: offset is 0.55 of
- * the blur, pointing away from the light at `angle`.
+ * pixels as stored). Follows the wall shadow's geometry: offset is
+ * SHADOW_PUSH times the blur, pointing away from the light at `angle`.
  *
  * `blur` comes back as a box-shadow / canvas shadowBlur length, which is
  * twice the Gaussian's standard deviation. The wall shadow is a CSS
@@ -25,7 +33,7 @@ export const FRAME_LIP_SPREAD = 2 / 3
 export function frameLipShadow(angle: number | null | undefined, blur: number) {
   const rad = ((angle ?? 225) * Math.PI) / 180
   const lipBlur = blur * FRAME_LIP_SPREAD
-  const dist = lipBlur * 0.55
+  const dist = lipBlur * SHADOW_PUSH
   return { x: -Math.sin(rad) * dist, y: Math.cos(rad) * dist, blur: lipBlur * 2 }
 }
 

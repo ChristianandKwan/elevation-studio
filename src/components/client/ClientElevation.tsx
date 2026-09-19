@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from 'react'
 import NextImage from 'next/image'
 import { formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
-import { frameLipShadeElement } from '@/lib/frameShadow'
+import { frameLipShadeElement, SHADOW_PUSH } from '@/lib/frameShadow'
 import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface ClientArtwork {
@@ -464,7 +464,7 @@ function ClientCanvas({
         if ((art as any).shadowBlur != null && (art as any).shadowBlur > 0 &&
             (art as any).shadowOpacity != null && (art as any).shadowOpacity > 0) {
           const rad = (((art as any).shadowAngle ?? 225) * Math.PI) / 180
-          const dist = (art as any).shadowBlur * 0.55
+          const dist = (art as any).shadowBlur * SHADOW_PUSH
           const oX = (-Math.sin(rad) * dist).toFixed(1)
           const oY = (Math.cos(rad) * dist).toFixed(1)
           awFilters.push(`drop-shadow(${oX}px ${oY}px ${(art as any).shadowBlur.toFixed(1)}px rgba(0,0,0,${(art as any).shadowOpacity.toFixed(2)}))`)
