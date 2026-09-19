@@ -546,3 +546,17 @@
 .budget-variance-cell {
   font-size: 13.5px; font-weight: 500; text-align: right; white-space: nowrap;
 }
+
+/* ── SUMMARY PANEL RULES ─────────────────────────────────────
+   Two lines earned their keep elsewhere and not here.
+
+   The kicker's underline is a section divider, right under
+   ELEVATIONS and ADDITIONAL COSTS where the next thing is a
+   card. Inside the summary it sat a hair above the column
+   headings and crowded them. Scoped to this panel so the other
+   sections keep theirs.
+
+   The last row's underline sat directly above the heavy rule
+   that opens the total, which already does that job. */
+.budget-totals .budget-section-kicker { border-bottom: none; }
+.budget-totals-rows > .budget-totals-row:last-child { border-bottom: none; }
