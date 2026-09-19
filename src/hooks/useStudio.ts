@@ -2113,7 +2113,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       // the shadow it throws inwards lands on the tile.
       if (frame > 0 && blur > 0 && shadowOpacity > 0) {
         const lip = frameLipShadow(art.shadowAngle, blur * dispToOrig)
-        const reach = Math.ceil(lip.blur + Math.abs(lip.x) + Math.abs(lip.y)) + 1
+        const reach = Math.ceil(lip.blur * 1.5 + Math.abs(lip.x) + Math.abs(lip.y)) + 1
         tctx.save()
         tctx.beginPath()
         tctx.rect(frame, frame, w, h)

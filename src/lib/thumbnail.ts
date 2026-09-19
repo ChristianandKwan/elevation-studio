@@ -67,7 +67,8 @@ async function frameLipShade(
   w: number, h: number, angle: number | null | undefined, blur: number, opacity: number
 ): Promise<Buffer> {
   const lip = frameLipShadow(angle, blur)
-  const sigma = Math.max(0.3, lip.blur * 0.55)
+  // lip.blur is twice the standard deviation; 0.55 matches the wall shadow's sigma above.
+  const sigma = Math.max(0.3, (lip.blur / 2) * 0.55)
   const ox = Math.round(lip.x)
   const oy = Math.round(lip.y)
   const pad = Math.ceil(sigma * 3) + Math.abs(ox) + Math.abs(oy) + 1
