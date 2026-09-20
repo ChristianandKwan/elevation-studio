@@ -33,15 +33,18 @@
 /* The title is centred on the header, while .studio-header-right never shrinks,
    so past a certain narrowness the two collide. The threshold depends on how
    many buttons are on the right, which is why there are two of them:
-     · normal        → right side ~366px, title 185px → needs ~917px
-     · approved      → adds "✓ Approved" + Unapprove (~530px) → needs ~1285px
-   Measured at 22px; each breakpoint carries ~20px of slack for font rendering.
+     · normal        → right side 435px, title 185px → collides below 1103px
+     · approved      → adds "✓ Approved" + Unapprove → collides below 1411px
+   Measured in a browser at 22px with the real fonts loaded, then rounded up
+   for slack. Re-measure these whenever a button joins the right-hand group:
+   the Index tab added ~59px and the old thresholds (939 / 1309) let the
+   toggle ride over the wordmark for a 160px band of window widths.
    .studio-header--wide-actions is set by StudioScreen whenever the wider set
    is on screen. */
-@media (max-width: 939px) {
+@media (max-width: 1124px) {
   .header-app-title { display: none; }
 }
-@media (max-width: 1309px) {
+@media (max-width: 1434px) {
   .studio-header--wide-actions .header-app-title { display: none; }
 }
 .save-status--error  { color: var(--red); }

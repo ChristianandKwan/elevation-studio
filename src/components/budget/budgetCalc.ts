@@ -6,7 +6,10 @@ import type {
 // ── Types used across budget components ───────────────────────────────────────
 
 export interface BudgetArtwork {
+  /** The placement. Two options showing the same print are two of these. */
   id: string
+  /** The work. Money and notes are written here, so both placements move. */
+  workId: string
   name: string
   artist: string
   wCm: number

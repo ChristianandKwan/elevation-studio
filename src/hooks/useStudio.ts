@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState, SubLineItem } from '@/types'
+import type { Artwork, Work, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState, SubLineItem } from '@/types'
 
 /** The line-item fields an edit panel may patch on one artwork. */
 export type ArtworkLineItemPatch = Partial<Pick<
@@ -13,9 +13,15 @@ import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 import { frameLipShadeElement, frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import { placementRow, workRow } from '@/lib/works'
+import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
+// A server-side render takes 4–9 s. Leaving the studio waits for one so the
+// dashboard shows the wall as it was left, but gives up after this so a slow
+// render can't hold the consultant on the page.
+const THUMBNAIL_FLUSH_CAP_MS = 10000
 
 /**
  * Frame colours, shared by the on-screen overlay and the PNG export so the
@@ -150,8 +156,12 @@ interface UseStudioOptions {
   onElevationUploaded?: (data: { imagePath: string; imageUrl: string; origW: number; origH: number }) => void
   /** Called when the scale calibration is confirmed for the current option */
   onScaleSet?: (scalePxPerCm: number) => void
-  /** Called when artworks are successfully added to the current option */
-  onArtworksAdded?: (artworks: Array<Artwork & { imageUrl: string | null }>) => void
+  /**
+   * Called when artworks are placed on the current option. `works` holds any
+   * works created in the process (uploads); placing a work the project
+   * already had passes an empty list.
+   */
+  onArtworksAdded?: (artworks: Array<Artwork & { imageUrl: string | null }>, works: Work[]) => void
   /** Called when an artwork is deleted from the current option */
   onArtworkDeleted?: (id: string) => void
   /** Called only when foreground masks actually changed and were persisted, so sibling options sharing the wall photo can be synced */
@@ -243,20 +253,33 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // previous tab's pending render. Fire-and-forget; failures are
   // non-fatal (the dashboard falls back to the plain elevation URL).
   const thumbnailTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const thumbnailInFlight = useRef<string | null>(null)
   const thumbnailDirty = useRef(new Set<string>())
+  // The renders run one at a time, chained. Holding the chain as a promise is
+  // what lets `flushPendingAndRegen` wait for it: the dashboard reads a PNG
+  // from storage, so leaving before the render lands shows the *previous*
+  // state of the wall.
+  const thumbnailChain = useRef<Promise<void> | null>(null)
 
-  const runThumbnailRegen = useCallback<(id: string) => Promise<void>>(async id => {
-    if (thumbnailInFlight.current) { thumbnailDirty.current.add(id); return }
-    thumbnailInFlight.current = id
-    thumbnailDirty.current.delete(id)
-    try {
-      await fetch(`/api/thumbnails/${id}`, { method: 'POST' })
-    } catch { /* non-fatal */ }
-    thumbnailInFlight.current = null
-    // Anything that changed while that render ran gets one more pass.
-    const next = thumbnailDirty.current.values().next().value
-    if (next) void runThumbnailRegen(next)
+  const runThumbnailRegen = useCallback((id: string): Promise<void> => {
+    thumbnailDirty.current.add(id)
+    // A render is already running: it will pick this id up before it settles,
+    // so the caller can wait on the same chain.
+    if (thumbnailChain.current) return thumbnailChain.current
+    const drain = async (): Promise<void> => {
+      while (thumbnailDirty.current.size > 0) {
+        const next = thumbnailDirty.current.values().next().value as string
+        thumbnailDirty.current.delete(next)
+        try {
+          await fetch(`/api/thumbnails/${next}`, { method: 'POST' })
+        } catch { /* non-fatal */ }
+      }
+      thumbnailChain.current = null
+    }
+    // The id above is always queued, so `drain` suspends on its first fetch
+    // and this assignment lands before the chain can clear itself.
+    const running = drain()
+    thumbnailChain.current = running
+    return running
   }, [])
 
   const scheduleThumbnailRegen = useCallback((id: string = optionId) => {
@@ -270,13 +293,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }, THUMBNAIL_DEBOUNCE_MS))
   }, [optionId, runThumbnailRegen])
 
-  /** Run every debounce-pending render now (leaving the studio), plus `alsoId` if given. */
-  const flushThumbnailRegens = useCallback((alsoId?: string) => {
+  /**
+   * Run every debounce-pending render now (leaving the studio) and resolve
+   * when they have all landed. Resolves immediately when nothing is pending
+   * and nothing is running — an option nobody touched is not re-rendered.
+   */
+  const flushThumbnailRegens = useCallback((): Promise<void> => {
     const ids = new Set(thumbnailTimers.current.keys())
     thumbnailTimers.current.forEach(t => clearTimeout(t))
     thumbnailTimers.current.clear()
-    if (alsoId) ids.add(alsoId)
-    ids.forEach(id => { void runThumbnailRegen(id) })
+    ids.forEach(id => { thumbnailDirty.current.add(id) })
+    if (thumbnailDirty.current.size === 0) return thumbnailChain.current ?? Promise.resolve()
+    const first = thumbnailDirty.current.values().next().value as string
+    return runThumbnailRegen(first)
   }, [runThumbnailRegen])
 
   // ─── WHAT THE DATABASE LAST SAW ───────────────────────────────────
@@ -286,38 +315,16 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // snapshots let persistOption write only what actually changed. They
   // are set when an option loads and after each successful write.
   const lastSavedMasks = useRef<string>('null')
-  const lastSavedArts = useRef(new Map<string, string>())
-
-  /** The columns a save writes for one artwork, in the shape the DB takes. */
-  function artworkRow(art: Artwork) {
-    return {
-      x_fraction: art.xF,
-      y_fraction: art.yF,
-      w_cm: art.wCm,
-      h_cm: art.hCm,
-      visible: art.visible,
-      price: art.price,
-      artist: art.artist,
-      note: art.note,
-      note_shown_to_client: art.noteShownToClient,
-      vat_applies: art.vatApplies,
-      discount_status: art.discountStatus,
-      discount_percent: art.discountPercent,
-      sub_line_items: art.subLineItems,
-      brightness: art.brightness ?? 1,
-      fade: art.fade ?? null,
-      name: art.name,
-      frame_type: art.frameType ?? null,
-      frame_width_mm: art.frameWidthMm ?? null,
-      shadow_angle: art.shadowAngle ?? null,
-      shadow_blur: art.shadowBlur ?? null,
-      shadow_opacity: art.shadowOpacity ?? null,
-    }
-  }
+  // Two snapshots, because a save writes two tables: the placement (where it
+  // hangs, frame, lighting) by its own id, and the work (name, size, money,
+  // notes) by work id. The halves are defined once, in src/lib/works.ts.
+  const lastSavedPlacements = useRef(new Map<string, string>())
+  const lastSavedWorks = useRef(new Map<string, string>())
 
   function rememberSaved(masks: ForegroundMasks, arts: Artwork[]) {
     lastSavedMasks.current = JSON.stringify(masks.length > 0 ? masks : null)
-    lastSavedArts.current = new Map(arts.map(a => [a.id, JSON.stringify(artworkRow(a))]))
+    lastSavedPlacements.current = new Map(arts.map(a => [a.id, JSON.stringify(placementRow(a))]))
+    lastSavedWorks.current = new Map(arts.map(a => [a.workId, JSON.stringify(workRow(a))]))
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────
@@ -1650,92 +1657,111 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   // ─── ADD ARTWORKS ─────────────────────────────────────────────────
-  async function addArtworks(files: File[], metas: Array<{
-    name: string; wCm: number; hCm: number; price: number
-    artist: string
-  }>) {
-    const supabase = createClient()
-    let completed = 0
-    const total = files.length
-
-    const results = await Promise.all(files.map(async (file, i) => {
-      const meta = metas[i] ?? metas[0]
-      const path = `${projectId}/${optionId}/art-${crypto.randomUUID()}.${file.name.split('.').pop()}`
-      const { error } = await supabase.storage.from('artwork-images').upload(path, file)
-      if (error) { onStatus('Upload failed: ' + error.message); return null }
-
-      const { data: signed } = await supabase.storage.from('artwork-images').createSignedUrl(path, STUDIO_SIGNED_URL_TTL)
-      const url = signed?.signedUrl
-      if (!url) return null
-
-      const name = meta.name || file.name.replace(/\.[^.]+$/, '')
-      const off = 0.06 * i
-
-      const { data: artRow } = await supabase.from('artworks').insert({
-        option_id: optionId,
-        name,
-        image_path: path,
-        w_cm: meta.wCm,
-        h_cm: meta.hCm,
-        x_fraction: Math.min(0.08 + off, 0.6),
-        y_fraction: Math.min(0.08 + off, 0.6),
-        visible: true,
-        price: meta.price,
-        artist: meta.artist,
-        display_order: i,
-      }).select().single()
-
-      if (!artRow) return null
-
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
+  /** The studio's copy of a freshly placed work, with its image loaded. */
+  async function artworkFromPlacement(work: Work, placementId: string, xF: number, yF: number): Promise<Artwork> {
+    let url = work.imageUrl
+    if (!url && work.imagePath) url = await resignStorageUrl('artwork-images', work.imagePath)
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    if (url) {
+      const src = url
       await new Promise<void>(resolve => {
         img.onload = () => resolve()
         img.onerror = () => resolve()
-        img.src = url
+        img.src = src
       })
+    }
+    return {
+      id: placementId,
+      workId: work.id,
+      name: work.name,
+      imageUrl: url,
+      imagePath: work.imagePath,
+      wCm: work.wCm,
+      hCm: work.hCm,
+      xF,
+      yF,
+      visible: true,
+      price: work.price,
+      artist: work.artist,
+      note: work.note,
+      noteShownToClient: work.noteShownToClient,
+      vatApplies: work.vatApplies,
+      discountStatus: work.discountStatus,
+      discountPercent: work.discountPercent,
+      subLineItems: work.subLineItems,
+      frameType: null,
+      frameWidthMm: null,
+      brightness: 1,
+      img: url ? img : null,
+    }
+  }
 
-      const newArt: Artwork = {
-        id: artRow.id,
-        name,
-        imageUrl: url,
-        imagePath: path,
-        wCm: meta.wCm,
-        hCm: meta.hCm,
-        xF: Math.min(0.08 + off, 0.6),
-        yF: Math.min(0.08 + off, 0.6),
-        visible: true,
-        price: meta.price,
-        artist: meta.artist,
-        note: '',
-        noteShownToClient: true,
-        vatApplies: true,
-        discountStatus: 'none',
-        discountPercent: null,
-        subLineItems: [],
-        frameType: null,
-        frameWidthMm: null,
-        brightness: 1,
-        img,
-      }
+  /** Hang a work on the open option: the placement row, staggered so a batch doesn't land in a pile. */
+  async function insertPlacement(workId: string, i: number): Promise<{ id: string; xF: number; yF: number } | null> {
+    const supabase = createClient()
+    const off = 0.06 * i
+    const xF = Math.min(0.08 + off, 0.6)
+    const yF = Math.min(0.08 + off, 0.6)
+    const { data, error } = await supabase.from('artworks').insert({
+      option_id: optionId,
+      work_id: workId,
+      x_fraction: xF,
+      y_fraction: yF,
+      visible: true,
+      display_order: i,
+    }).select('id').single()
+    if (error || !data) {
+      onStatus('Could not place this work: ' + (error?.message ?? 'unknown error'))
+      return null
+    }
+    return { id: data.id as string, xF, yF }
+  }
 
-      completed++
-      if (total > 1) onStatus(`Uploaded ${completed} of ${total}…`)
-
-      return newArt
-    }))
-
-    const placed = results.filter((a): a is Artwork => a !== null)
+  function commitPlaced(placed: Artwork[], newWorks: Work[], statusText: string) {
     setState(s => {
       const newArts = [...s.artworks, ...placed]
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       return { ...s, artworks: newArts }
     })
-    onArtworksAddedRef.current?.(placed)
+    onArtworksAddedRef.current?.(placed, newWorks)
     if (placed.length > 0) scheduleThumbnailRegen()
-
     setShowArtModal(false)
-    onStatus(placed.length === 1 ? `Artwork placed — drag to position` : `${placed.length} artworks placed`)
+    onStatus(statusText)
+  }
+
+  /** Upload new works and hang each on the open option. */
+  async function addArtworks(files: File[], metas: WorkMeta[]) {
+    let completed = 0
+    const total = files.length
+
+    const results = await Promise.all(files.map(async (file, i) => {
+      const work = await uploadWork(projectId, file, metas[i] ?? metas[0], onStatus)
+      if (!work) return null
+      const placement = await insertPlacement(work.id, i)
+      // The work exists even if hanging it failed — the index will show it.
+      if (!placement) return { work, art: null }
+      const art = await artworkFromPlacement(work, placement.id, placement.xF, placement.yF)
+      completed++
+      if (total > 1) onStatus(`Uploaded ${completed} of ${total}…`)
+      return { work, art }
+    }))
+
+    const newWorks = results.flatMap(r => (r ? [r.work] : []))
+    const placed = results.flatMap(r => (r?.art ? [r.art] : []))
+    commitPlaced(placed, newWorks, placed.length === 1 ? 'Artwork placed — drag to position' : `${placed.length} artworks placed`)
+  }
+
+  /** Hang works the project already has on the open option — no upload. */
+  async function placeExistingWorks(works: Work[]) {
+    const base = stateRef.current.artworks.length
+    const results = await Promise.all(works.map(async (work, i) => {
+      const placement = await insertPlacement(work.id, base + i)
+      if (!placement) return null
+      return artworkFromPlacement(work, placement.id, placement.xF, placement.yF)
+    }))
+    const placed = results.filter((a): a is Artwork => a !== null)
+    commitPlaced(placed, [], placed.length === 1 ? `${placed[0].name} placed — drag to position` : `${placed.length} works placed`)
   }
 
   // ─── SAVE (debounced) ─────────────────────────────────────────────
@@ -1761,8 +1787,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const pendingId = optionId
       const hadSave = !!saveTimer.current
       if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-      if (hadSave && pendingId) persistOption(stateRef.current)
-      flushThumbnailRegens(hadSave && pendingId ? pendingId : undefined)
+      // Regen only once the write has landed — a render started alongside the
+      // save composites the wall as it was before it.
+      if (hadSave && pendingId) {
+        void persistOption(stateRef.current).then(() => runThumbnailRegen(pendingId))
+      }
+      void flushThumbnailRegens()
     }
   }, [])
 
@@ -1770,16 +1800,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // Callers (e.g. the Dashboard back button) await this so the dashboard never renders a stale preview.
   async function flushPendingAndRegen(): Promise<void> {
     if (!optionId) return
-    const currentId = optionId
-    // Option data (artworks + foreground masks)
+    // Option data (artworks + foreground masks). A write that changes the
+    // wall schedules its own regen, which the flush below then picks up —
+    // so an option nobody touched costs nothing here.
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
       await persistOption(stateRef.current)
     }
-    // Thumbnail — fire-and-forget so dashboard navigation isn't blocked on
-    // server-side sharp compositing. Dashboard refetches thumbnails on mount.
-    flushThumbnailRegens(currentId)
+    // Thumbnail. The dashboard serves a PNG built on the server, so leaving
+    // before that render lands shows the wall as it was one edit ago. Wait
+    // for it — but never longer than THUMBNAIL_FLUSH_CAP_MS, because a slow
+    // render must not strand the consultant in the studio. The dashboard is
+    // stale for one refresh in that case, not wrong forever.
+    await Promise.race([
+      flushThumbnailRegens(),
+      new Promise<void>(r => setTimeout(r, THUMBNAIL_FLUSH_CAP_MS)),
+    ])
   }
 
   /**
@@ -1807,17 +1844,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         onForegroundSavedRef.current?.(s.masks)
       }
 
-      // Artworks whose saved columns differ from the snapshot.
-      const changed = s.artworks
-        .map(art => { const row = artworkRow(art); return { art, row, json: JSON.stringify(row) } })
-        .filter(({ art, json }) => lastSavedArts.current.get(art.id) !== json)
-      const results = await Promise.all(
-        changed.map(({ art, row }) => supabase.from('artworks').update(row).eq('id', art.id))
-      )
+      // Placements whose columns differ from the snapshot, and works likewise.
+      // A moved artwork writes its placement; a resized one writes its work.
+      const placements = s.artworks
+        .map(art => { const row = placementRow(art); return { art, row, json: JSON.stringify(row) } })
+        .filter(({ art, json }) => lastSavedPlacements.current.get(art.id) !== json)
+      const worksChanged = s.artworks
+        .map(art => { const row = workRow(art); return { art, row, json: JSON.stringify(row) } })
+        .filter(({ art, json }) => lastSavedWorks.current.get(art.workId) !== json)
+      const results = await Promise.all([
+        ...placements.map(({ art, row }) => supabase.from('artworks').update(row).eq('id', art.id)),
+        ...worksChanged.map(({ art, row }) => supabase.from('works').update(row).eq('id', art.workId)),
+      ])
       const artErr = results.find(r => r.error)?.error
       if (artErr) throw artErr
-      changed.forEach(({ art, json }) => lastSavedArts.current.set(art.id, json))
-      if (changed.length > 0) wrote = true
+      placements.forEach(({ art, json }) => lastSavedPlacements.current.set(art.id, json))
+      worksChanged.forEach(({ art, json }) => lastSavedWorks.current.set(art.workId, json))
+      if (placements.length > 0 || worksChanged.length > 0) wrote = true
 
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
@@ -1829,34 +1872,15 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }
   }
 
-  // ─── DELETE ARTWORK ───────────────────────────────────────────────
+  // ─── REMOVE FROM WALL ─────────────────────────────────────────────
+  /**
+   * Take a work off this option. Only the placement row goes: the work stays
+   * in the project, image and all, and the index still lists it. Deleting
+   * the work itself is the index's job.
+   */
   async function deleteArtwork(artId: string) {
     const supabase = createClient()
-
-    // The file is read before the row goes, and removed after. Deleting the row
-    // alone used to strand the image permanently — the single biggest source of
-    // orphaned files. Artwork images are per-artwork (`art-{uuid}.{ext}`), but
-    // the reference check still runs in case a future duplicate action reuses a
-    // path. Storage removal is best-effort; the sweep endpoint is the backstop.
-    const { data: doomed } = await supabase
-      .from('artworks')
-      .select('image_path')
-      .eq('id', artId)
-      .maybeSingle()
-
     await supabase.from('artworks').delete().eq('id', artId)
-
-    const oldPath = doomed?.image_path as string | null | undefined
-    if (oldPath) {
-      const { data: stillUsed, error } = await supabase
-        .from('artworks')
-        .select('id')
-        .eq('image_path', oldPath)
-        .limit(1)
-      if (!error && (!stillUsed || stillUsed.length === 0)) {
-        await supabase.storage.from('artwork-images').remove([oldPath])
-      }
-    }
 
     setState(s => {
       const newArts = s.artworks.filter(a => a.id !== artId)
@@ -1867,6 +1891,22 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
     })
     onArtworkDeletedRef.current?.(artId)
+    scheduleThumbnailRegen()
+  }
+
+  /**
+   * The index deleted a work. Its placements are already gone from the
+   * database (the delete cascades), so only the studio's copy needs dropping.
+   */
+  function removePlacementsOfWork(workId: string) {
+    setState(s => {
+      if (!s.artworks.some(a => a.workId === workId)) return s
+      const newArts = s.artworks.filter(a => a.workId !== workId)
+      const newSelIds = new Set([...s.selIds].filter(id => newArts.some(a => a.id === id)))
+      const newSelId = s.selId && newSelIds.has(s.selId) ? s.selId : null
+      renderArtworksDOM(newArts, s.elev, s.scale, newSelIds)
+      return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
+    })
     scheduleThumbnailRegen()
   }
 
@@ -1912,11 +1952,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function patchArtworkLocal(artId: string, patch: Partial<Artwork>) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
+      // Redraw the wall. The artworks are DOM overlays, not React children,
+      // and the studio view stays mounted while the index and budget are on
+      // screen — so without this a size changed elsewhere sits in state with
+      // the canvas still showing the old one until the page is reloaded.
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       // Mark only this artwork as already written, never the whole option: a
       // sibling may have an unsaved drag still sitting in the debounce, and
       // calling rememberSaved for all of them would drop it.
       const saved = newArts.find(a => a.id === artId)
-      if (saved) lastSavedArts.current.set(artId, JSON.stringify(artworkRow(saved)))
+      if (saved) {
+        lastSavedPlacements.current.set(artId, JSON.stringify(placementRow(saved)))
+        lastSavedWorks.current.set(saved.workId, JSON.stringify(workRow(saved)))
+      }
       return { ...s, artworks: newArts }
     })
   }
@@ -2358,7 +2406,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     changeZoom,
     setZoomFit,
     addArtworks,
+    placeExistingWorks,
     deleteArtwork,
+    removePlacementsOfWork,
+    scheduleThumbnailRegen,
     toggleVisibility,
     updateArtworkDims,
     updateArtworkPrice,

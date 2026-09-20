@@ -33,7 +33,7 @@ interface Props {
    * Editing the money. Supplied by the consultant's studio and left out of the
    * client portal, which makes every line read-only there.
    */
-  onArtworkChange?: (artworkId: string, patch: BudgetArtworkPatch) => void
+  onArtworkChange?: (workId: string, patch: BudgetArtworkPatch) => void
   onOptionNoteChange?: (elevationId: string, optionKey: string, note: string, shownToClient: boolean) => void
 }
 

@@ -15,11 +15,13 @@ import { ArcSpinner, DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
-import type { Artwork, ActivityLog } from '@/types'
+import type { Artwork, ActivityLog, Work } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
-import { toArtworkColumns } from '@/lib/lineItems'
-import type { BudgetArtworkPatch } from '@/components/budget/budgetCalc'
+import { toWorkColumns, placementsOf } from '@/lib/works'
+import type { WorkPatch, IndexElevation } from '@/lib/works'
+import { uploadWork, type WorkMeta } from '@/lib/workUpload'
+import IndexScreen from '@/components/index/IndexScreen'
 
 interface DbElevation {
   id: string
@@ -67,6 +69,10 @@ interface Props {
   /** True when this project's most recent client link has passed its expiry. */
   clientLinkExpired: boolean
   activityLogs: ActivityLog[]
+  /** Every work in the project, placed or not. The index lists these. */
+  initialWorks: Work[]
+  /** Artist names across the consultant's projects, for the pick-from-previous list. */
+  artistSuggestions: string[]
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
@@ -81,7 +87,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, artistSuggestions }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -98,7 +104,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [projectStatus, setProjectStatus] = useState(project.status)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
   const [budget, setBudget] = useState<number | null>(project.budget)
-  const [view, setView] = useState<'studio' | 'budget'>('studio')
+  const [view, setView] = useState<'studio' | 'index' | 'budget'>('studio')
+  // Every work in the project, placed or not. The index reads this; the
+  // studio and budget read the copies folded into `elevations`.
+  const [works, setWorks] = useState<Work[]>(initialWorks)
+  const [showIndexAddModal, setShowIndexAddModal] = useState(false)
+  const [pendingDeleteWorkId, setPendingDeleteWorkId] = useState<string | null>(null)
   const [isPreviewingClientView, setIsPreviewingClientView] = useState(false)
   const [returningToDashboard, setReturningToDashboard] = useState(false)
   const [showIntroLoader, setShowIntroLoader] = useState(true)
@@ -151,7 +162,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         }
       }))
     },
-    onArtworksAdded: (newArtworks) => {
+    onArtworksAdded: (newArtworks, newWorks) => {
       setElevations(prev => prev.map(e => {
         if (e.id !== activeElevId) return e
         return {
@@ -162,6 +173,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           }),
         }
       }))
+      if (newWorks.length > 0) setWorks(prev => [...prev, ...newWorks])
     },
     onArtworkDeleted: (id) => {
       setElevations(prev => prev.map(e => {
@@ -303,12 +315,23 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const currentArts = studio.state.artworks
     const currentMasks = studio.state.masks
     if (!activeElevId || !activeOption) return
-    setElevations(prev => prev.map(e => {
-      if (e.id !== activeElevId) return e
-      return {
-        ...e,
-        elevation_options: e.elevation_options.map(o => {
-          if (o.option !== activeOption) return o
+    // Name, artist, size and the money belong to the work, not to this
+    // placement of it — so every other placement of the same work, on any
+    // option or elevation, and the index's copy move with it.
+    const byWork = new Map(currentArts.map(a => [a.workId, a]))
+    const workFields = (cur: Artwork) => ({
+      name: cur.name, artist: cur.artist,
+      wCm: cur.wCm, hCm: cur.hCm,
+      price: cur.price,
+      note: cur.note, noteShownToClient: cur.noteShownToClient,
+      vatApplies: cur.vatApplies,
+      discountStatus: cur.discountStatus, discountPercent: cur.discountPercent,
+      subLineItems: cur.subLineItems,
+    })
+    setElevations(prev => prev.map(e => ({
+      ...e,
+      elevation_options: e.elevation_options.map(o => {
+        if (e.id === activeElevId && o.option === activeOption) {
           return {
             ...o,
             foreground_masks: currentMasks.length > 0 ? currentMasks : null,
@@ -317,87 +340,101 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               if (!cur) return a
               return {
                 ...a,
+                ...workFields(cur),
                 xF: cur.xF, yF: cur.yF,
-                name: cur.name,
-                wCm: cur.wCm, hCm: cur.hCm,
-                price: cur.price, artist: cur.artist,
                 frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
                 brightness: cur.brightness,
                 fade: cur.fade,
                 shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
                 visible: cur.visible,
-                note: cur.note,
-                noteShownToClient: cur.noteShownToClient,
-                vatApplies: cur.vatApplies,
-                discountStatus: cur.discountStatus,
-                discountPercent: cur.discountPercent,
-                subLineItems: cur.subLineItems,
               }
             }),
           }
-        }),
-      }
+        }
+        return {
+          ...o,
+          artworks: o.artworks.map(a => {
+            const cur = byWork.get(a.workId)
+            return cur ? { ...a, ...workFields(cur) } : a
+          }),
+        }
+      }),
+    })))
+    setWorks(prev => prev.map(w => {
+      const cur = byWork.get(w.id)
+      return cur ? { ...w, ...workFields(cur) } : w
     }))
   }, [studio.state.artworks, studio.state.masks, activeElevId, activeOption])
 
-  // ─── EDITING THE MONEY FROM THE BUDGET ────────────────────────────
-  // The budget owns price, VAT, discounts, sub items and notes. Writes go
-  // straight to the row by id, because the budget spans every elevation while
-  // the studio hook only knows the option currently open.
+  // ─── EDITING A WORK FROM THE BUDGET OR THE INDEX ─────────────────
+  // The money, the notes and the sourcing detail belong to the work, so a
+  // change is written to `works` by work id and shown on every placement of
+  // it. Writes go straight to the row because the budget and the index span
+  // every elevation while the studio hook only knows the option open.
   //
   // Debounced: the note fields fire on every keystroke, and one request per
   // character would be both wasteful and out of order.
 
   const WRITE_DELAY_MS = 600
-  const artworkPending = useRef(new Map<string, BudgetArtworkPatch>())
-  const artworkTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const workPending = useRef(new Map<string, WorkPatch>())
+  const workTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const notePending = useRef(new Map<string, { note: string; shownToClient: boolean }>())
   const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
-  const flushArtworkWrite = useCallback(async (artworkId: string) => {
-    const patch = artworkPending.current.get(artworkId)
-    artworkPending.current.delete(artworkId)
-    artworkTimers.current.delete(artworkId)
+  const flushWorkWrite = useCallback(async (workId: string) => {
+    const patch = workPending.current.get(workId)
+    workPending.current.delete(workId)
+    workTimers.current.delete(workId)
     if (!patch) return
 
     const supabase = createClient()
     const { data, error } = await supabase
-      .from('artworks')
-      .update(toArtworkColumns(patch))
-      .eq('id', artworkId)
+      .from('works')
+      .update(toWorkColumns(patch))
+      .eq('id', workId)
       .select('id')
 
     // `select` matters: without it an update that matches nothing, or that
     // row-level security filters out, comes back with no error at all.
     if (error) onStatus('Not saved: ' + error.message)
-    else if (!data || data.length === 0) onStatus('Not saved: this artwork could not be found')
+    else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
   }, [onStatus])
 
-  const handleArtworkChange = useCallback((artworkId: string, patch: BudgetArtworkPatch) => {
-    // Optimistic: the budget reads `elevations`, so it has to move now.
+  const handleWorkChange = useCallback((workId: string, patch: WorkPatch) => {
+    // Optimistic: the budget and the index read these, so they have to move now.
+    setWorks(prev => prev.map(w => (w.id === workId ? { ...w, ...patch } : w)))
     setElevations(prev => prev.map(e => ({
       ...e,
       elevation_options: e.elevation_options.map(o => ({
         ...o,
-        artworks: o.artworks.map(a => (a.id === artworkId ? { ...a, ...patch } : a)),
+        artworks: o.artworks.map(a => (a.workId === workId ? { ...a, ...patch } : a)),
       })),
     })))
 
-    // If this work is in the option the studio has open, its copy has to agree,
+    // If this work is on the option the studio has open, its copy has to agree,
     // or the next autosave from a drag would write the old figures back.
-    if (studio.state.artworks.some(a => a.id === artworkId)) {
-      studio.patchArtworkLocal(artworkId, patch)
+    studio.state.artworks
+      .filter(a => a.workId === workId)
+      .forEach(a => studio.patchArtworkLocal(a.id, patch))
+
+    // Size is the one work-level field the wall actually draws, so a resize
+    // from the index or the budget makes every dashboard picture holding this
+    // work out of date. Nothing else here changes what the wall looks like.
+    if (patch.wCm !== undefined || patch.hCm !== undefined) {
+      elevations.forEach(e => e.elevation_options.forEach(o => {
+        if (o.artworks.some(a => a.workId === workId)) studio.scheduleThumbnailRegen(o.id)
+      }))
     }
 
-    const merged = { ...artworkPending.current.get(artworkId), ...patch }
-    artworkPending.current.set(artworkId, merged)
-    const existing = artworkTimers.current.get(artworkId)
+    const merged = { ...workPending.current.get(workId), ...patch }
+    workPending.current.set(workId, merged)
+    const existing = workTimers.current.get(workId)
     if (existing) clearTimeout(existing)
-    artworkTimers.current.set(
-      artworkId,
-      setTimeout(() => { void flushArtworkWrite(artworkId) }, WRITE_DELAY_MS),
+    workTimers.current.set(
+      workId,
+      setTimeout(() => { void flushWorkWrite(workId) }, WRITE_DELAY_MS),
     )
-  }, [studio, flushArtworkWrite])
+  }, [studio, flushWorkWrite, elevations])
 
   const flushNoteWrite = useCallback(async (optionRowId: string) => {
     const pending = notePending.current.get(optionRowId)
@@ -453,15 +490,15 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   // Leaving the page with a write still queued would lose it.
   useEffect(() => {
-    const artTimers = artworkTimers.current
+    const wTimers = workTimers.current
     const nTimers = noteTimers.current
     return () => {
-      artTimers.forEach(t => clearTimeout(t))
+      wTimers.forEach(t => clearTimeout(t))
       nTimers.forEach(t => clearTimeout(t))
-      artworkPending.current.forEach((_, id) => { void flushArtworkWrite(id) })
+      workPending.current.forEach((_, id) => { void flushWorkWrite(id) })
       notePending.current.forEach((_, id) => { void flushNoteWrite(id) })
     }
-  }, [flushArtworkWrite, flushNoteWrite])
+  }, [flushWorkWrite, flushNoteWrite])
 
   async function handleSwitch(elevId: string, opt: string) {
     // Before switching: bring the studio's live edits into `elevations`.
@@ -529,18 +566,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         .eq('elevation_id', elevId)
 
       if (opts) {
-        // Fetch artwork image paths for all options
-        const optIds = opts.map(o => o.id)
-        const { data: arts } = await supabase
-          .from('artworks')
-          .select('image_path')
-          .in('option_id', optIds)
-
-        // Delete artwork images from storage
-        const artPaths = (arts ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
-        if (artPaths.length) {
-          await supabase.storage.from('artwork-images').remove(artPaths)
-        }
+        // Artwork images belong to works, which outlive the wall — only the
+        // wall photos go. The placements cascade with the option rows.
 
         // Delete elevation images from storage
         const elevPaths = opts.map(o => o.image_path).filter(Boolean) as string[]
@@ -669,9 +696,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (!opt || !elev) return
     const removedTitle = optionTitleFor(elev.elevation_options, optKey)
     const supabase = createClient()
-    // Delete artwork images
-    const artPaths = opt.artworks.map(a => (a as any).imagePath).filter(Boolean) as string[]
-    if (artPaths.length) await supabase.storage.from('artwork-images').remove(artPaths)
+    // Artwork images belong to works and stay; the placements cascade with the row.
     // Delete the elevation image — but ONLY if no other option still points at
     // it. Options of the same elevation deliberately share one wall photo:
     // handleSwitch copies image_path into an empty option so both show the same
@@ -881,6 +906,58 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     onStatus('Approval removed — client can make changes again')
   }
 
+  // ─── THE INDEX: ADDING AND DELETING WORKS ─────────────────────────
+
+  /** Best-effort, like the portal's logActivity: a failed log never fails the action. */
+  async function logActivity(type: string, text: string) {
+    const supabase = createClient()
+    const { error } = await supabase.from('activity_logs').insert({ project_id: project.id, type, text })
+    if (error) console.warn('activity log failed:', error.message)
+  }
+
+  /** Upload works into the project without hanging them anywhere. */
+  async function addWorksToIndex(files: File[], metas: WorkMeta[]) {
+    const results = await Promise.all(files.map((f, i) => uploadWork(project.id, f, metas[i] ?? metas[0], onStatus)))
+    const added = results.filter((w): w is Work => w !== null)
+    if (added.length === 0) return
+    setWorks(prev => [...prev, ...added])
+    setShowIndexAddModal(false)
+    onStatus(added.length === 1 ? `${added[0].name} added to the project` : `${added.length} works added to the project`)
+    void logActivity('work_added', `${PRACTICE_NAME} added ${added.map(w => w.name).join(', ')} to the project`)
+  }
+
+  /**
+   * Delete a work outright. Its placements go with it (the database
+   * cascades), so every wall it hung on is re-rendered, and its file goes.
+   */
+  async function deleteWork(workId: string) {
+    const work = works.find(w => w.id === workId)
+    if (!work) return
+    const supabase = createClient()
+    const { error } = await supabase.from('works').delete().eq('id', workId)
+    if (error) { onStatus('Could not delete this work: ' + error.message); return }
+    if (work.imagePath) await supabase.storage.from('artwork-images').remove([work.imagePath])
+
+    const affectedOptionIds = elevations.flatMap(e =>
+      e.elevation_options.filter(o => o.artworks.some(a => a.workId === workId)).map(o => o.id))
+    setElevations(prev => prev.map(e => ({
+      ...e,
+      elevation_options: e.elevation_options.map(o => ({ ...o, artworks: o.artworks.filter(a => a.workId !== workId) })),
+    })))
+    setWorks(prev => prev.filter(w => w.id !== workId))
+    studio.removePlacementsOfWork(workId)
+    affectedOptionIds.forEach(id => studio.scheduleThumbnailRegen(id))
+    onStatus(`${work.name} deleted`)
+    void logActivity('work_deleted', `${PRACTICE_NAME} deleted ${work.name} from the project`)
+  }
+
+  // What the index needs to say where each work hangs.
+  const indexElevations: IndexElevation[] = elevations.map(e => ({
+    id: e.id,
+    name: e.name,
+    options: labelOptions(e.elevation_options).map(o => ({ label: o.label, workIds: o.artworks.map(a => a.workId) })),
+  }))
+
   const { state } = studio
 
   // Widest right-hand button group: studio view with an approved option, which
@@ -888,7 +965,15 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const headerHasWideActions = view === 'studio' && !!activeOptData?.approved
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
+        // The studio has the sidebar down its left, so the wall's centre is
+        // half a sidebar right of the window's. The index and budget are
+        // full-width, and take the default of no shift.
+        '--status-bar-shift': view === 'studio' ? 'calc(var(--sidebar-w) / 2)' : '0px',
+      } as React.CSSProperties}
+    >
       {(returningToDashboard || showIntroLoader) && <DrawLoader variant="cream" />}
       {/* Header. The extra class tells the stylesheet that the right-hand group
           is in its widest form (the approved state adds a chip and an Unapprove
@@ -940,6 +1025,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               onClick={() => { setView('studio'); setIsPreviewingClientView(false) }}
             >
               Studio
+            </button>
+            <button
+              className={`budget-view-tab${view === 'index' ? ' active' : ''}`}
+              onClick={() => { syncStudioIntoElevations(); setView('index'); setIsPreviewingClientView(false) }}
+            >
+              Index
             </button>
             <button
               className={`budget-view-tab${view === 'budget' ? ' active' : ''}`}
@@ -1076,6 +1167,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               consultantNoteShownToClient: o.consultantNoteShownToClient ?? true,
               artworks: o.artworks.map(a => ({
                 id: a.id,
+                workId: a.workId,
                 name: a.name,
                 artist: a.artist ?? '',
                 wCm: a.wCm,
@@ -1096,8 +1188,22 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onPreviewToggle={() => setIsPreviewingClientView(v => !v)}
           clientBudget={budget}
           onClientBudgetChange={updateBudget}
-          onArtworkChange={handleArtworkChange}
+          onArtworkChange={handleWorkChange}
           onOptionNoteChange={handleOptionNoteChange}
+        />
+      )}
+
+      {/* Index view — every work in the project, placed or not. Mounted only when active. */}
+      {view === 'index' && (
+        <IndexScreen
+          projectName={project.name}
+          clientName={project.client_name}
+          works={works}
+          elevations={indexElevations}
+          artistSuggestions={artistSuggestions}
+          onWorkChange={handleWorkChange}
+          onAddWork={() => setShowIndexAddModal(true)}
+          onDeleteWork={id => setPendingDeleteWorkId(id)}
         />
       )}
 
@@ -1115,8 +1221,45 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onConfirm={studio.addArtworks}
           onCancel={() => studio.setShowArtModal(false)}
           wallPxPerCm={state.scale?.origPxPerCm ?? null}
+          availableWorks={works.filter(w => !(activeOptData?.artworks ?? []).some(a => a.workId === w.id))}
+          onPlaceExisting={studio.placeExistingWorks}
         />
       )}
+
+      {showIndexAddModal && (
+        <AddArtworkModal
+          mode="index"
+          onConfirm={addWorksToIndex}
+          onCancel={() => setShowIndexAddModal(false)}
+        />
+      )}
+
+      {/* Deleting a work from the project — from the index */}
+      {pendingDeleteWorkId && (() => {
+        const w = works.find(x => x.id === pendingDeleteWorkId)
+        const placed = w ? placementsOf(w.id, indexElevations) : []
+        return (
+          <div className="modal-bg open" onClick={() => setPendingDeleteWorkId(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Delete {w?.name ?? 'this work'} from the project?</div>
+              <div className="modal-sub" style={{ color: 'var(--red)' }}>
+                {placed.length > 0
+                  ? `It comes off ${placed.map(p => p.elevationName).join(' and ')} as well. This cannot be undone.`
+                  : 'Its image goes with it. This cannot be undone.'}
+              </div>
+              <div className="modal-footer">
+                <button className="btn" onClick={() => setPendingDeleteWorkId(null)}>Cancel</button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => { const id = pendingDeleteWorkId; setPendingDeleteWorkId(null); void deleteWork(id) }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {studio.showShareModal && (
         <ShareModal
@@ -1134,10 +1277,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         <div className="modal-bg open" onClick={() => setPendingDeleteIds(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-title">
-              Remove {pendingDeleteIds.size} artwork{pendingDeleteIds.size !== 1 ? 's' : ''}?
+              Take {pendingDeleteIds.size} artwork{pendingDeleteIds.size !== 1 ? 's' : ''} off this wall?
             </div>
-            <div className="modal-sub" style={{ color: 'var(--red)' }}>
-              This cannot be undone.
+            <div className="modal-sub">
+              {pendingDeleteIds.size !== 1 ? 'They stay' : 'It stays'} in the project — find
+              {pendingDeleteIds.size !== 1 ? ' them' : ' it'} in the Index to hang again or delete for good.
             </div>
             <div className="modal-footer">
               <button className="btn" onClick={() => setPendingDeleteIds(null)}>Cancel</button>

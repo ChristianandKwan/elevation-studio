@@ -13,6 +13,12 @@ export type OptionKey = string
  */
 export type DiscountStatus = 'none' | 'confirmed' | 'tbc'
 
+/**
+ * Where a work stands in the curation. Everything the consultant looked at
+ * is kept — a declined work keeps the note saying why it was not put forward.
+ */
+export type WorkStatus = 'proposed' | 'considered' | 'declined'
+
 export type SubLineItemKind = 'framing' | 'duty' | 'shipping' | 'other'
 
 /**
@@ -41,8 +47,48 @@ export interface Scale {
   dispPxPerCm: number
 }
 
+/**
+ * A work in the project — the thing itself, wherever (or whether) it hangs.
+ * Owned by the project since migration 026; see src/lib/works.ts.
+ */
+export interface Work {
+  id: string
+  projectId: string
+  artist: string
+  name: string
+  /** Storage path in `artwork-images`; null for a work with no image yet. */
+  imagePath: string | null
+  imageUrl: string | null
+  wCm: number
+  hCm: number
+  /** List price, ex-VAT, before any discount. */
+  price: number
+  vatApplies: boolean
+  discountStatus: DiscountStatus
+  discountPercent: number | null
+  subLineItems: SubLineItem[]
+  note: string
+  noteShownToClient: boolean
+  /** Sourcing detail: free text, because "2018", "c. 1973" and "2024 (from a 2019 series)" all happen. */
+  year: string | null
+  medium: string | null
+  edition: string | null
+  /** The gallery or publisher it comes from. */
+  source: string | null
+  status: WorkStatus
+  /** The elevation it is in mind for, hung there or not. */
+  consideredFor: string | null
+  displayOrder: number
+}
+
+/**
+ * A placement of a work on an elevation option, with the work's fields folded
+ * in: what the studio canvas, sidebar, budget and client portal all read.
+ * `id` is the placement; `workId` is the work it shows.
+ */
 export interface Artwork {
   id: string
+  workId: string
   name: string
   /** data URL (in memory) or signed URL (from storage) */
   imageUrl: string | null

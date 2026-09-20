@@ -24,7 +24,7 @@ const fail = (m) => { failures++; console.log(`  \x1b[31m✗\x1b[0m ${m}`) }
 // gone and no session, RLS should yield nothing on all of them.
 const TABLES = [
   'client_tokens', 'projects', 'elevations', 'elevation_options',
-  'artworks', 'activity_logs', 'profiles', 'project_budgets',
+  'artworks', 'activity_logs', 'profiles', 'project_budgets', 'works',
 ]
 
 console.log('\n── Anonymous reads (every table must return 0 rows) ──')

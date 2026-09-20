@@ -93,8 +93,6 @@ export default async function DashboardPage() {
       ...p,
       thumbnailUrl,
       elevCount,
-      artCount: 0,
-      artworks: [],
       origW: firstOption?.orig_w ?? 0,
       origH: firstOption?.orig_h ?? 0,
       scalePxPerCm: firstOption?.scale_px_per_cm ?? null,

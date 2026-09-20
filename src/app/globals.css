@@ -99,8 +99,12 @@ body {
 .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
 
 /* ── STATUS BAR ──────────────────────────────────────────── */
+/* Centred on the window by default. A screen with a fixed panel down one side
+   sets --status-bar-shift to half that panel's width, so the toast sits over
+   the middle of the area being worked in rather than the middle of the glass. */
 .status-bar {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 24px; left: calc(50% + var(--status-bar-shift, 0px));
+  transform: translateX(-50%);
   background: var(--charcoal); color: white; padding: 9px 20px; font-size: 12px;
   opacity: 0; transition: opacity .25s; pointer-events: none; white-space: nowrap; z-index: 9999;
   border-radius: var(--radius-sm);

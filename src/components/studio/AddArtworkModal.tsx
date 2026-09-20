@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { ArcSpinner } from '@/components/ui/Spinner'
 import { checkArtworkDetail } from '@/lib/utils'
+import type { Work } from '@/types'
 
 export interface ArtMeta {
   name: string
@@ -31,6 +32,15 @@ interface Props {
    * typed in. Null before calibration, when there is nothing to compare to.
    */
   wallPxPerCm?: number | null
+  /**
+   * `place` (the default) hangs the upload on the open option. `index` only
+   * adds it to the project — no wall, no scale needed — for works the
+   * consultant wants on hand before deciding where they go.
+   */
+  mode?: 'place' | 'index'
+  /** Works the project already has that aren't on this option, offered under "From this project". */
+  availableWorks?: Work[]
+  onPlaceExisting?: (works: Work[]) => void | Promise<void>
 }
 
 /**
@@ -55,7 +65,7 @@ function DetailNote({ filePx, wCm, wallPxPerCm }: { filePx: number | undefined; 
 const DEFAULT_W = 40
 const DEFAULT_H = 60
 
-export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Props) {
+export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode = 'place', availableWorks = [], onPlaceExisting }: Props) {
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
   /** Pixel width of each chosen file, read off the preview once it decodes. */
@@ -74,6 +84,12 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
   // Multi-file per-row metas
   const [rowMetas, setRowMetas] = useState<RowMeta[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // "From this project": only offered when placing, and only when there is
+  // something to offer. Starts on Upload so the familiar path is unchanged.
+  const canPickExisting = mode === 'place' && !!onPlaceExisting && availableWorks.length > 0
+  const [source, setSource] = useState<'upload' | 'existing'>('upload')
+  const [pickedIds, setPickedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
@@ -145,9 +161,26 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
     setRowMetas(prev => prev.map((m, idx) => idx === i ? { ...m, ...patch } : m))
   }
 
-  async function handleConfirm() {
-    if (!files.length || submitting) return
+  function togglePicked(id: string) {
+    setPickedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
+  async function handleConfirm() {
+    if (submitting) return
+
+    if (source === 'existing') {
+      const picked = availableWorks.filter(w => pickedIds.has(w.id))
+      if (!picked.length || !onPlaceExisting) return
+      setSubmitting(true)
+      try { await onPlaceExisting(picked) } finally { setSubmitting(false) }
+      return
+    }
+
+    if (!files.length) return
     const metas: ArtMeta[] = files.length === 1
       ? [{
           name: name.trim() || 'Untitled',
@@ -168,47 +201,95 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
     try {
       await onConfirm(files, metas)
     } finally {
-      // addArtworks closes the modal on success; resetting matters for the
+      // The caller closes the modal on success; resetting matters for the
       // case where it fails and leaves the modal open.
       setSubmitting(false)
     }
   }
 
   const isMulti = files.length > 1
+  const pickingExisting = source === 'existing'
+  const canConfirm = pickingExisting ? pickedIds.size > 0 : files.length > 0
+
+  const title = mode === 'index' ? 'Add a work to the project' : 'Add Artwork'
+  const subtitle = pickingExisting
+    ? 'Hang works the project already holds on this wall.'
+    : mode === 'index'
+      ? 'Upload the image and enter its details. It goes in the Index, ready to hang later.'
+      : isMulti
+        ? 'Set details individually for each artwork.'
+        : 'Upload the artwork image and enter its details.'
+  const confirmLabel = submitting
+    ? (mode === 'index' ? 'Adding…' : 'Placing…')
+    : pickingExisting
+      ? `Place ${pickedIds.size || ''} on Elevation`.replace('  ', ' ')
+      : mode === 'index'
+        ? 'Add to project'
+        : 'Place on Elevation'
 
   return (
     <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
-      <div className="modal" style={{ maxWidth: isMulti ? 600 : undefined }}>
-        <div className="modal-title">Add Artwork</div>
-        <div className="modal-sub">
-          {isMulti
-            ? 'Set details individually for each artwork.'
-            : 'Upload the artwork image and enter its details.'}
-        </div>
+      <div className="modal" style={{ maxWidth: isMulti || pickingExisting ? 600 : undefined }}>
+        <div className="modal-title">{title}</div>
+        <div className="modal-sub">{subtitle}</div>
 
-        <div className="field">
-          <label className="field-label">Artwork Image</label>
-          <div style={{ position: 'relative' }}>
-            <div className={`upload-zone${files.length ? ' has-file' : ''}`} onClick={pickImages}>
-              {files.length === 0 && 'Click to upload up to 5 artwork images'}
-              {files.length === 1 && files[0].name}
-              {files.length > 1 && `${files.length} artworks selected`}
-            </div>
-            {reading && <ArcSpinner size={36} />}
+        {canPickExisting && (
+          <div className="ble-seg work-pick-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={!pickingExisting} className={`ble-seg-btn${!pickingExisting ? ' active' : ''}`} onClick={() => setSource('upload')}>
+              Upload new
+            </button>
+            <button type="button" role="tab" aria-selected={pickingExisting} className={`ble-seg-btn${pickingExisting ? ' active' : ''}`} onClick={() => setSource('existing')}>
+              From this project ({availableWorks.length})
+            </button>
           </div>
-          <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilesChange} />
-          {sizeErrors.length > 0 && (
-            <div style={{ marginTop: 6, fontSize: 12, color: '#c0392b' }}>
-              The following files exceed the 20 MB limit and were not added:
-              <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-                {sizeErrors.map((err, i) => <li key={i}>{err}</li>)}
-              </ul>
+        )}
+
+        {pickingExisting && (
+          <div className="work-pick-list">
+            {availableWorks.map(w => (
+              <label key={w.id} className={`work-pick${pickedIds.has(w.id) ? ' selected' : ''}`}>
+                <input type="checkbox" checked={pickedIds.has(w.id)} onChange={() => togglePicked(w.id)} />
+                <div className="work-pick-thumb">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {w.imageUrl && <img src={w.imageUrl} alt="" />}
+                </div>
+                <div className="work-pick-main">
+                  <span className="work-pick-title">{w.name}</span>
+                  <span className="work-pick-meta">
+                    {w.artist && <>{w.artist} · </>}{w.wCm} × {w.hCm} cm
+                    {w.status !== 'proposed' && <> · {w.status}</>}
+                  </span>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {!pickingExisting && (
+          <div className="field">
+            <label className="field-label">Artwork Image</label>
+            <div style={{ position: 'relative' }}>
+              <div className={`upload-zone${files.length ? ' has-file' : ''}`} onClick={pickImages}>
+                {files.length === 0 && 'Click to upload up to 5 artwork images'}
+                {files.length === 1 && files[0].name}
+                {files.length > 1 && `${files.length} artworks selected`}
+              </div>
+              {reading && <ArcSpinner size={36} />}
             </div>
-          )}
-        </div>
+            <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilesChange} />
+            {sizeErrors.length > 0 && (
+              <div style={{ marginTop: 6, fontSize: 12, color: '#c0392b' }}>
+                The following files exceed the 20 MB limit and were not added:
+                <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                  {sizeErrors.map((err, i) => <li key={i}>{err}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Single file: original layout plus the artist field */}
-        {!isMulti && (
+        {!pickingExisting && !isMulti && (
           <>
             {previews.length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: -4, marginBottom: 12 }}>
@@ -226,7 +307,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
             </div>
             <div className="field">
               <label className="field-label">Artist</label>
-              <input type="text" className="field-input" value={artist} onChange={e => setArtist(e.target.value)} placeholder="e.g. Sarah Chen" />
+              <input type="text" className="field-input" list="index-artists" value={artist} onChange={e => setArtist(e.target.value)} placeholder="e.g. Sarah Chen" />
             </div>
             <div className="field-row">
               <div className="field">
@@ -238,7 +319,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
                 <input type="number" className="field-input" value={hCm} onChange={e => setHCm(e.target.value)} placeholder="60" min={1} step={0.5} />
               </div>
             </div>
-            <DetailNote filePx={naturalWidths[0]} wCm={parseFloat(wCm) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />
+            {mode === 'place' && <DetailNote filePx={naturalWidths[0]} wCm={parseFloat(wCm) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />}
             <div className="field">
               <label className="field-label">
                 Price (£)
@@ -250,7 +331,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
         )}
 
         {/* Multi-file: per-card layout */}
-        {isMulti && rowMetas.length > 0 && (
+        {!pickingExisting && isMulti && rowMetas.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
             {rowMetas.map((meta, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, padding: 10, background: 'var(--cream)', borderRadius: 6, border: '1px solid var(--border)' }}>
@@ -274,6 +355,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
                     <input
                       type="text"
                       className="field-input"
+                      list="index-artists"
                       value={meta.artist}
                       onChange={e => updateRow(i, { artist: e.target.value })}
                       placeholder="Artist"
@@ -295,7 +377,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
                       <input type="number" className="field-input" value={meta.price || ''} onChange={e => updateRow(i, { price: parseFloat(e.target.value) || 0 })} min={0} step={50} placeholder="0" style={{ fontSize: 12, width: 80 }} />
                     </div>
                   </div>
-                  <DetailNote filePx={naturalWidths[i]} wCm={parseFloat(meta.wStr) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />
+                  {mode === 'place' && <DetailNote filePx={naturalWidths[i]} wCm={parseFloat(meta.wStr) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />}
                 </div>
               </div>
             ))}
@@ -304,8 +386,8 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm }: Pr
 
         <div className="modal-footer">
           <button className="btn" onClick={onCancel} disabled={submitting}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleConfirm} disabled={!files.length || submitting}>
-            {submitting ? 'Placing…' : 'Place on Elevation'}
+          <button className="btn btn-primary" onClick={handleConfirm} disabled={!canConfirm || submitting}>
+            {confirmLabel}
           </button>
         </div>
       </div>

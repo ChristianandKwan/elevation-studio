@@ -334,6 +334,8 @@ interface OptionRowForThumbnail {
     shadow_angle: number | null
     shadow_blur: number | null
     shadow_opacity: number | null
+    /** The work this placement shows. Null only for a straggler row (see migration 026). */
+    work: { image_path: string | null; w_cm: number; h_cm: number } | null
   }>
 }
 
@@ -346,9 +348,10 @@ async function fetchOptionForThumbnail(
     .select(`
       id, image_path, orig_w, orig_h, scale_px_per_cm, foreground_masks,
       artworks(
-        image_path, x_fraction, y_fraction, w_cm, h_cm, visible,
+        x_fraction, y_fraction, visible,
         brightness, fade, frame_type, frame_width_mm,
-        shadow_angle, shadow_blur, shadow_opacity
+        shadow_angle, shadow_blur, shadow_opacity,
+        work:works(image_path, w_cm, h_cm)
       )
     `)
     .eq('id', optionId)
@@ -382,20 +385,25 @@ export async function regenerateOptionThumbnail(
     .createSignedUrl(row.image_path, 3600)
   if (!elevSigned?.signedUrl) return false
 
-  // Sign visible artworks in parallel
-  const visible = (row.artworks ?? []).filter(a => a.visible)
+  // Sign each visible artwork's image once — one work may hang on the wall
+  // more than once, and every placement of it shares the file.
+  const visible = (row.artworks ?? []).filter(a => a.visible && a.work?.image_path)
+  const paths = [...new Set(visible.map(a => a.work!.image_path as string))]
+  const urls = new Map<string, string>()
+  await Promise.all(paths.map(async path => {
+    const { data } = await supabase.storage.from('artwork-images').createSignedUrl(path, 3600)
+    if (data?.signedUrl) urls.set(path, data.signedUrl)
+  }))
   const signed = await Promise.all(
     visible.map(async (a): Promise<ArtworkEntry | null> => {
-      const { data } = await supabase.storage
-        .from('artwork-images')
-        .createSignedUrl(a.image_path, 3600)
-      if (!data?.signedUrl) return null
+      const url = urls.get(a.work!.image_path as string)
+      if (!url) return null
       return {
-        url:           data.signedUrl,
+        url,
         xF:            a.x_fraction,
         yF:            a.y_fraction,
-        wCm:           a.w_cm,
-        hCm:           a.h_cm,
+        wCm:           a.work!.w_cm,
+        hCm:           a.work!.h_cm,
         brightness:    a.brightness ?? 1,
         fade:          a.fade ?? null,
         frameType:     a.frame_type,

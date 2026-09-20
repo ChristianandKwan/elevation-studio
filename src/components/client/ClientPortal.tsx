@@ -12,6 +12,7 @@ import { optionTitleFor, optionTagClass } from '@/lib/options'
 
 interface ClientArtwork {
   id: string
+  workId: string
   name: string
   imageUrl: string | null
   wCm: number
@@ -295,6 +296,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       consultantNoteShownToClient: opt.consultantNoteShownToClient ?? true,
       artworks: opt.artworks.map(a => ({
         id: a.id,
+        workId: a.workId,
         name: a.name,
         artist: a.artist ?? '',
         wCm: a.wCm,
