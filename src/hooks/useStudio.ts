@@ -18,6 +18,10 @@ import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
+// A server-side render takes 4–9 s. Leaving the studio waits for one so the
+// dashboard shows the wall as it was left, but gives up after this so a slow
+// render can't hold the consultant on the page.
+const THUMBNAIL_FLUSH_CAP_MS = 10000
 
 /**
  * Frame colours, shared by the on-screen overlay and the PNG export so the
@@ -249,20 +253,33 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // previous tab's pending render. Fire-and-forget; failures are
   // non-fatal (the dashboard falls back to the plain elevation URL).
   const thumbnailTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const thumbnailInFlight = useRef<string | null>(null)
   const thumbnailDirty = useRef(new Set<string>())
+  // The renders run one at a time, chained. Holding the chain as a promise is
+  // what lets `flushPendingAndRegen` wait for it: the dashboard reads a PNG
+  // from storage, so leaving before the render lands shows the *previous*
+  // state of the wall.
+  const thumbnailChain = useRef<Promise<void> | null>(null)
 
-  const runThumbnailRegen = useCallback<(id: string) => Promise<void>>(async id => {
-    if (thumbnailInFlight.current) { thumbnailDirty.current.add(id); return }
-    thumbnailInFlight.current = id
-    thumbnailDirty.current.delete(id)
-    try {
-      await fetch(`/api/thumbnails/${id}`, { method: 'POST' })
-    } catch { /* non-fatal */ }
-    thumbnailInFlight.current = null
-    // Anything that changed while that render ran gets one more pass.
-    const next = thumbnailDirty.current.values().next().value
-    if (next) void runThumbnailRegen(next)
+  const runThumbnailRegen = useCallback((id: string): Promise<void> => {
+    thumbnailDirty.current.add(id)
+    // A render is already running: it will pick this id up before it settles,
+    // so the caller can wait on the same chain.
+    if (thumbnailChain.current) return thumbnailChain.current
+    const drain = async (): Promise<void> => {
+      while (thumbnailDirty.current.size > 0) {
+        const next = thumbnailDirty.current.values().next().value as string
+        thumbnailDirty.current.delete(next)
+        try {
+          await fetch(`/api/thumbnails/${next}`, { method: 'POST' })
+        } catch { /* non-fatal */ }
+      }
+      thumbnailChain.current = null
+    }
+    // The id above is always queued, so `drain` suspends on its first fetch
+    // and this assignment lands before the chain can clear itself.
+    const running = drain()
+    thumbnailChain.current = running
+    return running
   }, [])
 
   const scheduleThumbnailRegen = useCallback((id: string = optionId) => {
@@ -276,13 +293,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }, THUMBNAIL_DEBOUNCE_MS))
   }, [optionId, runThumbnailRegen])
 
-  /** Run every debounce-pending render now (leaving the studio), plus `alsoId` if given. */
-  const flushThumbnailRegens = useCallback((alsoId?: string) => {
+  /**
+   * Run every debounce-pending render now (leaving the studio) and resolve
+   * when they have all landed. Resolves immediately when nothing is pending
+   * and nothing is running — an option nobody touched is not re-rendered.
+   */
+  const flushThumbnailRegens = useCallback((): Promise<void> => {
     const ids = new Set(thumbnailTimers.current.keys())
     thumbnailTimers.current.forEach(t => clearTimeout(t))
     thumbnailTimers.current.clear()
-    if (alsoId) ids.add(alsoId)
-    ids.forEach(id => { void runThumbnailRegen(id) })
+    ids.forEach(id => { thumbnailDirty.current.add(id) })
+    if (thumbnailDirty.current.size === 0) return thumbnailChain.current ?? Promise.resolve()
+    const first = thumbnailDirty.current.values().next().value as string
+    return runThumbnailRegen(first)
   }, [runThumbnailRegen])
 
   // ─── WHAT THE DATABASE LAST SAW ───────────────────────────────────
@@ -1764,8 +1787,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const pendingId = optionId
       const hadSave = !!saveTimer.current
       if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-      if (hadSave && pendingId) persistOption(stateRef.current)
-      flushThumbnailRegens(hadSave && pendingId ? pendingId : undefined)
+      // Regen only once the write has landed — a render started alongside the
+      // save composites the wall as it was before it.
+      if (hadSave && pendingId) {
+        void persistOption(stateRef.current).then(() => runThumbnailRegen(pendingId))
+      }
+      void flushThumbnailRegens()
     }
   }, [])
 
@@ -1773,16 +1800,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // Callers (e.g. the Dashboard back button) await this so the dashboard never renders a stale preview.
   async function flushPendingAndRegen(): Promise<void> {
     if (!optionId) return
-    const currentId = optionId
-    // Option data (artworks + foreground masks)
+    // Option data (artworks + foreground masks). A write that changes the
+    // wall schedules its own regen, which the flush below then picks up —
+    // so an option nobody touched costs nothing here.
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
       await persistOption(stateRef.current)
     }
-    // Thumbnail — fire-and-forget so dashboard navigation isn't blocked on
-    // server-side sharp compositing. Dashboard refetches thumbnails on mount.
-    flushThumbnailRegens(currentId)
+    // Thumbnail. The dashboard serves a PNG built on the server, so leaving
+    // before that render lands shows the wall as it was one edit ago. Wait
+    // for it — but never longer than THUMBNAIL_FLUSH_CAP_MS, because a slow
+    // render must not strand the consultant in the studio. The dashboard is
+    // stale for one refresh in that case, not wrong forever.
+    await Promise.race([
+      flushThumbnailRegens(),
+      new Promise<void>(r => setTimeout(r, THUMBNAIL_FLUSH_CAP_MS)),
+    ])
   }
 
   /**

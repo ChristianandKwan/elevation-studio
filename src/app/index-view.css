@@ -22,12 +22,17 @@
 .index-row--declined .index-thumb,
 .index-row--declined .budget-artwork-title { opacity: .55; }
 
+/* A work is whatever shape it is; the box is always square. Centring with
+   flex rather than grid matters: in a grid the image's own box grew to its
+   natural height and was clipped to its top, so tall works showed only their
+   top edge. Bounding it with max-width/max-height lets both dimensions shrink
+   to fit and leaves the spare space as margin. */
 .index-thumb {
   width: 56px; height: 56px; flex-shrink: 0;
   background: var(--warm-white); border: 1px solid var(--border);
-  overflow: hidden; display: grid; place-items: center;
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
 }
-.index-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.index-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
 .index-thumb-empty { font-size: 9.5px; color: var(--mid); text-align: center; line-height: 1.2; padding: 4px; }
 
 .index-main { flex: 1; min-width: 0; }
@@ -82,9 +87,9 @@
 .work-pick input { accent-color: var(--charcoal); margin: 0; }
 .work-pick-thumb {
   width: 40px; height: 40px; background: white; border: 1px solid var(--border);
-  overflow: hidden; flex-shrink: 0; display: grid; place-items: center;
+  overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
 }
-.work-pick-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.work-pick-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
 .work-pick-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .work-pick-title {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 15px;
