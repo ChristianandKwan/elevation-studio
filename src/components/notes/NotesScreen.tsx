@@ -115,7 +115,11 @@ export default function NotesScreen({
 
         {/* ── Each artist, and their works ────────────────────── */}
         {artistGroups.map(g => {
-          const key = artistKey(g.label)
+          // From the works' own artist field, not the group label: works
+          // with no artist group under a placeholder, and keying off that
+          // would invent an artist called "Unattributed" with notes and a
+          // standing profile of its own.
+          const key = artistKey(g.works[0]?.artist)
           const profile = artistProfiles.find(p => p.nameKey === key)
           const narrowable = g.works.map(w => ({ id: w.id, name: w.name }))
           return (

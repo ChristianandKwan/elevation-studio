@@ -60,6 +60,14 @@ describe('artistKey', () => {
     assert.equal(artistKey(undefined), '')
     assert.equal(artistKey('   '), '')
   })
+
+  test('an empty key is falsy, which is what the screens guard on', () => {
+    // Works with no artist group under a placeholder label in the index. The
+    // key has to come from the artist field, not that label, or the
+    // placeholder becomes an artist with notes and a standing profile.
+    assert.ok(!artistKey(''), 'empty key must be falsy')
+    assert.ok(artistKey('Unattributed'), 'a real artist of that name still keys')
+  })
 })
 
 describe('rows in and out', () => {

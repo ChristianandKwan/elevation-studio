@@ -66,7 +66,9 @@ export default function IndexScreen({
           </div>
         ) : (
           groups.map(g => {
-            const key = artistKey(g.label)
+            // The works' own artist, not the group label — see NotesScreen.
+            // Unattributed works must not become an artist.
+            const key = artistKey(g.works[0]?.artist)
             const narrowable = g.works.map(w => ({ id: w.id, name: w.name }))
             return (
               <section key={g.key} className="index-group">
