@@ -10,6 +10,7 @@ import {
 import { ArcSpinner } from '@/components/ui/Spinner'
 import { frameHex, mountHex, bandsPx, isWoodFrame } from '@/lib/frames'
 import { frameGrainElement } from '@/lib/frameGrain'
+import { wallImageUrl } from '@/lib/wall'
 
 interface ClientArtwork {
   id: string
@@ -43,6 +44,10 @@ interface ClientOption {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
+  /** Set instead of imageUrl when this wall was entered as a measurement. */
+  wall_w_cm?: number | null
+  wall_h_cm?: number | null
+  wall_color?: string | null
   approved: boolean
   approved_at: string | null
   foreground_masks?: unknown
@@ -394,8 +399,18 @@ function ClientCanvas({
   // browser already had, which is what made the eye icon feel slow.
   const decodedRef = useRef(new Map<string, HTMLImageElement>())
 
+  // The wall to draw: the photograph if the consultant uploaded one, or a
+  // generated rectangle of the colour they chose if they entered the wall as
+  // a measurement instead. Everything below works on the picture either way.
+  const wallUrl = wallImageUrl({
+    imageUrl: optData.imageUrl,
+    origW: optData.orig_w,
+    origH: optData.orig_h,
+    wallColor: optData.wall_color,
+  })
+
   useEffect(() => {
-    if (!optData.imageUrl || !canvasRef.current) return
+    if (!wallUrl || !canvasRef.current) return
 
     const build = (img: HTMLImageElement) => {
       // Fit to the visible canvas frame (.client-canvas-area) on both dimensions
@@ -695,7 +710,7 @@ function ClientCanvas({
         if (fgImg) {
           fgImg.setAttribute('width', String(W))
           fgImg.setAttribute('height', String(H))
-          fgImg.setAttribute('href', optData.imageUrl!)
+          fgImg.setAttribute('href', wallUrl)
         }
         fgSvg.style.display = masks.length > 0 ? '' : 'none'
       }
@@ -704,7 +719,7 @@ function ClientCanvas({
 
     // Already decoded (a visibility toggle, a re-fit, a tab switch back):
     // rebuild the overlays straight away and never show the spinner.
-    const url = optData.imageUrl
+    const url = wallUrl
     const cached = decodedRef.current.get(url)
     if (cached?.complete && cached.naturalWidth > 0) {
       build(cached)
@@ -719,7 +734,7 @@ function ClientCanvas({
       build(img)
     }
     img.src = url
-  }, [optData.id, optData.imageUrl, locked, rerenderKey, refitKey]) // eslint-disable-line
+  }, [optData.id, wallUrl, locked, rerenderKey, refitKey]) // eslint-disable-line
 
   return (
     <div className="client-canvas-inner" ref={canvasRef} style={{ position: 'relative', minHeight: isLoading ? 200 : undefined }}>
@@ -730,7 +745,7 @@ function ClientCanvas({
       >
         <NextImage
           className="client-elev-img"
-          src={optData.imageUrl!}
+          src={wallUrl ?? ''}
           alt="elevation"
           width={optData.orig_w || 1600}
           height={optData.orig_h || 900}

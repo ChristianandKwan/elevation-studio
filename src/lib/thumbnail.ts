@@ -22,6 +22,7 @@ import {
   lipShadow, FRAME_LIP_SPREAD, MOUNT_LIP_SPREAD, mountLipOpacity, SHADOW_PUSH,
 } from '@/lib/frameShadow'
 import { frameRgb, mountRgb, frameGrainSvg } from '@/lib/frames'
+import { wallRgb } from '@/lib/wall'
 
 const THUMB_W = 600 // max thumbnail width in pixels
 
@@ -92,11 +93,18 @@ async function frameLipShade(
 }
 
 /**
- * Pure compositing: takes signed URLs + artwork metadata and returns
- * a PNG `Buffer`. Returns `null` on failure (caller falls back).
+ * Where the wall itself comes from: a signed URL for a photograph, or a hex
+ * colour for a wall that was entered as a measurement and has no file.
+ */
+export type ElevSource = string | { color: string }
+
+/**
+ * Pure compositing: takes a wall source + signed artwork URLs + artwork
+ * metadata and returns a PNG `Buffer`. Returns `null` on failure (caller
+ * falls back).
  */
 export async function buildThumbnailBuffer(
-  elevUrl: string,
+  elev: ElevSource,
   artworks: ArtworkEntry[],
   origW: number,
   origH: number,
@@ -104,14 +112,25 @@ export async function buildThumbnailBuffer(
   foregroundMasks: MaskPolygon[] | null = null
 ): Promise<Buffer | null> {
   try {
-    const elevBuf = await fetchBuffer(elevUrl)
-    if (!elevBuf) return null
-
     const scale = THUMB_W / origW
     const thumbH = Math.round(origH * scale)
+
+    // A plain wall is created at thumbnail size rather than created large and
+    // resized — there is nothing in a flat colour that resampling could
+    // preserve, and a six-thousand-pixel rectangle to throw away is work for
+    // nothing on a path that already takes several seconds.
+    const elevBuf = typeof elev === 'string'
+      ? await fetchBuffer(elev)
+      : await sharp({
+          create: {
+            width: THUMB_W, height: thumbH, channels: 4,
+            background: { ...wallRgb(elev.color), alpha: 1 },
+          },
+        }).png().toBuffer()
+    if (!elevBuf) return null
     const hasMasks = (foregroundMasks ?? []).some(p => p && p.length >= 3)
 
-    // No scale or no artworks — plain elevation thumbnail (no foreground to apply)
+    // No scale or no artworks — bare wall thumbnail (no foreground to apply)
     if (!scalePxPerCm || artworks.length === 0) {
       return await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
     }
@@ -394,6 +413,8 @@ interface OptionRowForThumbnail {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
+  /** Set instead of image_path when this wall was entered as a measurement. */
+  wall_color: string | null
   foreground_masks: unknown
   artworks: Array<{
     image_path: string
@@ -426,7 +447,7 @@ async function fetchOptionForThumbnail(
   const { data } = await supabase
     .from('elevation_options')
     .select(`
-      id, image_path, orig_w, orig_h, scale_px_per_cm, foreground_masks,
+      id, image_path, orig_w, orig_h, scale_px_per_cm, wall_color, foreground_masks,
       artworks(
         x_fraction, y_fraction, visible,
         brightness, fade, frame_type, frame_width_mm,
@@ -449,8 +470,8 @@ async function fetchOptionForThumbnail(
  * `elevation_options` update both succeed regardless of RLS context.
  *
  * Returns `true` if a thumbnail was produced and persisted,
- * `false` if the option has no elevation image yet (no-op) or
- * compositing failed.
+ * `false` if the option has neither a photograph nor a plain wall yet
+ * (no-op) or compositing failed.
  */
 export async function regenerateOptionThumbnail(
   supabase: SupabaseClient,
@@ -458,13 +479,24 @@ export async function regenerateOptionThumbnail(
 ): Promise<boolean> {
   const row = await fetchOptionForThumbnail(supabase, optionId)
   if (!row) return false
-  if (!row.image_path || !row.orig_w || !row.orig_h) return false
+  if (!row.orig_w || !row.orig_h) return false
 
-  // Sign the elevation image
-  const { data: elevSigned } = await supabase.storage
-    .from('elevation-images')
-    .createSignedUrl(row.image_path, 3600)
-  if (!elevSigned?.signedUrl) return false
+  // Where the wall comes from. A photograph is signed; a wall entered as a
+  // measurement has no file, so its colour is passed straight through and
+  // nothing is fetched.
+  let elevSource: ElevSource
+  if (row.image_path) {
+    const { data: elevSigned } = await supabase.storage
+      .from('elevation-images')
+      .createSignedUrl(row.image_path, 3600)
+    if (!elevSigned?.signedUrl) return false
+    elevSource = elevSigned.signedUrl
+  } else if (row.wall_color) {
+    elevSource = { color: row.wall_color }
+  } else {
+    // Neither a photograph nor a wall: the option has not been set up yet.
+    return false
+  }
 
   // Sign each visible artwork's image once — one work may hang on the wall
   // more than once, and every placement of it shares the file.
@@ -503,7 +535,7 @@ export async function regenerateOptionThumbnail(
   const artworkEntries: ArtworkEntry[] = signed.filter((a): a is ArtworkEntry => a !== null)
 
   const buf = await buildThumbnailBuffer(
-    elevSigned.signedUrl,
+    elevSource,
     artworkEntries,
     row.orig_w,
     row.orig_h,
