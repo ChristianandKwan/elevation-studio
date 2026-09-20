@@ -20,6 +20,7 @@ import { frameGrainElement, paintFrameGrain } from '@/lib/frameGrain'
 import { placementRow, workRow } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import { frameHex, mountHex, isWoodFrame, bandsPx } from '@/lib/frames'
+import { blankWallDataUrl, blankWallPixels, clampCm, wallHex } from '@/lib/wall'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -82,6 +83,15 @@ export interface StudioElev {
   origH: number
   dispW: number
   dispH: number
+  /**
+   * Set when this wall is a measurement rather than a photograph. The image
+   * above is then a generated rectangle of this colour, which is enough for
+   * everything on screen; the PNG export fills the colour directly instead,
+   * so an export never depends on a data URL surviving a canvas.
+   */
+  wallColor?: string | null
+  wallWCm?: number | null
+  wallHCm?: number | null
 }
 
 export type SkewCorners = [[number, number], [number, number], [number, number], [number, number]]
@@ -157,6 +167,15 @@ interface UseStudioOptions {
   /** Called when the scale calibration is confirmed for the current option */
   onScaleSet?: (scalePxPerCm: number) => void
   /**
+   * Called when the current option is given, or re-given, a plain wall. Carries
+   * everything the row now holds, because setting a wall this way writes the
+   * derived pixel size and scale at the same time as the size and colour.
+   */
+  onBlankWallSet?: (data: {
+    origW: number; origH: number; scalePxPerCm: number
+    wallWCm: number; wallHCm: number; wallColor: string
+  }) => void
+  /**
    * Called when artworks are placed on the current option. `works` holds any
    * works created in the process (uploads); placing a work the project
    * already had passes an empty list.
@@ -168,7 +187,7 @@ interface UseStudioOptions {
   onForegroundSaved?: (masks: ForegroundMasks) => void
 }
 
-export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onBlankWallSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -203,6 +222,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   onElevationUploadedRef.current = onElevationUploaded
   const onScaleSetRef = useRef(onScaleSet)
   onScaleSetRef.current = onScaleSet
+  const onBlankWallSetRef = useRef(onBlankWallSet)
+  onBlankWallSetRef.current = onBlankWallSet
   const onArtworksAddedRef = useRef(onArtworksAdded)
   onArtworksAddedRef.current = onArtworksAdded
   const onArtworkDeletedRef = useRef(onArtworkDeleted)
@@ -1176,6 +1197,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function loadOption(opts: {
     imageUrl: string | null; imagePath: string | null;
     origW: number; origH: number; scalePxPerCm: number | null;
+    wallWCm?: number | null; wallHCm?: number | null; wallColor?: string | null;
     artworks: Array<Artwork & { imageUrl: string | null }>;
     foregroundMasks: ForegroundMasks | null;
     skewCorners?: SkewCorners | null;
@@ -1192,14 +1214,25 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       setBusy(false)
     }
 
-    if (!opts.imageUrl) {
+    // A wall entered as a measurement has no file to fetch. It is turned into
+    // a picture here — a few hundred bytes of SVG at the size the wall was
+    // given — so that everything below this line, from fit-zoom through
+    // artwork placement to the foreground masks, runs on the one code path it
+    // always has. The only renderer that does not take this route is the PNG
+    // export, which fills the colour itself.
+    const blank = !opts.imageUrl && !!opts.wallColor && opts.origW > 0 && opts.origH > 0
+    const sourceUrl = blank
+      ? blankWallDataUrl(opts.origW, opts.origH, opts.wallColor)
+      : opts.imageUrl
+
+    if (!sourceUrl) {
       showEmptyCanvas()
       return
     }
 
     setBusy(true)
     // Reassigned if the signature on the URL we were handed has expired.
-    let elevUrl = opts.imageUrl
+    let elevUrl = sourceUrl
     const img = new Image()
     img.crossOrigin = 'anonymous'
     let retriedSignature = false
@@ -1231,6 +1264,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         origH,
         dispW: 0,
         dispH: 0,
+        wallColor: blank ? wallHex(opts.wallColor) : null,
+        wallWCm: blank ? opts.wallWCm ?? null : null,
+        wallHCm: blank ? opts.wallHCm ?? null : null,
       }
 
       const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
@@ -1358,7 +1394,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         }
       })
     }
-    img.src = opts.imageUrl
+    img.src = sourceUrl
   }
 
   // ─── ELEVATION UPLOAD ────────────────────────────────────────────
@@ -1414,9 +1450,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       saveRelativeZoom(optionId, 1)
 
       // Persist to DB
+      // wall_* are cleared alongside: a photograph replaces a plain wall
+      // outright, and a row carrying both would have half the renderers
+      // drawing the picture and half drawing the colour.
       supabase.from('elevation_options').update({
         image_path: path, orig_w: img.naturalWidth, orig_h: img.naturalHeight,
         scale_px_per_cm: null, foreground_masks: null,
+        wall_w_cm: null, wall_h_cm: null, wall_color: null,
       }).eq('id', optionId).then(({ error }) => {
         if (error) {
           onStatus('Elevation saved to storage but DB update failed — reload to retry')
@@ -1437,6 +1477,97 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
       onElevationUploadedRef.current?.({ imagePath: path, imageUrl: url, origW: img.naturalWidth, origH: img.naturalHeight })
       onStatus('Elevation loaded — draw a scale line to continue')
+      setBusy(false)
+    }
+    img.src = url
+  }
+
+  /**
+   * Give this option a wall that has no photograph — a size in centimetres
+   * and a colour.
+   *
+   * Nothing is uploaded. The pixel dimensions and the scale are worked out
+   * from the size and written with it, which is why there is no calibration
+   * step afterwards: a wall entered as a measurement already knows how many
+   * pixels a centimetre is.
+   *
+   * Unlike replacing a photograph, this keeps the artworks. Re-typing the
+   * size or changing the colour is an edit to the wall, not a new wall, and
+   * taking the pictures down each time would be its own bug. Positions are
+   * held as fractions and sizes in centimetres, so both survive a resize:
+   * a 60 cm print stays 60 cm when the wall grows, and covers less of it.
+   *
+   * Masks and perspective do not survive. Both describe a photograph — there
+   * is no foreground in front of a flat colour, and nothing to correct.
+   */
+  async function setBlankWall(wCm: number, hCm: number, color: string) {
+    const hex = wallHex(color)
+    const { origW, origH, pxPerCm } = blankWallPixels(wCm, hCm)
+    const url = blankWallDataUrl(origW, origH, hex)
+    // Captured before the state swap so a photograph being replaced by a
+    // plain wall still gets its file cleaned up.
+    const previousPath = stateRef.current.elev?.imagePath || null
+
+    setBusy(true)
+    const img = new Image()
+    img.onerror = () => { setBusy(false); onStatus('Could not draw the wall') }
+    img.onload = () => {
+      const elev: StudioElev = {
+        imagePath: '', imageUrl: url, img,
+        origW, origH, dispW: 0, dispH: 0,
+        wallColor: hex, wallWCm: clampCm(wCm), wallHCm: clampCm(hCm),
+      }
+      const scale: Scale = { origPxPerCm: pxPerCm, dispPxPerCm: pxPerCm }
+      const arts = stateRef.current.artworks
+
+      setState(s => ({
+        ...s, elev, scale, artworks: arts, selId: null, selIds: new Set(),
+        zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW,
+        skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false,
+      }))
+      renderForegroundSVG([], null, null)
+      renderSkewHandles([], null)
+      rememberSaved([], arts)
+
+      // A wall that just changed size starts at fit; the old per-user zoom was
+      // chosen against a wall of a different shape.
+      saveRelativeZoom(optionId, 1)
+
+      const supabase = createClient()
+      supabase.from('elevation_options').update({
+        image_path: null, orig_w: origW, orig_h: origH,
+        scale_px_per_cm: pxPerCm, foreground_masks: null,
+        skew_tl_x: null, skew_tl_y: null, skew_tr_x: null, skew_tr_y: null,
+        skew_br_x: null, skew_br_y: null, skew_bl_x: null, skew_bl_y: null, skew_active: false,
+        wall_w_cm: clampCm(wCm), wall_h_cm: clampCm(hCm), wall_color: hex,
+      }).eq('id', optionId).then(({ error }) => {
+        if (error) {
+          onStatus('Wall set on screen but not saved — reload to retry')
+          return
+        }
+        // Only once the row has stopped pointing at the photograph is the
+        // file safe to drop.
+        if (previousPath) {
+          removeUnreferencedElevationImage(previousPath, optionId).catch(() => { /* sweep will catch it */ })
+        }
+      })
+      scheduleThumbnailRegen()
+
+      requestAnimationFrame(() => {
+        const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
+        if (elevImg) elevImg.src = url
+        setZoomFit({
+          elev, scale, artworks: arts, selId: null, selIds: new Set(), zoom: 1, fitZoom: 1,
+          calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW,
+          skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false,
+        })
+      })
+
+      onBlankWallSetRef.current?.({
+        origW, origH, scalePxPerCm: pxPerCm,
+        wallWCm: clampCm(wCm), wallHCm: clampCm(hCm), wallColor: hex,
+      })
+      onStatus(`Wall set — ${clampCm(wCm)} × ${clampCm(hCm)} cm`)
       setBusy(false)
     }
     img.src = url
@@ -2146,8 +2277,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
 
-    // 1. Draw base elevation
-    ctx.drawImage(s.elev.img, 0, 0, c.width, c.height)
+    // 1. Draw base elevation. A plain wall is filled rather than drawn: the
+    //    image behind it is an SVG data URL, and browsers have historically
+    //    disagreed about whether drawing an SVG taints a canvas — a tainted
+    //    canvas cannot be read back, so the export would fail at the very last
+    //    step. Filling the same colour cannot.
+    if (s.elev.wallColor) {
+      ctx.fillStyle = s.elev.wallColor
+      ctx.fillRect(0, 0, c.width, c.height)
+    } else {
+      ctx.drawImage(s.elev.img, 0, 0, c.width, c.height)
+    }
 
     // 2. Draw artworks — frame, brightness, fade and drop shadow included, so
     //    the file matches the canvas. The export used to draw the bare image,
@@ -2480,6 +2620,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     pendingCalibPx,
     loadOption,
     uploadElevation,
+    setBlankWall,
     startCalibration,
     cancelCalibration,
     confirmScale,

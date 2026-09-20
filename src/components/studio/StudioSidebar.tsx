@@ -4,6 +4,8 @@ import { useRef, useState, useEffect, memo } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 import type { ActivityLog, Artwork } from '@/types'
 import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail, MIN_ELEVATION_LONG_EDGE } from '@/lib/utils'
+import { wallSizeLabel } from '@/lib/wall'
+import BlankWallModal from './BlankWallModal'
 import {
   FRAME_COLORS, frameLabel, MOUNT_COLORS, mountLabel, MOUNT_DEFAULT_MM, mountIsUniform,
 } from '@/lib/frames'
@@ -31,12 +33,13 @@ interface Props {
 }
 
 export default function StudioSidebar({ studio, onStatus, optionId, clientNotes, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange }: Props) {
-  const { state, uploadElevation, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
+  const { state, uploadElevation, setBlankWall, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [editingBudget, setEditingBudget] = useState(false)
   const [budgetInput, setBudgetInput] = useState(budget != null ? String(budget) : '')
   const [expandedArtId, setExpandedArtId] = useState<string | null>(null)
+  const [showWallModal, setShowWallModal] = useState(false)
 
   // Auto-expand the artwork's toolbar panel when it is selected (from canvas click or sidebar click)
   useEffect(() => {
@@ -48,6 +51,10 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
 
   const hasElev = !!state.elev
   const hasScale = !!state.scale
+  // A wall entered as a measurement rather than photographed. Its scale came
+  // with its size, so there is nothing to calibrate, and there is no
+  // photograph for a foreground mask to cut out of.
+  const isBlank = !!state.elev?.wallColor
   const hasArts = state.artworks.length > 0
   // Lock all editing once client has picked or approved this option
   const isLocked = !!(approvalStatus?.pickedOption || approvalStatus?.approved)
@@ -78,7 +85,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
           Elevation
         </div>
         <div className={`upload-zone${hasElev ? ' has-file' : ''}`} onClick={pickElevation}>
-          {hasElev ? 'Elevation loaded — click to replace' : (
+          {isBlank ? 'Upload a photo of this wall instead' : hasElev ? 'Elevation loaded — click to replace' : (
             <>Upload elevation image<br /><span style={{ fontSize: 10, opacity: .7 }}>JPG, PNG, TIFF — any resolution</span></>
           )}
         </div>
@@ -89,9 +96,36 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
           style={{ display: 'none' }}
           onChange={onFileChange}
         />
+        {/* The other way in. A room that isn't built, or one nobody got a
+            usable photograph of, is still a wall that can be planned. */}
+        {!isBlank && (
+          <button
+            className="btn btn-sm btn-full btn-step"
+            style={{ marginTop: 8 }}
+            onClick={() => setShowWallModal(true)}
+          >
+            {hasElev ? 'Use a plain wall instead' : 'No photo — set a plain wall'}
+          </button>
+        )}
+        {isBlank && (
+          <div className="wall-chip">
+            <span className="wall-chip-dot" style={{ background: state.elev!.wallColor! }} />
+            <span>
+              Plain wall · <strong>{wallSizeLabel(state.elev!.wallWCm, state.elev!.wallHCm)}</strong>
+            </span>
+            <button
+              className="btn btn-sm"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => setShowWallModal(true)}
+            >
+              Edit
+            </button>
+          </div>
+        )}
         {/* A small photo limits everything: it sets the detail budget the
-            artworks have to share, and it cannot be improved after the fact. */}
-        {hasElev && Math.max(state.elev!.origW, state.elev!.origH) < MIN_ELEVATION_LONG_EDGE && (
+            artworks have to share, and it cannot be improved after the fact.
+            A plain wall is exempt — its resolution is chosen, not inherited. */}
+        {hasElev && !isBlank && Math.max(state.elev!.origW, state.elev!.origH) < MIN_ELEVATION_LONG_EDGE && (
           <div className="detail-note">
             This photo is {state.elev!.origW} × {state.elev!.origH} px, which will look soft to the
             client and in exports. Around 3000 px on the long edge is ideal — a photo sent through
@@ -106,17 +140,26 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
           <span className={`step-badge${hasScale ? ' done' : ''}`}>2</span>
           Scale Calibration
         </div>
-        <button
-          className="btn btn-sm btn-full btn-step"
-          disabled={!hasElev}
-          onClick={startCalibration}
-        >
-          {hasScale ? 'Redraw Scale Line' : 'Draw Scale Line'}
-        </button>
-        {hasScale && (
+        {isBlank ? (
           <div className="scale-chip">
-            Scale: <strong>{state.scale!.origPxPerCm.toFixed(2)} px/cm</strong>
+            Set by the wall size — <strong>{state.scale!.origPxPerCm.toFixed(2)} px/cm</strong>.
+            Nothing to draw.
           </div>
+        ) : (
+          <>
+            <button
+              className="btn btn-sm btn-full btn-step"
+              disabled={!hasElev}
+              onClick={startCalibration}
+            >
+              {hasScale ? 'Redraw Scale Line' : 'Draw Scale Line'}
+            </button>
+            {hasScale && (
+              <div className="scale-chip">
+                Scale: <strong>{state.scale!.origPxPerCm.toFixed(2)} px/cm</strong>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -182,8 +225,10 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
         )}
       </div>
 
-      {/* Step 4: Foreground */}
-      {hasElev && (
+      {/* Step 4: Foreground. Hidden on a plain wall — a foreground region cuts
+          a shape out of the photograph and draws it back over the artworks,
+          and cutting a shape out of a flat colour puts the same colour back. */}
+      {hasElev && !isBlank && (
         <div className="sidebar-section">
           <div className="s-title">
             <span className={`step-badge${hasMasks ? ' done' : ''}`}>4</span>
@@ -477,6 +522,16 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
             </div>
           )}
         </div>
+      )}
+
+      {showWallModal && (
+        <BlankWallModal
+          wCm={state.elev?.wallWCm ?? null}
+          hCm={state.elev?.wallHCm ?? null}
+          color={state.elev?.wallColor ?? null}
+          onConfirm={(w, h, color) => { setShowWallModal(false); setBlankWall(w, h, color) }}
+          onCancel={() => setShowWallModal(false)}
+        />
       )}
     </div>
   )

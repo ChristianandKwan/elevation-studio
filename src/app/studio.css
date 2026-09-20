@@ -170,6 +170,48 @@
 }
 .scale-chip strong { color: var(--charcoal); }
 .kb-hint { font-size: 10px; color: var(--mid); margin-top: 8px; line-height: 1.6; }
+
+/* ── Plain wall ──────────────────────────────────────────────────────
+   A wall entered as a measurement rather than photographed. The swatches
+   are the common room colours; the picker beside them covers the rest. */
+.wall-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.wall-swatch {
+  width: 28px; height: 28px; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: transform .12s, box-shadow .12s;
+}
+.wall-swatch:hover { transform: translateY(-1px); }
+/* An outer ring rather than a border, so choosing a colour never changes the
+   size of the colour you are looking at. */
+.wall-swatch.selected {
+  box-shadow: 0 0 0 2px var(--warm-white), 0 0 0 4px var(--charcoal);
+}
+.wall-colour-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.wall-colour-input {
+  width: 34px; height: 28px; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: none;
+}
+.wall-colour-hex {
+  font-size: 11px; color: var(--mid); font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
+}
+/* The preview is the wall's real proportions, capped in height so a tall
+   wall cannot push the buttons off the bottom of the modal. */
+.wall-preview-box { display: flex; justify-content: center; }
+.wall-preview {
+  width: 100%; max-width: 260px; max-height: 130px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.wall-chip {
+  margin-top: 8px; padding: 8px 11px; background: var(--cream);
+  border-left: 2px solid var(--accent); font-size: 11.5px; color: var(--mid);
+  display: flex; align-items: center; gap: 8px;
+}
+.wall-chip strong { color: var(--charcoal); }
+.wall-chip-dot {
+  width: 14px; height: 14px; flex: none;
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+}
 /* Image-detail advice. Advisory, never a blocker — a consultant with only a
    poor photograph still has to be able to use it, so this is styled as a note
    rather than an error. */

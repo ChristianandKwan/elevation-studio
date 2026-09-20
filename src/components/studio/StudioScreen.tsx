@@ -43,6 +43,10 @@ interface DbElevation {
     orig_w: number
     orig_h: number
     scale_px_per_cm: number | null
+    /** Set instead of imagePath when this wall was entered as a measurement. */
+    wall_w_cm?: number | null
+    wall_h_cm?: number | null
+    wall_color?: string | null
     approved: boolean
     approved_at: string | null
     foreground_masks: unknown
@@ -78,6 +82,15 @@ interface Props {
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
   'skew_tl_x' | 'skew_tl_y' | 'skew_tr_x' | 'skew_tr_y' |
   'skew_br_x' | 'skew_br_y' | 'skew_bl_x' | 'skew_bl_y'>
+
+/**
+ * Whether this option has a wall to hang anything on yet — a photograph the
+ * consultant uploaded, or a wall they typed the size of. The two are
+ * alternatives, never both.
+ */
+function optHasWall(o: { imagePath: string | null; wall_color?: string | null }): boolean {
+  return !!o.imagePath || !!o.wall_color
+}
 
 function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCorners | null {
   const { skew_tl_x: tlx, skew_tl_y: tly, skew_tr_x: trx, skew_tr_y: try_,
@@ -145,7 +158,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           ...e,
           elevation_options: e.elevation_options.map(o => {
             if (o.option !== activeOption) return o
-            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH }
+            // A photograph replaces a plain wall outright, so the wall's own
+            // fields go with it — see the same clearing in uploadElevation.
+            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH, wall_w_cm: null, wall_h_cm: null, wall_color: null }
           }),
         }
       }))
@@ -158,6 +173,27 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           elevation_options: e.elevation_options.map(o => {
             if (o.option !== activeOption) return o
             return { ...o, scale_px_per_cm: scalePxPerCm }
+          }),
+        }
+      }))
+    },
+    onBlankWallSet: ({ origW, origH, scalePxPerCm, wallWCm, wallHCm, wallColor }) => {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== activeOption) return o
+            // imagePath and imageUrl are cleared deliberately: a wall is one
+            // thing or the other, and leaving a stale photograph behind would
+            // have the studio drawing colour while the client portal still
+            // drew the old picture.
+            return {
+              ...o, imagePath: null, imageUrl: null,
+              orig_w: origW, orig_h: origH, scale_px_per_cm: scalePxPerCm,
+              wall_w_cm: wallWCm, wall_h_cm: wallHCm, wall_color: wallColor,
+              foreground_masks: null,
+            }
           }),
         }
       }))
@@ -243,6 +279,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       origW: activeOptData.orig_w,
       origH: activeOptData.orig_h,
       scalePxPerCm: activeOptData.scale_px_per_cm,
+      wallWCm: activeOptData.wall_w_cm ?? null,
+      wallHCm: activeOptData.wall_h_cm ?? null,
+      wallColor: activeOptData.wall_color ?? null,
       artworks: activeOptData.artworks ?? [],
       foregroundMasks: (activeOptData.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
       skewCorners,
@@ -504,17 +543,23 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     // Before switching: bring the studio's live edits into `elevations`.
     syncStudioIntoElevations()
 
-    // If target option has no image but another option does, copy from the first with an image
+    // If the target option has no wall but another option does, copy from the
+    // first that has one. Options are alternatives for the same wall, so the
+    // wall itself is shared — which is as true of a plain wall as it is of a
+    // photograph, so both kinds are carried across here.
     const elev = elevations.find(e => e.id === elevId)
     const targetOpt = elev?.elevation_options.find(o => o.option === opt)
-    const sourceOpt = elev?.elevation_options.find(o => o.option !== opt && o.imagePath)
-    if (targetOpt && !targetOpt.imagePath && sourceOpt) {
+    const sourceOpt = elev?.elevation_options.find(o => o.option !== opt && optHasWall(o))
+    if (targetOpt && !optHasWall(targetOpt) && sourceOpt) {
       const supabase = createClient()
       await supabase.from('elevation_options').update({
         image_path: sourceOpt.imagePath,
         orig_w: sourceOpt.orig_w,
         orig_h: sourceOpt.orig_h,
         scale_px_per_cm: sourceOpt.scale_px_per_cm,
+        wall_w_cm: sourceOpt.wall_w_cm ?? null,
+        wall_h_cm: sourceOpt.wall_h_cm ?? null,
+        wall_color: sourceOpt.wall_color ?? null,
       }).eq('id', targetOpt.id)
       setElevations(prev => prev.map(e => {
         if (e.id !== elevId) return e
@@ -522,7 +567,15 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           ...e,
           elevation_options: e.elevation_options.map(o => {
             if (o.option !== opt) return o
-            return { ...o, imagePath: sourceOpt.imagePath, imageUrl: sourceOpt.imageUrl, orig_w: sourceOpt.orig_w, orig_h: sourceOpt.orig_h, scale_px_per_cm: sourceOpt.scale_px_per_cm }
+            return {
+              ...o,
+              imagePath: sourceOpt.imagePath, imageUrl: sourceOpt.imageUrl,
+              orig_w: sourceOpt.orig_w, orig_h: sourceOpt.orig_h,
+              scale_px_per_cm: sourceOpt.scale_px_per_cm,
+              wall_w_cm: sourceOpt.wall_w_cm ?? null,
+              wall_h_cm: sourceOpt.wall_h_cm ?? null,
+              wall_color: sourceOpt.wall_color ?? null,
+            }
           }),
         }
       }))
@@ -533,6 +586,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         origW: sourceOpt.orig_w,
         origH: sourceOpt.orig_h,
         scalePxPerCm: sourceOpt.scale_px_per_cm,
+        wallWCm: sourceOpt.wall_w_cm ?? null,
+        wallHCm: sourceOpt.wall_h_cm ?? null,
+        wallColor: sourceOpt.wall_color ?? null,
         artworks: targetOpt.artworks ?? [],
         foregroundMasks: (targetOpt.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
         skewCorners: buildSkewCorners(targetOpt),
@@ -629,7 +685,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null, visibleToClient: true,
       elevation_options: [
-        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
+        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, wall_w_cm: null, wall_h_cm: null, wall_color: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
@@ -646,13 +702,18 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (!nextKey) { onStatus('An elevation can have at most 26 options'); return }
     const sortOrder = nextSortOrder(elev.elevation_options)
     const newLabel = optionLabel(elev.elevation_options.length)
-    // Inherit image + foreground from the currently active option (same room = same base photo)
+    // Inherit the wall + foreground from the currently active option (same room
+    // = same wall). A plain wall is inherited on the same terms as a photograph:
+    // the options are alternative hangs of one wall either way.
     const srcOpt = elev.elevation_options.find(o => o.option === activeOption) ?? elev.elevation_options[0] ?? null
     const inheritedImagePath = srcOpt?.imagePath ?? null
     const inheritedMasks = (srcOpt?.foreground_masks as any[] | null) ?? null
     const inheritedOrigW = srcOpt?.orig_w ?? 0
     const inheritedOrigH = srcOpt?.orig_h ?? 0
     const inheritedScale = srcOpt?.scale_px_per_cm ?? null
+    const inheritedWallW = srcOpt?.wall_w_cm ?? null
+    const inheritedWallH = srcOpt?.wall_h_cm ?? null
+    const inheritedWallColor = srcOpt?.wall_color ?? null
     const supabase = createClient()
     const insertPayload: Record<string, unknown> = { elevation_id: elevId, option: nextKey, sort_order: sortOrder }
     if (inheritedImagePath) {
@@ -660,6 +721,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       insertPayload.orig_w = inheritedOrigW
       insertPayload.orig_h = inheritedOrigH
       insertPayload.scale_px_per_cm = inheritedScale
+    } else if (inheritedWallColor) {
+      insertPayload.orig_w = inheritedOrigW
+      insertPayload.orig_h = inheritedOrigH
+      insertPayload.scale_px_per_cm = inheritedScale
+      insertPayload.wall_w_cm = inheritedWallW
+      insertPayload.wall_h_cm = inheritedWallH
+      insertPayload.wall_color = inheritedWallColor
     }
     if (inheritedMasks && inheritedMasks.length > 0) {
       insertPayload.foreground_masks = inheritedMasks
@@ -679,6 +747,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           imagePath: inheritedImagePath,
           orig_w: inheritedOrigW, orig_h: inheritedOrigH,
           scale_px_per_cm: inheritedScale,
+          wall_w_cm: inheritedWallW, wall_h_cm: inheritedWallH, wall_color: inheritedWallColor,
           approved: false, approved_at: null,
           foreground_masks: inheritedMasks,
           clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [],

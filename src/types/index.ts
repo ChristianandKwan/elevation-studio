@@ -151,6 +151,15 @@ export interface ElevationOption {
   origW: number
   origH: number
   scalePxPerCm: number | null
+  /**
+   * A wall with no photograph: its real size, and the colour it is painted.
+   * All three are null on a photographed wall. When they are set, origW,
+   * origH and scalePxPerCm are derived from them rather than measured — see
+   * `src/lib/wall.ts`.
+   */
+  wallWCm: number | null
+  wallHCm: number | null
+  wallColor: string | null
   approved: boolean
   approvedAt: string | null
   /**

@@ -35,7 +35,7 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
       {!hasElev && (
         <div className="canvas-empty">
           <div className="empty-icon">🖼</div>
-          <p>Upload an elevation to begin</p>
+          <p>Upload an elevation to begin — or set a plain wall if there&apos;s no photo</p>
         </div>
       )}
 

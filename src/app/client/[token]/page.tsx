@@ -67,7 +67,7 @@ export default async function ClientPortalPage({ params }: Props) {
     .select(`
       id, name, display_order, client_picked_option,
       elevation_options(
-        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
         ${ARTWORKS_FRAGMENT}
       )
@@ -83,7 +83,7 @@ export default async function ClientPortalPage({ params }: Props) {
       .select(`
         id, name, display_order, client_picked_option,
         elevation_options(
-          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
           ${ARTWORKS_FRAGMENT}
         )
       `)
@@ -118,6 +118,7 @@ export default async function ClientPortalPage({ params }: Props) {
     const options = (elev.elevation_options ?? []).map((opt: {
       id: string; option: string; sort_order: number; created_at: string; name: string | null; image_path: string | null;
       orig_w: number; orig_h: number; scale_px_per_cm: number | null;
+      wall_w_cm: number | null; wall_h_cm: number | null; wall_color: string | null;
       approved: boolean; approved_at: string | null;
       foreground_masks?: any[] | null; client_notes?: string | null;
       skew_tl_x?: number | null; skew_tl_y?: number | null;
