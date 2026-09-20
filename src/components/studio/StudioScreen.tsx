@@ -965,7 +965,15 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const headerHasWideActions = view === 'studio' && !!activeOptData?.approved
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
+        // The studio has the sidebar down its left, so the wall's centre is
+        // half a sidebar right of the window's. The index and budget are
+        // full-width, and take the default of no shift.
+        '--status-bar-shift': view === 'studio' ? 'calc(var(--sidebar-w) / 2)' : '0px',
+      } as React.CSSProperties}
+    >
       {(returningToDashboard || showIntroLoader) && <DrawLoader variant="cream" />}
       {/* Header. The extra class tells the stylesheet that the right-hand group
           is in its widest form (the approved state adds a chip and an Unapprove
