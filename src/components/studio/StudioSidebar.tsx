@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, memo } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
 import type { ActivityLog } from '@/types'
 import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail, MIN_ELEVATION_LONG_EDGE } from '@/lib/utils'
+import { FRAME_COLORS, frameLabel } from '@/lib/frames'
 
 type StudioHook = ReturnType<typeof useStudio>
 
@@ -478,11 +479,6 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
   )
 }
 
-const FRAME_COLORS: Record<string, string> = {
-  black: '#1a1a1a', white: '#f0ede8',
-  'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-}
-
 interface ArtworkItemProps {
   art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null; img?: HTMLImageElement | null }
   isSelected: boolean
@@ -674,7 +670,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
             >
               <option value="">None</option>
               {Object.keys(FRAME_COLORS).map(k => (
-                <option key={k} value={k}>{k.replace('-', ' ')}</option>
+                <option key={k} value={k}>{frameLabel(k)}</option>
               ))}
             </select>
             {art.frameType && (

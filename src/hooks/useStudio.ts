@@ -15,6 +15,7 @@ import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 import { frameLipShadeElement, frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
 import { placementRow, workRow } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
+import { frameHex } from '@/lib/frames'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -28,11 +29,6 @@ const THUMBNAIL_FLUSH_CAP_MS = 10000
  * exported file matches the canvas. `lib/thumbnail.ts` holds the same five
  * colours as RGB triples for sharp.
  */
-const FRAME_COLORS: Record<string, string> = {
-  black: '#1a1a1a', white: '#f0ede8',
-  'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-}
-
 /**
  * How far above the elevation photograph's own resolution the PNG export is
  * rendered, and the ceiling that keeps a large photo from producing a canvas
@@ -861,7 +857,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         // Frame border
         if (art.frameType && art.frameWidthMm && sc) {
           const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
-          div.style.border = `${framePx}px solid ${FRAME_COLORS[art.frameType] ?? FRAME_COLORS.black}`
+          div.style.border = `${framePx}px solid ${frameHex(art.frameType)}`
           div.style.boxSizing = 'content-box'
         }
 
@@ -2148,7 +2144,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       tctx.imageSmoothingEnabled = true
       tctx.imageSmoothingQuality = 'high'
       if (frame > 0) {
-        tctx.fillStyle = FRAME_COLORS[art.frameType!] ?? FRAME_COLORS.black
+        tctx.fillStyle = frameHex(art.frameType)
         tctx.fillRect(0, 0, tile.width, tile.height)
       }
       tctx.drawImage(art.img, frame, frame, w, h)

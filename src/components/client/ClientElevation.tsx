@@ -6,6 +6,7 @@ import { formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
 import { frameLipShadeElement, SHADOW_PUSH } from '@/lib/frameShadow'
 import { ArcSpinner } from '@/components/ui/Spinner'
+import { frameHex } from '@/lib/frames'
 
 interface ClientArtwork {
   id: string
@@ -444,11 +445,7 @@ function ClientCanvas({
         // Frame border
         if (art.frameType && art.frameWidthMm && sc) {
           const framePx = Math.round((art.frameWidthMm / 10) * sc)
-          const frameColor: Record<string, string> = {
-            black: '#1a1a1a', white: '#f0ede8',
-            'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-          }
-          aw.style.border = `${framePx}px solid ${frameColor[art.frameType] ?? '#1a1a1a'}`
+          aw.style.border = `${framePx}px solid ${frameHex(art.frameType)}`
           aw.style.boxSizing = 'content-box'
         }
 

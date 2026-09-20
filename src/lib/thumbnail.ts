@@ -19,16 +19,9 @@
 import sharp from 'sharp'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import { frameRgb } from '@/lib/frames'
 
 const THUMB_W = 600 // max thumbnail width in pixels
-
-const FRAME_COLORS: Record<string, { r: number; g: number; b: number }> = {
-  black:       { r: 26,  g: 26,  b: 26  },
-  white:       { r: 240, g: 237, b: 232 },
-  'pale-wood': { r: 196, g: 168, b: 130 },
-  'mid-wood':  { r: 125, g: 90,  b: 53  },
-  'dark-wood': { r: 61,  g: 40,  b: 20  },
-}
 
 export interface ArtworkEntry {
   url: string
@@ -224,7 +217,7 @@ export async function buildThumbnailBuffer(
 
         let frameOffset = 0
         if (framePxThumb > 0) {
-          const fc = FRAME_COLORS[frameType!] ?? FRAME_COLORS.black
+          const fc = frameRgb(frameType)
           // Materialised first so the extend can't be planned ahead of the
           // lip shadow's composite.
           pipeline = sharp(await pipeline.png().toBuffer()).extend({
