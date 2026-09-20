@@ -13,9 +13,10 @@ import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 import { frameLipShadeElement, frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import { frameGrainElement, paintFrameGrain } from '@/lib/frameGrain'
 import { placementRow, workRow } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
-import { frameHex } from '@/lib/frames'
+import { frameHex, mountHex, isWoodFrame, bandsPx } from '@/lib/frames'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -854,14 +855,42 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           })
         }
 
-        // Frame border
-        if (art.frameType && art.frameWidthMm && sc) {
-          const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
-          div.style.border = `${framePx}px solid ${frameHex(art.frameType)}`
-          div.style.boxSizing = 'content-box'
+        // Mount and frame. The artwork keeps the div's content box, the mount
+        // is padding and the frame is the border, so both grow outward from
+        // the recorded position exactly as they did before mounts existed.
+        if (sc) {
+          const bands = bandsPx(art, sc.dispPxPerCm)
+          if (bands.mount.top || bands.mount.right || bands.mount.bottom || bands.mount.left) {
+            div.style.padding =
+              `${bands.mount.top}px ${bands.mount.right}px ${bands.mount.bottom}px ${bands.mount.left}px`
+            div.style.background = mountHex(art.mountColor)
+            div.style.boxSizing = 'content-box'
+          }
+          if (bands.frame > 0) {
+            div.style.border = `${bands.frame}px solid ${frameHex(art.frameType)}`
+            div.style.boxSizing = 'content-box'
+          }
         }
 
         div.appendChild(img)
+
+        // Grain, on the wood frames only. Four rails rather than one band,
+        // because grain runs along the length of each piece of timber — which
+        // is what stops a wide frame reading as a colour swatch.
+        if (sc && isWoodFrame(art.frameType)) {
+          const bands = bandsPx(art, sc.dispPxPerCm)
+          if (bands.frame > 0) {
+            div.appendChild(frameGrainElement(
+              art.frameType!,
+              sz.w + bands.mount.left + bands.mount.right + bands.frame * 2,
+              sz.h + bands.mount.top + bands.mount.bottom + bands.frame * 2,
+              bands.frame,
+              sc.dispPxPerCm,
+              bands.outer.left,
+              bands.outer.top,
+            ))
+          }
+        }
 
         // The frame's lip shades the artwork itself, not just the wall.
         if (art.frameType && art.frameWidthMm && sc &&
@@ -1983,6 +2012,21 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  /**
+   * The mount: colour and the four widths. Takes a patch rather than a fixed
+   * argument list because the studio edits one figure for all four sides most
+   * of the time and the individual sides only occasionally.
+   */
+  function updateArtworkMount(artId: string, patch: Partial<Pick<Artwork,
+    'mountColor' | 'mountTopMm' | 'mountRightMm' | 'mountBottomMm' | 'mountLeftMm'>>) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
   function updateArtworkBrightness(artId: string, brightness: number) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, brightness } : a)
@@ -2126,17 +2170,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const h = art.hCm * pxPerCm
       const x = art.xF * c.width
       const y = art.yF * c.height
-      // The overlay is content-box with the border outside the artwork, so the
-      // frame grows right and down from (x, y) rather than centring on it.
-      const frame = art.frameType && art.frameWidthMm
-        ? Math.round((art.frameWidthMm / 10) * pxPerCm)
-        : 0
+      // The overlay is content-box with its bands outside the artwork, so the
+      // mount and frame grow right and down from (x, y) rather than centring
+      // on it. Same helper the wall uses, so the export matches the screen.
+      const bands = bandsPx(art, pxPerCm)
+      const frame = bands.frame
 
-      // Compose frame + artwork off-screen so brightness, fade and shadow
-      // apply to the pair as one, exactly as the CSS filter on the overlay div does.
+      // Compose bands + artwork off-screen so brightness, fade and shadow
+      // apply to the whole as one, exactly as the CSS filter on the overlay div does.
       const tile = document.createElement('canvas')
-      tile.width = Math.max(1, Math.round(w + frame * 2))
-      tile.height = Math.max(1, Math.round(h + frame * 2))
+      tile.width = Math.max(1, Math.round(w + bands.outer.left + bands.outer.right))
+      tile.height = Math.max(1, Math.round(h + bands.outer.top + bands.outer.bottom))
       const tctx = tile.getContext('2d')
       if (!tctx) return
       // Artwork files are usually far larger than the space they occupy on the
@@ -2146,8 +2190,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       if (frame > 0) {
         tctx.fillStyle = frameHex(art.frameType)
         tctx.fillRect(0, 0, tile.width, tile.height)
+        paintFrameGrain(tctx, art.frameType!, tile.width, tile.height, frame, pxPerCm)
       }
-      tctx.drawImage(art.img, frame, frame, w, h)
+      const mountDrawn = bands.mount.top || bands.mount.right || bands.mount.bottom || bands.mount.left
+      if (mountDrawn) {
+        tctx.fillStyle = mountHex(art.mountColor)
+        tctx.fillRect(frame, frame, tile.width - frame * 2, tile.height - frame * 2)
+      }
+      tctx.drawImage(art.img, bands.outer.left, bands.outer.top, w, h)
 
       const blur = art.shadowBlur ?? 0
       const shadowOpacity = art.shadowOpacity ?? 0
@@ -2414,6 +2464,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkArtist,
     updateArtworkLineItems,
     updateArtworkFrame,
+    updateArtworkMount,
     updateArtworkBrightness,
     updateAllArtworksBrightness,
     updateArtworkFade,

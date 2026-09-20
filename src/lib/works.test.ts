@@ -25,6 +25,15 @@ const LEGACY_COLUMNS = [
   'shadow_angle', 'shadow_blur', 'shadow_opacity',
 ].sort()
 
+/**
+ * Placement columns added after 026. Listed separately so the legacy set above
+ * stays exactly what the old single table held — that is what proves the split
+ * dropped nothing. Anything added here must also be added to a migration.
+ */
+const ADDED_PLACEMENT_COLUMNS = [
+  'mount_color', 'mount_top_mm', 'mount_right_mm', 'mount_bottom_mm', 'mount_left_mm',
+].sort()
+
 function art(partial: Partial<Artwork> = {}): Artwork {
   return {
     id: 'p1', workId: 'w1', name: 'Berlin', imageUrl: null, imagePath: null,
@@ -51,8 +60,30 @@ describe('the two halves of a save', () => {
   test('cover every legacy column exactly once', () => {
     const p = Object.keys(placementRow(art()))
     const w = Object.keys(workRow(art()))
-    assert.deepEqual([...p, ...w].sort(), LEGACY_COLUMNS)
+    assert.deepEqual([...p, ...w].sort(), [...LEGACY_COLUMNS, ...ADDED_PLACEMENT_COLUMNS].sort())
     assert.deepEqual(p.filter(k => w.includes(k)), [])
+  })
+
+  test('every legacy column is still written by one half or the other', () => {
+    const covered = [...Object.keys(placementRow(art())), ...Object.keys(workRow(art()))]
+    for (const col of LEGACY_COLUMNS) {
+      assert.ok(covered.includes(col), `${col} is no longer saved by either half`)
+    }
+  })
+
+  test('a mount is part of the placement, never the work', () => {
+    const a = art({ mountColor: 'ivory', mountTopMm: 50, mountRightMm: 50, mountBottomMm: 60, mountLeftMm: 50 })
+    const p = placementRow(a)
+    assert.equal(p.mount_color, 'ivory')
+    assert.equal(p.mount_bottom_mm, 60)
+    assert.equal('mount_color' in workRow(a), false)
+  })
+
+  test('no mount saves as null colour and zero sides, not as undefined', () => {
+    const p = placementRow(art())
+    assert.equal(p.mount_color, null)
+    assert.equal(p.mount_top_mm, 0)
+    assert.equal(p.mount_left_mm, 0)
   })
 
   test('placement half never carries work fields', () => {
