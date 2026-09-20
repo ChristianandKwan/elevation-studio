@@ -2,8 +2,11 @@
 
 import { useRef, useState, useEffect, memo } from 'react'
 import type { useStudio } from '@/hooks/useStudio'
-import type { ActivityLog } from '@/types'
+import type { ActivityLog, Artwork } from '@/types'
 import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail, MIN_ELEVATION_LONG_EDGE } from '@/lib/utils'
+import {
+  FRAME_COLORS, frameLabel, MOUNT_COLORS, mountLabel, MOUNT_DEFAULT_MM, mountIsUniform,
+} from '@/lib/frames'
 
 type StudioHook = ReturnType<typeof useStudio>
 
@@ -159,6 +162,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
                   onNameChange={(n) => studio.updateArtworkName(art.id, n)}
                   onArtistChange={(a) => studio.updateArtworkArtist(art.id, a)}
                   onFrameChange={(ft, fw) => studio.updateArtworkFrame(art.id, ft, fw)}
+                  onMountChange={patch => studio.updateArtworkMount(art.id, patch)}
                   onBrightnessChange={(b) => studio.updateArtworkBrightness(art.id, b)}
                   onBrightnessApplyAll={(b) => studio.updateAllArtworksBrightness(b)}
                   onFadeChange={(f) => studio.updateArtworkFade(art.id, f)}
@@ -478,13 +482,19 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
   )
 }
 
-const FRAME_COLORS: Record<string, string> = {
-  black: '#1a1a1a', white: '#f0ede8',
-  'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-}
+/** What a mount edit can change. Keys match the Artwork fields. */
+type MountPatch = Partial<Pick<Artwork,
+  'mountColor' | 'mountTopMm' | 'mountRightMm' | 'mountBottomMm' | 'mountLeftMm'>>
+
+const MOUNT_SIDES = [
+  { key: 'mountTopMm', label: 'Top' },
+  { key: 'mountRightMm', label: 'Right' },
+  { key: 'mountBottomMm', label: 'Bottom' },
+  { key: 'mountLeftMm', label: 'Left' },
+] as const
 
 interface ArtworkItemProps {
-  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null; img?: HTMLImageElement | null }
+  art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; mountColor?: string | null; mountTopMm?: number | null; mountRightMm?: number | null; mountBottomMm?: number | null; mountLeftMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null; img?: HTMLImageElement | null }
   isSelected: boolean
   isExpanded: boolean
   hasScale: boolean
@@ -500,6 +510,7 @@ interface ArtworkItemProps {
   onNameChange: (name: string) => void
   onArtistChange: (artist: string) => void
   onFrameChange: (frameType: string | null, frameWidthMm: number | null) => void
+  onMountChange: (patch: MountPatch) => void
   onBrightnessChange: (b: number) => void
   onBrightnessApplyAll: (b: number) => void
   onFadeChange: (f: number) => void
@@ -508,7 +519,7 @@ interface ArtworkItemProps {
   onShadowApplyAll: (angle: number | null, blur: number | null, opacity: number | null) => void
 }
 
-const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, wallPxPerCm, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onNameChange, onArtistChange, onFrameChange, onBrightnessChange, onBrightnessApplyAll, onFadeChange, onFadeApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
+const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, hasScale, wallPxPerCm, isLocked, onSelect, onDeselect, onToggleExpand, onToggleVis, onDelete, onDimsChange, onNameChange, onArtistChange, onFrameChange, onMountChange, onBrightnessChange, onBrightnessApplyAll, onFadeChange, onFadeApplyAll, onShadowChange, onShadowApplyAll }: ArtworkItemProps) {
   const dimsRef = useRef<HTMLDivElement>(null)
   const editBtnRef = useRef<HTMLButtonElement>(null)
   const [nameValue, setNameValue] = useState(art.name)
@@ -518,6 +529,20 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
   const [shadowAngle, setShadowAngle] = useState(art.shadowAngle ?? 225)
   const [shadowBlur, setShadowBlur] = useState(art.shadowBlur ?? 0)
   const [shadowOpacity, setShadowOpacity] = useState(art.shadowOpacity ?? 0)
+
+  // A mount cut the same all round is the usual case, so that is what the one
+  // figure edits. The four sides open only when they need to differ — and stay
+  // open by themselves if they already do.
+  const mountMm = {
+    top: art.mountTopMm ?? 0,
+    right: art.mountRightMm ?? 0,
+    bottom: art.mountBottomMm ?? 0,
+    left: art.mountLeftMm ?? 0,
+  }
+  const uniformMount = mountIsUniform(mountMm) ? mountMm.top : null
+  const [sidesOpenManual, setSidesOpenManual] = useState(false)
+  const setSidesOpen = setSidesOpenManual
+  const sidesOpen = sidesOpenManual || uniformMount === null
 
   const detail = checkArtworkDetail(art.img?.naturalWidth, art.wCm, wallPxPerCm)
 
@@ -674,7 +699,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
             >
               <option value="">None</option>
               {Object.keys(FRAME_COLORS).map(k => (
-                <option key={k} value={k}>{k.replace('-', ' ')}</option>
+                <option key={k} value={k}>{frameLabel(k)}</option>
               ))}
             </select>
             {art.frameType && (
@@ -692,6 +717,95 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
               </>
             )}
           </div>
+
+          {/* Mount. One figure for all four sides, which is how a mount is
+              nearly always cut; "Sides" opens the four when they differ. */}
+          <div className="aw-field-row" style={{ marginTop: 6 }}>
+            <label className="aw-f-label">Mount</label>
+            <select
+              className="aw-frame-select"
+              disabled={!hasScale || isLocked}
+              value={art.mountColor ?? ''}
+              onClick={e => e.stopPropagation()}
+              onChange={e => {
+                const mc = e.target.value || null
+                onMountChange(mc
+                  ? {
+                      mountColor: mc,
+                      // Give it a width straight away, or choosing a colour
+                      // would appear to do nothing.
+                      mountTopMm: uniformMount || MOUNT_DEFAULT_MM,
+                      mountRightMm: uniformMount || MOUNT_DEFAULT_MM,
+                      mountBottomMm: uniformMount || MOUNT_DEFAULT_MM,
+                      mountLeftMm: uniformMount || MOUNT_DEFAULT_MM,
+                    }
+                  : { mountColor: null })
+              }}
+            >
+              <option value="">None</option>
+              {Object.keys(MOUNT_COLORS).map(k => (
+                <option key={k} value={k}>{mountLabel(k)}</option>
+              ))}
+            </select>
+            {art.mountColor && !sidesOpen && (
+              <>
+                <input
+                  type="number" className="dim-input" style={{ width: 44, marginLeft: 5 }}
+                  disabled={!hasScale || isLocked}
+                  value={uniformMount ?? ''}
+                  placeholder="—"
+                  min={0} max={500} step={5}
+                  title="Mount width (mm)"
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value)
+                    if (!Number.isNaN(v) && v >= 0) {
+                      onMountChange({
+                        mountTopMm: v, mountRightMm: v, mountBottomMm: v, mountLeftMm: v,
+                      })
+                    }
+                  }}
+                />
+                <span className="dim-unit" style={{ marginLeft: 3 }}>mm</span>
+              </>
+            )}
+          </div>
+
+          {/* The toggle gets its own line: the Mount row already carries a
+              label, a select, a number and its unit, and a fifth control ran
+              off the edge of the sidebar. */}
+          {art.mountColor && (
+            <div className="aw-mount-toggle-row">
+              <button
+                type="button"
+                className="aw-mount-sides-btn"
+                title={sidesOpen ? 'Use one width all round' : 'Set each side separately'}
+                onClick={e => { e.stopPropagation(); setSidesOpen(o => !o) }}
+              >
+                {sidesOpen ? 'Same all round' : 'Different sides'}
+              </button>
+            </div>
+          )}
+
+          {art.mountColor && sidesOpen && (
+            <div className="aw-mount-sides" onClick={e => e.stopPropagation()}>
+              {MOUNT_SIDES.map(({ key, label }) => (
+                <label key={key} className="aw-mount-side">
+                  <span>{label}</span>
+                  <input
+                    type="number" className="dim-input"
+                    disabled={!hasScale || isLocked}
+                    value={(art[key] ?? 0) as number}
+                    min={0} max={500} step={5}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value)
+                      if (!Number.isNaN(v) && v >= 0) onMountChange({ [key]: v } as MountPatch)
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Group 4: Lighting */}

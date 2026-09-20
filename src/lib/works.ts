@@ -33,7 +33,7 @@ export function parseWorkStatus(raw: unknown): WorkStatus {
 
 /** The columns a placement row carries: where it hangs, how it is framed and lit. */
 export const PLACEMENT_COLUMNS =
-  'id, work_id, x_fraction, y_fraction, visible, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity'
+  'id, work_id, x_fraction, y_fraction, visible, display_order, frame_type, frame_width_mm, mount_color, mount_top_mm, mount_right_mm, mount_bottom_mm, mount_left_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity'
 
 /** The columns a work row carries. */
 export const WORK_COLUMNS =
@@ -50,6 +50,11 @@ export function placementRow(art: Artwork) {
     visible: art.visible,
     frame_type: art.frameType ?? null,
     frame_width_mm: art.frameWidthMm ?? null,
+    mount_color: art.mountColor ?? null,
+    mount_top_mm: art.mountTopMm ?? 0,
+    mount_right_mm: art.mountRightMm ?? 0,
+    mount_bottom_mm: art.mountBottomMm ?? 0,
+    mount_left_mm: art.mountLeftMm ?? 0,
     brightness: art.brightness ?? 1,
     fade: art.fade ?? null,
     shadow_angle: art.shadowAngle ?? null,

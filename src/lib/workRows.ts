@@ -71,6 +71,12 @@ export function placementToArtwork(row: Row, imageUrl: string | null): Artwork |
     subLineItems: w.subLineItems,
     frameType: strOrNull(row.frame_type),
     frameWidthMm: numOrNull(row.frame_width_mm),
+    // Zero, not null, for a row written before 027 ran.
+    mountColor: strOrNull(row.mount_color),
+    mountTopMm: num(row.mount_top_mm, 0),
+    mountRightMm: num(row.mount_right_mm, 0),
+    mountBottomMm: num(row.mount_bottom_mm, 0),
+    mountLeftMm: num(row.mount_left_mm, 0),
     brightness: num(row.brightness, 1),
     fade: numOrNull(row.fade),
     shadowAngle: numOrNull(row.shadow_angle),

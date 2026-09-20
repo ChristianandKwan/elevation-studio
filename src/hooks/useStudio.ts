@@ -12,9 +12,14 @@ export type ArtworkLineItemPatch = Partial<Pick<
 import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
-import { frameLipShadeElement, frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import {
+  frameLipShadeElement, frameLipShadow, mountLipShadeElement, mountLipShadow,
+  mountLipOpacity, SHADOW_PUSH,
+} from '@/lib/frameShadow'
+import { frameGrainElement, paintFrameGrain } from '@/lib/frameGrain'
 import { placementRow, workRow } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
+import { frameHex, mountHex, isWoodFrame, bandsPx } from '@/lib/frames'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -28,11 +33,6 @@ const THUMBNAIL_FLUSH_CAP_MS = 10000
  * exported file matches the canvas. `lib/thumbnail.ts` holds the same five
  * colours as RGB triples for sharp.
  */
-const FRAME_COLORS: Record<string, string> = {
-  black: '#1a1a1a', white: '#f0ede8',
-  'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-}
-
 /**
  * How far above the elevation photograph's own resolution the PNG export is
  * rendered, and the ceiling that keeps a large photo from producing a canvas
@@ -858,19 +858,60 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           })
         }
 
-        // Frame border
-        if (art.frameType && art.frameWidthMm && sc) {
-          const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
-          div.style.border = `${framePx}px solid ${FRAME_COLORS[art.frameType] ?? FRAME_COLORS.black}`
-          div.style.boxSizing = 'content-box'
+        // Mount and frame. The artwork keeps the div's content box, the mount
+        // is padding and the frame is the border, so both grow outward from
+        // the recorded position exactly as they did before mounts existed.
+        if (sc) {
+          const bands = bandsPx(art, sc.dispPxPerCm)
+          if (bands.mount.top || bands.mount.right || bands.mount.bottom || bands.mount.left) {
+            div.style.padding =
+              `${bands.mount.top}px ${bands.mount.right}px ${bands.mount.bottom}px ${bands.mount.left}px`
+            div.style.background = mountHex(art.mountColor)
+            div.style.boxSizing = 'content-box'
+          }
+          if (bands.frame > 0) {
+            div.style.border = `${bands.frame}px solid ${frameHex(art.frameType)}`
+            div.style.boxSizing = 'content-box'
+          }
         }
 
         div.appendChild(img)
 
-        // The frame's lip shades the artwork itself, not just the wall.
-        if (art.frameType && art.frameWidthMm && sc &&
-            art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
-          div.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur, art.shadowOpacity))
+        // Grain, on the wood frames only. Four rails rather than one band,
+        // because grain runs along the length of each piece of timber — which
+        // is what stops a wide frame reading as a colour swatch.
+        if (sc && isWoodFrame(art.frameType)) {
+          const bands = bandsPx(art, sc.dispPxPerCm)
+          if (bands.frame > 0) {
+            div.appendChild(frameGrainElement(
+              art.frameType!,
+              sz.w + bands.mount.left + bands.mount.right + bands.frame * 2,
+              sz.h + bands.mount.top + bands.mount.bottom + bands.frame * 2,
+              bands.frame,
+              sc.dispPxPerCm,
+              bands.frame,
+              bands.frame,
+            ))
+          }
+        }
+
+        // Two lips, because two edges stand proud. The frame's falls on
+        // whatever is immediately inside it — the mount when there is one —
+        // which `inset:0` gives for free, since the mount is this div's
+        // padding. The mount's own falls on the artwork, inset by its widths.
+        const lit = art.shadowBlur != null && art.shadowBlur > 0
+          && art.shadowOpacity != null && art.shadowOpacity > 0
+        if (art.frameType && art.frameWidthMm && sc && lit) {
+          div.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur!, art.shadowOpacity!))
+        }
+        if (sc && lit) {
+          const m = bandsPx(art, sc.dispPxPerCm).mount
+          if (m.top || m.right || m.bottom || m.left) {
+            div.appendChild(mountLipShadeElement(
+              art.shadowAngle, art.shadowBlur!, mountLipOpacity(art.shadowOpacity!),
+              `${m.top}px ${m.right}px ${m.bottom}px ${m.left}px`,
+            ))
+          }
         }
       }
 
@@ -1987,6 +2028,21 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  /**
+   * The mount: colour and the four widths. Takes a patch rather than a fixed
+   * argument list because the studio edits one figure for all four sides most
+   * of the time and the individual sides only occasionally.
+   */
+  function updateArtworkMount(artId: string, patch: Partial<Pick<Artwork,
+    'mountColor' | 'mountTopMm' | 'mountRightMm' | 'mountBottomMm' | 'mountLeftMm'>>) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
   function updateArtworkBrightness(artId: string, brightness: number) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, brightness } : a)
@@ -2130,17 +2186,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const h = art.hCm * pxPerCm
       const x = art.xF * c.width
       const y = art.yF * c.height
-      // The overlay is content-box with the border outside the artwork, so the
-      // frame grows right and down from (x, y) rather than centring on it.
-      const frame = art.frameType && art.frameWidthMm
-        ? Math.round((art.frameWidthMm / 10) * pxPerCm)
-        : 0
+      // The overlay is content-box with its bands outside the artwork, so the
+      // mount and frame grow right and down from (x, y) rather than centring
+      // on it. Same helper the wall uses, so the export matches the screen.
+      const bands = bandsPx(art, pxPerCm)
+      const frame = bands.frame
 
-      // Compose frame + artwork off-screen so brightness, fade and shadow
-      // apply to the pair as one, exactly as the CSS filter on the overlay div does.
+      // Compose bands + artwork off-screen so brightness, fade and shadow
+      // apply to the whole as one, exactly as the CSS filter on the overlay div does.
       const tile = document.createElement('canvas')
-      tile.width = Math.max(1, Math.round(w + frame * 2))
-      tile.height = Math.max(1, Math.round(h + frame * 2))
+      tile.width = Math.max(1, Math.round(w + bands.outer.left + bands.outer.right))
+      tile.height = Math.max(1, Math.round(h + bands.outer.top + bands.outer.bottom))
       const tctx = tile.getContext('2d')
       if (!tctx) return
       // Artwork files are usually far larger than the space they occupy on the
@@ -2148,34 +2204,61 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       tctx.imageSmoothingEnabled = true
       tctx.imageSmoothingQuality = 'high'
       if (frame > 0) {
-        tctx.fillStyle = FRAME_COLORS[art.frameType!] ?? FRAME_COLORS.black
+        tctx.fillStyle = frameHex(art.frameType)
         tctx.fillRect(0, 0, tile.width, tile.height)
+        paintFrameGrain(tctx, art.frameType!, tile.width, tile.height, frame, pxPerCm)
       }
-      tctx.drawImage(art.img, frame, frame, w, h)
+      const mountDrawn = bands.mount.top || bands.mount.right || bands.mount.bottom || bands.mount.left
+      if (mountDrawn) {
+        tctx.fillStyle = mountHex(art.mountColor)
+        tctx.fillRect(frame, frame, tile.width - frame * 2, tile.height - frame * 2)
+      }
+      tctx.drawImage(art.img, bands.outer.left, bands.outer.top, w, h)
 
       const blur = art.shadowBlur ?? 0
       const shadowOpacity = art.shadowOpacity ?? 0
 
-      // The frame's lip shades the artwork, as the overlay's inset box-shadow
-      // does. A ring around the artwork is filled outside the clip, so only
-      // the shadow it throws inwards lands on the tile.
-      if (frame > 0 && blur > 0 && shadowOpacity > 0) {
-        const lip = frameLipShadow(art.shadowAngle, blur * dispToOrig)
+      // A lip's shadow: a ring filled outside the clip, so only what it throws
+      // inwards lands on the tile. Used twice — once for the frame, once for
+      // the mount — because two edges stand proud of what they cover.
+      const paintLip = (
+        rx: number, ry: number, rw: number, rh: number,
+        lip: { x: number; y: number; blur: number }, opacity: number,
+      ) => {
         const reach = Math.ceil(lip.blur * 1.5 + Math.abs(lip.x) + Math.abs(lip.y)) + 1
         tctx.save()
         tctx.beginPath()
-        tctx.rect(frame, frame, w, h)
+        tctx.rect(rx, ry, rw, rh)
         tctx.clip()
-        tctx.shadowColor = `rgba(0,0,0,${shadowOpacity})`
+        tctx.shadowColor = `rgba(0,0,0,${opacity})`
         tctx.shadowBlur = lip.blur
         tctx.shadowOffsetX = lip.x
         tctx.shadowOffsetY = lip.y
         tctx.fillStyle = '#000'
         tctx.beginPath()
-        tctx.rect(frame - reach, frame - reach, w + reach * 2, h + reach * 2)
-        tctx.rect(frame, frame, w, h)
+        tctx.rect(rx - reach, ry - reach, rw + reach * 2, rh + reach * 2)
+        tctx.rect(rx, ry, rw, rh)
         tctx.fill('evenodd')
         tctx.restore()
+      }
+
+      if (blur > 0 && shadowOpacity > 0) {
+        // The frame shades what sits inside it: the mount, or the artwork when
+        // there is no mount.
+        if (frame > 0) {
+          paintLip(
+            frame, frame, tile.width - frame * 2, tile.height - frame * 2,
+            frameLipShadow(art.shadowAngle, blur * dispToOrig), shadowOpacity,
+          )
+        }
+        // The mount shades the artwork — a sixth as deep and two-thirds as
+        // dark, because card is thin and its bevel catches light.
+        if (mountDrawn) {
+          paintLip(
+            bands.outer.left, bands.outer.top, w, h,
+            mountLipShadow(art.shadowAngle, blur * dispToOrig), mountLipOpacity(shadowOpacity),
+          )
+        }
       }
 
       // Drop shadow, baked into its own layer. CSS paints the shadow behind an
@@ -2418,6 +2501,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkArtist,
     updateArtworkLineItems,
     updateArtworkFrame,
+    updateArtworkMount,
     updateArtworkBrightness,
     updateAllArtworksBrightness,
     updateArtworkFade,

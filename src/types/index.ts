@@ -116,6 +116,17 @@ export interface Artwork {
   /** Optional frame: type and width in mm (requires scale to be set) */
   frameType?: string | null
   frameWidthMm?: number | null
+  /**
+   * Optional mount: the card between the artwork and the frame. Null colour
+   * means no mount. Widths are per side in mm — the studio edits one figure
+   * for all four until the consultant opens the sides. Part of the placement,
+   * not the work: the same print can be mounted differently on two walls.
+   */
+  mountColor?: string | null
+  mountTopMm?: number | null
+  mountRightMm?: number | null
+  mountBottomMm?: number | null
+  mountLeftMm?: number | null
   /** Per-artwork brightness effect via CSS filter (1.0 = unchanged) */
   brightness?: number | null
   /** Per-artwork fade: slider 0–1, rendered as up to 25 % opacity reduction so the wall shows through */
