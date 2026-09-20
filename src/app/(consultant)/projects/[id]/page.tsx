@@ -7,6 +7,7 @@ import { sortOptions } from '@/lib/options'
 import { readOptionNoteFields } from '@/lib/lineItems'
 import { PLACEMENT_WITH_WORK_SELECT, WORK_COLUMNS } from '@/lib/works'
 import { placementsToArtworks, rowToWork } from '@/lib/workRows'
+import { artistKey, rowToNote, type NoteRow } from '@/lib/notes'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -124,6 +125,41 @@ export default async function ProjectPage({ params }: Props) {
 
   const clientLinkExpired = !!tokenRow && new Date(tokenRow.expires_at) <= new Date()
 
+  // Notes, with the works an artist note is narrowed to. One query: they are
+  // read on four different screens and threading four fetches through would
+  // mean four chances to forget one.
+  const { data: noteRows } = await supabase
+    .from('notes')
+    .select(`
+      id, project_id, anchor_type, elevation_id, option_id, work_id, artist_key,
+      role, body, share, display_order, updated_at,
+      note_works(work_id)
+    `)
+    .eq('project_id', id)
+    .order('display_order', { ascending: true })
+
+  const notes = (noteRows ?? []).map(r => rowToNote(r as unknown as NoteRow))
+
+  // Standing artist notes, narrowed to the artists this project actually has.
+  // The table is studio-wide, so fetching it whole would grow with every
+  // project ever made.
+  const projectArtistKeys = [...new Set(
+    (workRows ?? []).map(w => artistKey((w.artist as string | null) ?? '')).filter(Boolean),
+  )]
+  const { data: artistProfileRows } = projectArtistKeys.length
+    ? await supabase
+        .from('artist_profiles')
+        .select('id, name, name_key, note')
+        .in('name_key', projectArtistKeys)
+    : { data: [] }
+
+  const artistProfiles = (artistProfileRows ?? []).map(r => ({
+    id: r.id as string,
+    name: r.name as string,
+    nameKey: r.name_key as string,
+    note: (r.note as string) ?? '',
+  }))
+
   // Fetch last 10 activity logs for the project
   const { data: activityLogs } = await supabase
     .from('activity_logs')
@@ -141,6 +177,8 @@ export default async function ProjectPage({ params }: Props) {
       existingToken={clientLinkExpired ? null : (tokenRow?.token ?? null)}
       clientLinkExpired={clientLinkExpired}
       activityLogs={(activityLogs ?? []).map(a => ({ id: a.id, type: a.type, text: a.text, createdAt: a.created_at }))}
+      initialNotes={notes}
+      initialArtistProfiles={artistProfiles}
     />
   )
 }

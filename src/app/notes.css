@@ -1,0 +1,137 @@
+/* ══════════════════════════════════════════════════════════
+   NOTES — everything written about a project
+   The same panel appears on four screens (the Notes view, the
+   studio sidebar, the index, and beside an artist), so the
+   card language is defined once here and only its density
+   changes between them.
+══════════════════════════════════════════════════════════ */
+
+.notes-content { max-width: 820px; }
+.notes-preamble {
+  font-size: 12.5px; color: var(--mid); line-height: 1.6;
+  padding: 10px 12px; background: var(--warm-white);
+  border-left: 2px solid var(--accent); border-radius: var(--radius-sm);
+  margin-bottom: 32px;
+}
+.notes-hint { font-size: 11.5px; color: var(--mid); line-height: 1.6; margin: 10px 0 12px; }
+
+/* An option under its elevation, or a work under its artist. Indented so the
+   nesting is legible without a second heading level competing with the
+   kicker above it. */
+.notes-suborder { margin-left: 18px; padding-left: 14px; border-left: 1px solid var(--border); }
+.notes-sub-kicker {
+  font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--mid); margin: 16px 0 8px;
+}
+
+/* ── The panel ──────────────────────────────────────────── */
+.note-panel { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.note-panel.compact { gap: 7px; margin-bottom: 10px; }
+.note-empty { font-size: 11.5px; color: var(--mid); font-style: italic; }
+.note-add { align-self: flex-start; }
+
+/* ── One note ───────────────────────────────────────────── */
+.note-card {
+  background: var(--warm-white); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 11px;
+}
+/* A private note has to be obvious at a glance — it is the one thing on this
+   screen that behaves differently when the export runs. */
+.note-card.private {
+  background: var(--amber-light); border-color: rgba(139, 111, 71, 0.35);
+}
+.note-card.standing { background: var(--cream); }
+
+.note-card-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; flex-wrap: wrap; }
+.note-card-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+.note-role-select {
+  font-size: 11px; font-weight: 500; letter-spacing: .02em;
+  padding: 3px 6px; border: 1px solid var(--border);
+  border-radius: var(--radius-xs); background: white; color: var(--charcoal);
+  cursor: pointer;
+}
+
+.note-share {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: var(--radius-xs); cursor: pointer;
+  border: 1px solid var(--border); background: white; color: var(--mid);
+}
+.note-share.on { background: var(--amber); border-color: var(--amber); color: white; }
+
+.note-narrow-btn {
+  font-size: 10px; padding: 3px 7px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+  background: white; color: var(--mid);
+}
+.note-narrow-btn.on { border-color: var(--accent); color: var(--accent); }
+
+.note-del {
+  font-size: 10px; padding: 3px 6px; cursor: pointer;
+  border: 1px solid transparent; border-radius: var(--radius-xs);
+  background: none; color: var(--mid);
+}
+.note-del:hover { color: var(--red); }
+.note-del.confirm { color: var(--red); border-color: var(--red); background: var(--red-light); }
+
+.note-body {
+  width: 100%; min-height: 54px; resize: none; overflow: hidden;
+  font-family: inherit; font-size: 12.5px; line-height: 1.65; color: var(--charcoal);
+  border: none; background: none; padding: 0;
+}
+.note-body:focus { outline: none; }
+.note-body::placeholder { color: var(--mid); opacity: .65; font-style: italic; }
+
+/* ── Choosing what a new note is for ────────────────────── */
+.note-role-picker {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px; background: var(--warm-white);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.note-role-picker-title { font-size: 11.5px; color: var(--mid); margin-bottom: 5px; }
+.note-role-option {
+  display: flex; flex-direction: column; gap: 1px; text-align: left;
+  padding: 7px 9px; cursor: pointer; background: none;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+}
+.note-role-option:hover { background: var(--cream); border-color: var(--border); }
+.note-role-option-label { font-size: 12px; font-weight: 500; color: var(--charcoal); }
+/* The blurb is the point of this picker: sourcing versus logistics is
+   exactly what gets filed wrong without it. */
+.note-role-option-blurb { font-size: 11px; color: var(--mid); line-height: 1.45; }
+
+/* ── Narrowing an artist note to some of their works ────── */
+.note-narrow {
+  margin-bottom: 8px; padding: 8px 9px;
+  background: var(--cream); border-radius: var(--radius-sm);
+}
+.note-narrow-title { font-size: 11px; color: var(--mid); margin-bottom: 6px; line-height: 1.5; }
+.note-narrow-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; padding: 2px 0; cursor: pointer;
+}
+
+/* ── The standing artist note ───────────────────────────── */
+.note-standing-label { font-size: 12px; font-weight: 500; }
+.note-standing-scope {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--mid);
+}
+
+/* ── A work's notes in the index ────────────────────────── */
+.work-notes { margin: 0 0 14px 62px; }
+.work-notes-toggle {
+  display: inline-block; margin: 0 0 10px 62px; padding: 2px 0;
+  font-size: 11px; color: var(--mid); cursor: pointer;
+  background: none; border: none;
+}
+.work-notes-toggle:hover { color: var(--accent); }
+
+/* A note shown where it is not anchored — an artist's consignment note
+   appearing on each work in that set. Marked, because it is the same note:
+   editing it here changes it everywhere it shows. */
+.note-card.borrowed { background: var(--cream); border-style: dashed; }
+.note-borrowed {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--accent); padding: 3px 6px;
+  border: 1px solid var(--accent-light); border-radius: var(--radius-xs);
+}
