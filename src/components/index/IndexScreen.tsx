@@ -6,7 +6,9 @@ import { groupWorksByArtist, placementsOf } from '@/lib/works'
 import type { IndexElevation, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
 import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
-import { artistKey, notesMentioning, notesOn, type Note, type NoteAnchor, type NoteRole } from '@/lib/notes'
+import ArtistStandingNote from '@/components/notes/ArtistStandingNote'
+import { ANCHOR_META, artistKey, notesMentioning, notesOn, type Note, type NoteAnchor } from '@/lib/notes'
+import type { ArtistProfile } from '@/components/studio/StudioScreen'
 
 interface Props {
   projectName: string
@@ -20,9 +22,14 @@ interface Props {
   onDeleteWork: (workId: string) => void
   /** Every note in the project; the index narrows them per artist and work. */
   notes: Note[]
-  onAddNote: (anchor: NoteAnchor, role: NoteRole, id: string | null) => void
+  onAddNote: (anchor: NoteAnchor, id: string | null) => void
+  /** A note covering several works at once, made by picking them first. */
+  onAddWorkSetNote: (artistKey: string, workIds: string[]) => void
   onChangeNote: (noteId: string, patch: NotePatch) => void
   onDeleteNote: (noteId: string) => void
+  /** Standing artist notes — the same text in every project they appear in. */
+  artistProfiles: ArtistProfile[]
+  onArtistProfileChange: (name: string, note: string) => void
 }
 
 /**
@@ -32,8 +39,13 @@ interface Props {
  */
 export default function IndexScreen({
   projectName, clientName, works, elevations, artistSuggestions, onWorkChange, onAddWork, onDeleteWork,
-  notes, onAddNote, onChangeNote, onDeleteNote,
+  notes, onAddNote, onAddWorkSetNote, onChangeNote, onDeleteNote,
+  artistProfiles, onArtistProfileChange,
 }: Props) {
+  const nameOf = useMemo(() => {
+    const m = new Map(works.map(w => [w.id, w.name]))
+    return (id: string) => m.get(id)
+  }, [works])
   const groups = useMemo(() => groupWorksByArtist(works), [works])
   const placedCount = works.filter(w => placementsOf(w.id, elevations).length > 0).length
   const declinedCount = works.filter(w => w.status === 'declined').length
@@ -66,55 +78,27 @@ export default function IndexScreen({
           </div>
         ) : (
           groups.map(g => {
-            // The works' own artist, not the group label — see NotesScreen.
-            // Unattributed works must not become an artist.
+            // The works' own artist, not the group label. Works with no
+            // artist group under a placeholder, and must not become one.
             const key = artistKey(g.works[0]?.artist)
-            const narrowable = g.works.map(w => ({ id: w.id, name: w.name }))
             return (
-              <section key={g.key} className="index-group">
-                <div className="budget-section-kicker index-kicker">
-                  <span>{g.label}</span>
-                  <span className="index-kicker-count">{g.works.length}</span>
-                </div>
-
-                {/* Notes about the artist, including any narrowed to a few of
-                    their works. The standing note that carries between
-                    projects is edited on the Notes screen, not here — changing
-                    it changes what other projects say. */}
-                {key && (
-                  <NotePanel
-                    notes={notesOn(notes, 'artist', key)}
-                    anchor="artist"
-                    onAdd={role => onAddNote('artist', role, key)}
-                    onChange={onChangeNote}
-                    onDelete={onDeleteNote}
-                    narrowableWorks={narrowable.length > 1 ? narrowable : undefined}
-                    compact
-                  />
-                )}
-
-                {g.works.map(w => (
-                  <div key={w.id}>
-                    <WorkRow
-                      work={w}
-                      placed={placementsOf(w.id, elevations)}
-                      elevations={elevations}
-                      onChange={patch => onWorkChange(w.id, patch)}
-                      onDelete={() => onDeleteWork(w.id)}
-                    />
-                    {/* Both the notes written on this work and any artist note
-                        narrowed to a set it belongs to — a consignment note is
-                        about this work as much as one written on it. */}
-                    <WorkNotes
-                      work={w}
-                      notes={notesMentioning(notes, w.id)}
-                      onAdd={role => onAddNote('work', role, w.id)}
-                      onChange={onChangeNote}
-                      onDelete={onDeleteNote}
-                    />
-                  </div>
-                ))}
-              </section>
+              <ArtistGroupSection
+                key={g.key}
+                artistKeyValue={key}
+                label={g.label}
+                works={g.works}
+                elevations={elevations}
+                notes={notes}
+                nameOf={nameOf}
+                standingNote={artistProfiles.find(p => p.nameKey === key)?.note ?? ''}
+                onStandingNoteChange={note => onArtistProfileChange(g.label, note)}
+                onWorkChange={onWorkChange}
+                onDeleteWork={onDeleteWork}
+                onAddNote={onAddNote}
+                onAddWorkSetNote={onAddWorkSetNote}
+                onChangeNote={onChangeNote}
+                onDeleteNote={onDeleteNote}
+              />
             )
           })
         )}
@@ -124,16 +108,170 @@ export default function IndexScreen({
 }
 
 /**
+ * One artist: what carries between projects, what this project says, their
+ * works, and any note covering several of them at once.
+ *
+ * Picking works and then writing about them is the way round that reads: the
+ * set is made by pointing at things, which is how a consultant would describe
+ * it out loud. The earlier version had the consultant open a note and tick
+ * works from inside it, which nobody could explain.
+ */
+function ArtistGroupSection({
+  artistKeyValue, label, works, elevations, notes, nameOf,
+  standingNote, onStandingNoteChange,
+  onWorkChange, onDeleteWork,
+  onAddNote, onAddWorkSetNote, onChangeNote, onDeleteNote,
+}: {
+  artistKeyValue: string
+  label: string
+  works: Work[]
+  elevations: IndexElevation[]
+  notes: Note[]
+  nameOf: (id: string) => string | undefined
+  standingNote: string
+  onStandingNoteChange: (note: string) => void
+  onWorkChange: (workId: string, patch: WorkPatch) => void
+  onDeleteWork: (workId: string) => void
+  onAddNote: (anchor: NoteAnchor, id: string | null) => void
+  onAddWorkSetNote: (artistKey: string, workIds: string[]) => void
+  onChangeNote: (noteId: string, patch: NotePatch) => void
+  onDeleteNote: (noteId: string) => void
+}) {
+  const [picking, setPicking] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [showAbout, setShowAbout] = useState(false)
+
+  function toggle(id: string) {
+    setPicked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function finish() {
+    if (picked.size > 0) onAddWorkSetNote(artistKeyValue, [...picked])
+    setPicked(new Set())
+    setPicking(false)
+  }
+
+  const artistNotes = artistKeyValue ? notesOn(notes, 'artist', artistKeyValue) : []
+  // A note covering a set is read on the works it covers, not again up here.
+  const aboutTheArtist = artistNotes.filter(n => n.workIds.length === 0)
+
+  return (
+    <section className="index-group">
+      <div className="budget-section-kicker index-kicker">
+        <span>{label}</span>
+        <span className="index-kicker-count">{works.length}</span>
+      </div>
+
+      {artistKeyValue && (
+        <>
+          <div className="artist-note-tools">
+            <button
+              type="button"
+              className={`artist-note-tab${showAbout ? ' on' : ''}`}
+              onClick={() => setShowAbout(v => !v)}
+            >
+              {showAbout ? 'Hide notes about this artist' : `Notes about ${label}`}
+            </button>
+            {works.length > 1 && (
+              picking ? (
+                <>
+                  <span className="artist-pick-hint">
+                    {picked.size === 0
+                      ? 'Tick the works this note is about'
+                      : `${picked.size} picked`}
+                  </span>
+                  <button type="button" className="btn btn-sm btn-primary" disabled={picked.size === 0} onClick={finish}>
+                    Write about these
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => { setPicked(new Set()); setPicking(false) }}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="artist-note-tab" onClick={() => setPicking(true)}>
+                  Note about several works
+                </button>
+              )
+            )}
+          </div>
+
+          {showAbout && (
+            <div className="artist-note-open">
+              <ArtistStandingNote
+                name={label}
+                note={standingNote}
+                onChange={onStandingNoteChange}
+              />
+              <p className="notes-hint">{ANCHOR_META.artist.prompt}</p>
+              <NotePanel
+                notes={aboutTheArtist}
+                anchor="artist"
+                onAdd={() => onAddNote('artist', artistKeyValue)}
+                onChange={onChangeNote}
+                onDelete={onDeleteNote}
+                compact
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {works.map(w => (
+        <div key={w.id} className={picking ? 'index-pickable' : undefined}>
+          <div className="index-pick-row">
+            {picking && (
+              <input
+                type="checkbox"
+                className="index-pick-box"
+                checked={picked.has(w.id)}
+                onChange={() => toggle(w.id)}
+                aria-label={`Include ${w.name}`}
+              />
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <WorkRow
+                work={w}
+                placed={placementsOf(w.id, elevations)}
+                elevations={elevations}
+                onChange={patch => onWorkChange(w.id, patch)}
+                onDelete={() => onDeleteWork(w.id)}
+              />
+            </div>
+          </div>
+          {/* Both the notes written on this work and any note covering a set
+              it belongs to — a consignment note is about this work as much as
+              one written on it directly. */}
+          <WorkNotes
+            work={w}
+            notes={notesMentioning(notes, w.id)}
+            nameOf={nameOf}
+            onAdd={() => onAddNote('work', w.id)}
+            onChange={onChangeNote}
+            onDelete={onDeleteNote}
+          />
+        </div>
+      ))}
+    </section>
+  )
+}
+
+/**
  * A work's notes, collapsed until there is something to read or somebody
  * wants to write. The index is a list to scan; an always-open editor under
  * every row would bury the rows.
  */
 function WorkNotes({
-  work, notes, onAdd, onChange, onDelete,
+  work, notes, nameOf, onAdd, onChange, onDelete,
 }: {
   work: Work
   notes: Note[]
-  onAdd: (role: NoteRole) => void
+  nameOf: (id: string) => string | undefined
+  onAdd: () => void
   onChange: (noteId: string, patch: NotePatch) => void
   onDelete: (noteId: string) => void
 }) {
@@ -158,6 +296,7 @@ function WorkNotes({
         onAdd={onAdd}
         onChange={onChange}
         onDelete={onDelete}
+        workName={nameOf}
         compact
       />
     </div>

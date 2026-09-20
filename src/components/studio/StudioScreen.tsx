@@ -25,7 +25,7 @@ import IndexScreen from '@/components/index/IndexScreen'
 import NotesScreen from '@/components/notes/NotesScreen'
 import {
   artistKey, noteRow, notesOn, rowToNote,
-  type Note, type NoteAnchor, type NoteRole, type NoteRow,
+  type Note, type NoteAnchor, type NoteRow,
 } from '@/lib/notes'
 import type { NotePatch } from '@/components/notes/NotePanel'
 
@@ -464,8 +464,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   // All five anchors go through these three, so there is one place that
   // knows how a note is written and one place that can get it wrong.
 
-  const addNote = useCallback(async (
-    anchor: NoteAnchor, role: NoteRole, id: string | null,
+  const NOTE_SELECT = `
+    id, project_id, anchor_type, elevation_id, option_id, work_id, artist_key,
+    body, share, display_order, updated_at, note_works(work_id)
+  `
+
+  const insertNote = useCallback(async (
+    anchor: NoteAnchor, id: string | null, workIds: string[] = [],
   ) => {
     const supabase = createClient()
     const payload = noteRow({
@@ -475,20 +480,33 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       optionId:    anchor === 'option'    ? id : null,
       workId:      anchor === 'work'      ? id : null,
       artistKey:   anchor === 'artist'    ? id : null,
-      role,
       body: '',
       share: 'proposal',
-      // On the end of its own role, not of everything on the anchor: a new
-      // rationale belongs under the last rationale, not after the logistics.
-      displayOrder: notes.filter(n => n.anchor === anchor && n.role === role).length,
+      displayOrder: notes.filter(n => n.anchor === anchor).length,
     })
-    const { data, error } = await supabase.from('notes').insert(payload).select(`
-      id, project_id, anchor_type, elevation_id, option_id, work_id, artist_key,
-      role, body, share, display_order, updated_at, note_works(work_id)
-    `).single()
+    const { data, error } = await supabase.from('notes').insert(payload).select(NOTE_SELECT).single()
     if (error || !data) { onStatus('Could not add the note — please try again'); return }
-    setNotes(prev => [...prev, rowToNote(data as unknown as NoteRow)])
+
+    // The set of works a note covers is written with it rather than after,
+    // so a note picked out of several works is never briefly about none.
+    if (workIds.length > 0) {
+      const { error: setErr } = await supabase.from('note_works')
+        .insert(workIds.map(work_id => ({ note_id: data.id, work_id })))
+      if (setErr) onStatus('Note added, but not which works it is about')
+    }
+
+    const note = rowToNote(data as unknown as NoteRow)
+    setNotes(prev => [...prev, { ...note, workIds }])
   }, [project.id, notes]) // eslint-disable-line
+
+  const addNote = useCallback((anchor: NoteAnchor, id: string | null) => {
+    void insertNote(anchor, id)
+  }, [insertNote])
+
+  /** A note about several of one artist's works, made by picking them first. */
+  const addWorkSetNote = useCallback((key: string, workIds: string[]) => {
+    void insertNote('artist', key, workIds)
+  }, [insertNote])
 
   const changeNote = useCallback(async (noteId: string, patch: NotePatch) => {
     const before = notes.find(n => n.id === noteId)
@@ -1333,7 +1351,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             budget={budget}
             onBudgetChange={updateBudget}
             optionNotes={notesOn(notes, 'option', optionId)}
-            onAddNote={role => addNote('option', role, optionId)}
+            onAddNote={() => addNote('option', optionId)}
             onChangeNote={changeNote}
             onDeleteNote={deleteNote}
           />
@@ -1352,13 +1370,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           projectName={project.name}
           clientName={project.client_name}
           notes={notes}
-          works={works}
           elevations={elevations}
-          artistProfiles={artistProfiles}
           onAdd={addNote}
           onChange={changeNote}
           onDelete={deleteNote}
-          onArtistProfileChange={changeArtistProfile}
         />
       )}
 
@@ -1421,8 +1436,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onDeleteWork={id => setPendingDeleteWorkId(id)}
           notes={notes}
           onAddNote={addNote}
+          onAddWorkSetNote={addWorkSetNote}
           onChangeNote={changeNote}
           onDeleteNote={deleteNote}
+          artistProfiles={artistProfiles}
+          onArtistProfileChange={changeArtistProfile}
         />
       )}
 

@@ -1,98 +1,85 @@
 /**
  * Notes, in one place.
  *
- * A note is one body of text with two independent properties: what it is
- * about (its anchor) and what it is for (its role). Keeping those apart is
- * the whole design. "Why this pair is discounted" and "why this pair suits
- * the room" are both notes on an option and differ only in their role; if
- * they were modelled as two kinds of note they would need two tables, two
- * editors, and would drift apart the way the frame colour table did.
+ * A note is a body of text attached to something: the project, its budget,
+ * an elevation, an option, a work, or an artist. That attachment is the only
+ * structure a note carries.
+ *
+ * An earlier version also made the consultant classify each note — brief,
+ * rationale, sourcing, commercial — so the export would know which part of a
+ * proposal it belonged in. That was the wrong trade. Working out what a note
+ * is for is cheap for a language model reading the export and expensive for
+ * the person writing it, and the picker stood between them and the first
+ * word. What a note is attached to cannot be inferred from prose; what it is
+ * for can be. The vocabulary survives as the prompt under each heading,
+ * where it invites writing rather than interrupting it.
  *
  * Nothing here talks to the database or the DOM, so `node --test` can run it
- * and every renderer can share it.
+ * and every screen can share it.
  */
 
 /** What a note is about. */
-export const NOTE_ANCHORS = ['project', 'elevation', 'option', 'work', 'artist'] as const
+export const NOTE_ANCHORS = ['project', 'budget', 'elevation', 'option', 'work', 'artist'] as const
 export type NoteAnchor = typeof NOTE_ANCHORS[number]
-
-/** What a note is for. */
-export const NOTE_ROLES = ['brief', 'space', 'rationale', 'sourcing', 'commercial', 'logistics'] as const
-export type NoteRole = typeof NOTE_ROLES[number]
 
 /** Whether a note may leave the studio. */
 export const NOTE_SHARES = ['proposal', 'private'] as const
 export type NoteShare = typeof NOTE_SHARES[number]
 
 /**
- * The six roles, in the order a proposal reads. The blurb is what the
- * consultant sees under the label when choosing — these are guessable but
- * not obvious, and the difference between sourcing and logistics is exactly
- * the kind of thing that gets filed wrong without a prompt.
+ * The heading, and what is worth writing under it.
+ *
+ * `prompt` is the whole of the old role vocabulary, repurposed. It shows as
+ * placeholder text in an empty note and as the hint under each heading, so
+ * it is answering "what goes here?" at the moment that question is being
+ * asked.
  */
-export const ROLE_META: Record<NoteRole, { label: string; blurb: string }> = {
-  brief: {
-    label: 'Brief',
-    blurb: 'What the client asked for, and what they ruled out.',
+export const ANCHOR_META: Record<NoteAnchor, {
+  /** Heading on the screen. */
+  label: string
+  /** Referring to it mid-sentence: "nothing written about …". */
+  inline: string
+  prompt: string
+}> = {
+  project: {
+    label: 'The project',
+    inline: 'the project',
+    prompt: 'What the job is, and who it is for. The building, the scope, the timeline. Who the client is — the organisation, the people, their taste, anything to be careful of. What they asked for, and what they ruled out.',
   },
-  space: {
-    label: 'The space',
-    blurb: 'The building, the light, the room and how it is used.',
+  budget: {
+    label: 'Budget',
+    inline: 'the budget',
+    prompt: 'The shape of the money rather than the figures — the ceiling, how it is structured, what is in and what is out, terms. Per-work pricing lives on the Budget screen.',
   },
-  rationale: {
-    label: 'Rationale',
-    blurb: 'Why this work, why this wall — or why it was declined.',
+  elevation: {
+    label: 'Elevation',
+    inline: 'this elevation',
+    prompt: 'The space this wall is in. Light, how the room is used, traffic, ceiling height, what is already there, anything that constrains hanging.',
   },
-  sourcing: {
-    label: 'Sourcing',
-    blurb: 'Gallery, representation, availability, lead time, provenance.',
+  option: {
+    label: 'Option',
+    inline: 'this option',
+    prompt: 'Why this arrangement — what it does for the room, and how it differs from the alternatives.',
   },
-  commercial: {
-    label: 'Commercial',
-    blurb: 'How a price is put together — pairing, conditions, what is included.',
+  work: {
+    label: 'Work',
+    inline: 'this work',
+    prompt: 'Why this piece, and why here. Or why it was declined.',
   },
-  logistics: {
-    label: 'Logistics',
-    blurb: 'Delivery, access, installation, insurance.',
+  artist: {
+    label: 'Artist',
+    inline: 'this artist',
+    prompt: 'Why this artist for this client, and what the proposal should say about them.',
   },
-}
-
-export const ANCHOR_META: Record<NoteAnchor, { label: string }> = {
-  project: { label: 'the project' },
-  elevation: { label: 'this elevation' },
-  option: { label: 'this option' },
-  work: { label: 'this work' },
-  artist: { label: 'this artist' },
 }
 
 /**
- * Which roles are offered on which anchor.
- *
- * A brief note on a single work would be meaningless, and the export would
- * have nowhere to put it. The picker is narrowed rather than the database:
- * the constraint in 030 allows any pairing, so a role can be opened up later
- * without a migration.
+ * The standing note about an artist, which is a different question from the
+ * one above: this is true of them wherever they hang, and carries into every
+ * project.
  */
-const ROLES_BY_ANCHOR: Record<NoteAnchor, readonly NoteRole[]> = {
-  project:   ['brief', 'space', 'rationale', 'commercial', 'logistics'],
-  elevation: ['space', 'rationale', 'logistics'],
-  option:    ['rationale', 'commercial', 'logistics'],
-  work:      ['rationale', 'sourcing', 'commercial', 'logistics'],
-  artist:    ['sourcing', 'rationale', 'commercial', 'logistics'],
-}
-
-export function rolesFor(anchor: NoteAnchor): readonly NoteRole[] {
-  return ROLES_BY_ANCHOR[anchor] ?? NOTE_ROLES
-}
-
-/** The role a new note on this anchor starts as — the commonest one there. */
-export function defaultRoleFor(anchor: NoteAnchor): NoteRole {
-  return rolesFor(anchor)[0]
-}
-
-export function isNoteRole(v: unknown): v is NoteRole {
-  return typeof v === 'string' && (NOTE_ROLES as readonly string[]).includes(v)
-}
+export const ARTIST_STANDING_PROMPT =
+  'Who represents them, lead times, editions policy, your history with the gallery — anything true of this artist wherever they hang.'
 
 export function isNoteAnchor(v: unknown): v is NoteAnchor {
   return typeof v === 'string' && (NOTE_ANCHORS as readonly string[]).includes(v)
@@ -119,10 +106,13 @@ export interface Note {
   optionId: string | null
   workId: string | null
   artistKey: string | null
-  role: NoteRole
   body: string
   share: NoteShare
-  /** Works an artist note is narrowed to. Empty means the artist generally. */
+  /**
+   * The works this note is about, when it covers several. Set by picking
+   * works and saying "note about these" — the set is made by pointing at
+   * things rather than by ticking boxes inside a note.
+   */
   workIds: string[]
   displayOrder: number
   updatedAt: string | null
@@ -137,7 +127,6 @@ export interface NoteRow {
   option_id: string | null
   work_id: string | null
   artist_key: string | null
-  role: string
   body: string
   share: string
   display_order: number
@@ -146,9 +135,9 @@ export interface NoteRow {
 }
 
 /**
- * A row as the app uses it. Anything unrecognised falls back rather than
- * being dropped: a note whose role no longer exists is still text somebody
- * wrote, and losing it silently would be worse than filing it oddly.
+ * A row as the app uses it. An unrecognised anchor falls back rather than
+ * being dropped: a note is text somebody wrote, and losing it silently would
+ * be worse than filing it oddly.
  */
 export function rowToNote(r: NoteRow): Note {
   return {
@@ -159,7 +148,6 @@ export function rowToNote(r: NoteRow): Note {
     optionId: r.option_id,
     workId: r.work_id,
     artistKey: r.artist_key,
-    role: isNoteRole(r.role) ? r.role : 'rationale',
     body: r.body ?? '',
     share: r.share === 'private' ? 'private' : 'proposal',
     workIds: (r.note_works ?? []).map(w => w.work_id),
@@ -168,7 +156,7 @@ export function rowToNote(r: NoteRow): Note {
   }
 }
 
-/** The columns a write sends. The join table is handled separately. */
+/** The columns a write sends. The work set is handled separately. */
 export function noteRow(n: Omit<Note, 'id' | 'workIds' | 'updatedAt'>): Record<string, unknown> {
   return {
     project_id:    n.projectId,
@@ -177,14 +165,13 @@ export function noteRow(n: Omit<Note, 'id' | 'workIds' | 'updatedAt'>): Record<s
     option_id:     n.anchor === 'option'    ? n.optionId    : null,
     work_id:       n.anchor === 'work'      ? n.workId      : null,
     artist_key:    n.anchor === 'artist'    ? n.artistKey   : null,
-    role:          n.role,
     body:          n.body,
     share:         n.share,
     display_order: n.displayOrder,
   }
 }
 
-/** Every note attached to one thing, in the order they should read. */
+/** Every note attached to one thing, in the order they were written. */
 export function notesOn(
   notes: Note[],
   anchor: NoteAnchor,
@@ -194,32 +181,26 @@ export function notesOn(
     .filter(n => {
       if (n.anchor !== anchor) return false
       switch (anchor) {
-        case 'project':   return true
+        case 'project':
+        case 'budget':    return true
         case 'elevation': return n.elevationId === id
         case 'option':    return n.optionId === id
         case 'work':      return n.workId === id
         case 'artist':    return n.artistKey === id
       }
     })
-    .sort(byRoleThenOrder)
+    .sort((a, b) => a.displayOrder - b.displayOrder)
 }
 
 /**
- * Notes that mention a work: the ones anchored to it, plus any artist note
- * narrowed to a set it belongs to. The work's own page wants both — the
- * consignment note is about this work as much as the note written on it.
+ * Notes that mention a work: the ones written on it, plus any note covering
+ * a set it belongs to. A consignment note is about this work as much as one
+ * written on it directly.
  */
 export function notesMentioning(notes: Note[], workId: string): Note[] {
   return notes
     .filter(n => n.workId === workId || n.workIds.includes(workId))
-    .sort(byRoleThenOrder)
-}
-
-function byRoleThenOrder(a: Note, b: Note): number {
-  const ra = NOTE_ROLES.indexOf(a.role)
-  const rb = NOTE_ROLES.indexOf(b.role)
-  if (ra !== rb) return ra - rb
-  return a.displayOrder - b.displayOrder
+    .sort((a, b) => a.displayOrder - b.displayOrder)
 }
 
 /**
@@ -227,23 +208,30 @@ function byRoleThenOrder(a: Note, b: Note): number {
  *
  * Private notes are dropped here, once, rather than at each place the export
  * assembles a section — a filter that has to be remembered in six places is
- * a filter that will be forgotten in one. Empty notes go too: a note the
- * consultant opened and never wrote in should not become a blank heading in
- * a client proposal.
+ * a filter that will be forgotten in one. Empty notes go too: a note that
+ * was opened and never written in should not become a blank heading in a
+ * client proposal.
  */
 export function notesForExport(notes: Note[]): Note[] {
   return notes.filter(n => n.share === 'proposal' && n.body.trim().length > 0)
 }
 
-/** Grouped by role, roles in proposal order, empty roles left out. */
-export function groupNotesByRole(notes: Note[]): Array<{ role: NoteRole; notes: Note[] }> {
-  return NOTE_ROLES
-    .map(role => ({ role, notes: notes.filter(n => n.role === role).sort((a, b) => a.displayOrder - b.displayOrder) }))
-    .filter(g => g.notes.length > 0)
+/** How many notes here actually say something. */
+export function writtenCount(notes: Note[]): number {
+  return notes.filter(n => n.body.trim().length > 0).length
 }
 
-/** "Sourcing · private", for a note's header line. */
-export function noteLabel(n: Note): string {
-  const role = ROLE_META[n.role]?.label ?? n.role
-  return n.share === 'private' ? `${role} · private` : role
+/**
+ * "About 3 works" / "About Sprinters 1" — what a multi-work note covers,
+ * named rather than counted where naming fits. A count alone gives no way to
+ * tell two sets apart.
+ */
+export function workSetLabel(
+  workIds: string[],
+  nameOf: (id: string) => string | undefined,
+): string {
+  const names = workIds.map(nameOf).filter((n): n is string => !!n)
+  if (names.length === 0) return ''
+  if (names.length <= 2) return names.join(' and ')
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`
 }

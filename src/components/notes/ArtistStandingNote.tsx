@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ARTIST_STANDING_PROMPT } from '@/lib/notes'
 
 interface Props {
   name: string
@@ -44,7 +45,7 @@ export default function ArtistStandingNote({ name, note, onChange }: Props) {
         ref={taRef}
         className="note-body"
         value={body}
-        placeholder="Gallery, representation, lead times, the history with them — anything true of this artist wherever they hang."
+        placeholder={ARTIST_STANDING_PROMPT}
         onChange={e => setBody(e.target.value)}
         onBlur={() => { if (body !== saved) { setSaved(body); onChange(body) } }}
       />

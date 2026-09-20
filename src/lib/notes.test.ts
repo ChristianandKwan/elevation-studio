@@ -1,9 +1,9 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  NOTE_ANCHORS, NOTE_ROLES, ROLE_META, ANCHOR_META,
-  artistKey, defaultRoleFor, groupNotesByRole, noteLabel, noteRow,
-  notesForExport, notesMentioning, notesOn, rolesFor, rowToNote,
+  ANCHOR_META, ARTIST_STANDING_PROMPT, NOTE_ANCHORS,
+  artistKey, noteRow, notesForExport, notesMentioning, notesOn,
+  rowToNote, workSetLabel, writtenCount,
   type Note, type NoteRow,
 } from './notes.ts'
 
@@ -11,41 +11,50 @@ function note(over: Partial<Note> = {}): Note {
   return {
     id: 'n1', projectId: 'p1', anchor: 'project',
     elevationId: null, optionId: null, workId: null, artistKey: null,
-    role: 'rationale', body: 'because', share: 'proposal',
+    body: 'because', share: 'proposal',
     workIds: [], displayOrder: 0, updatedAt: null,
     ...over,
   }
 }
 
-describe('the vocabulary', () => {
-  test('every role and anchor has a label', () => {
-    for (const r of NOTE_ROLES) assert.ok(ROLE_META[r]?.label, `${r} has no label`)
-    for (const a of NOTE_ANCHORS) assert.ok(ANCHOR_META[a]?.label, `${a} has no label`)
-  })
-
-  test('every role carries a blurb — the picker is not self-explanatory', () => {
-    // Sourcing vs logistics is exactly the distinction people file wrong.
-    for (const r of NOTE_ROLES) assert.ok(ROLE_META[r].blurb.length > 10, `${r} blurb too thin`)
-  })
-
-  test('every anchor offers at least one role, and only real ones', () => {
+describe('the anchors', () => {
+  test('every anchor has a heading, an inline name and a prompt', () => {
     for (const a of NOTE_ANCHORS) {
-      const roles = rolesFor(a)
-      assert.ok(roles.length > 0, `${a} offers no roles`)
-      for (const r of roles) assert.ok(NOTE_ROLES.includes(r), `${a} offers unknown role ${r}`)
-      assert.ok(roles.includes(defaultRoleFor(a)), `${a}'s default is not among its roles`)
+      assert.ok(ANCHOR_META[a]?.label, `${a} has no label`)
+      assert.ok(ANCHOR_META[a]?.inline, `${a} has no inline name`)
+      // The prompt is the whole of the old role vocabulary, repurposed: it
+      // has to answer "what goes here?" on its own.
+      assert.ok(ANCHOR_META[a].prompt.length > 40, `${a}'s prompt is too thin to replace a picker`)
     }
+    assert.ok(ARTIST_STANDING_PROMPT.length > 40)
   })
 
-  test('brief and space are project-shaped, not work-shaped', () => {
-    assert.ok(rolesFor('project').includes('brief'))
-    assert.ok(!rolesFor('work').includes('brief'), 'a brief note on one work has nowhere to go')
-    assert.ok(!rolesFor('artist').includes('space'))
+  test('budget is project-scoped, like the project itself', () => {
+    // Both carry no foreign key; the constraint in 031 enforces it.
+    const row = noteRow({
+      projectId: 'p1', anchor: 'budget',
+      elevationId: 'e1', optionId: 'o1', workId: 'w1', artistKey: 'someone',
+      body: 'ceiling is 40k', share: 'proposal', displayOrder: 0,
+    })
+    assert.equal(row.anchor_type, 'budget')
+    assert.equal(row.elevation_id, null)
+    assert.equal(row.option_id, null)
+    assert.equal(row.work_id, null)
+    assert.equal(row.artist_key, null)
   })
 
-  test('sourcing is offered where an artist or a work is', () => {
-    assert.ok(rolesFor('artist').includes('sourcing'))
-    assert.ok(rolesFor('work').includes('sourcing'))
+  test('the budget prompt sends per-line pricing elsewhere', () => {
+    // The distinction that would otherwise be got wrong: this is the shape of
+    // the money, not the figures.
+    assert.match(ANCHOR_META.budget.prompt, /Budget screen/)
+  })
+
+  test('the elevation prompt talks about the space', () => {
+    // The label stays "Elevation" — it is the word the product is named for
+    // and the one clients already see — while the prompt uses the natural
+    // word, so precision labels and plain language explains.
+    assert.equal(ANCHOR_META.elevation.label, 'Elevation')
+    assert.match(ANCHOR_META.elevation.prompt, /space|room/i)
   })
 })
 
@@ -75,66 +84,72 @@ describe('rows in and out', () => {
     const row: NoteRow = {
       id: 'n9', project_id: 'p1', anchor_type: 'artist',
       elevation_id: null, option_id: null, work_id: null, artist_key: 'agnes martin',
-      role: 'sourcing', body: 'Represented by X', share: 'private',
+      body: 'Represented by X', share: 'private',
       display_order: 2, updated_at: '2026-09-20T10:00:00Z',
       note_works: [{ work_id: 'w1' }, { work_id: 'w2' }],
     }
     const n = rowToNote(row)
     assert.equal(n.anchor, 'artist')
-    assert.equal(n.role, 'sourcing')
     assert.equal(n.share, 'private')
     assert.deepEqual(n.workIds, ['w1', 'w2'])
   })
 
-  test('an unrecognised role is filed oddly rather than lost', () => {
-    // Somebody wrote this text. Dropping it silently would be worse.
+  test('an unrecognised anchor is filed oddly rather than lost', () => {
     const n = rowToNote({
       id: 'n1', project_id: 'p1', anchor_type: 'nonsense',
       elevation_id: null, option_id: null, work_id: null, artist_key: null,
-      role: 'gibberish', body: 'still text', share: 'whatever',
-      display_order: 0,
+      body: 'still text', share: 'whatever', display_order: 0,
     })
     assert.equal(n.body, 'still text')
     assert.equal(n.anchor, 'project')
-    assert.equal(n.role, 'rationale')
     assert.equal(n.share, 'proposal')
   })
 
   test('writing a note clears the anchors it is not', () => {
-    // A note that claims to be about an elevation while carrying a work id
-    // is rejected by the constraint in 030; this is what keeps it from
-    // getting that far.
     const row = noteRow({
       projectId: 'p1', anchor: 'option',
       elevationId: 'e1', optionId: 'o1', workId: 'w1', artistKey: 'someone',
-      role: 'commercial', body: 'paired', share: 'proposal', displayOrder: 0,
+      body: 'paired', share: 'proposal', displayOrder: 0,
     })
     assert.equal(row.option_id, 'o1')
     assert.equal(row.elevation_id, null)
     assert.equal(row.work_id, null)
     assert.equal(row.artist_key, null)
   })
+
+  test('a note carries no role any more', () => {
+    const row = noteRow({
+      projectId: 'p1', anchor: 'project',
+      elevationId: null, optionId: null, workId: null, artistKey: null,
+      body: 'x', share: 'proposal', displayOrder: 0,
+    })
+    assert.ok(!('role' in row), 'role was dropped in 031 and must not be written')
+  })
 })
 
 describe('finding the notes on a thing', () => {
   const notes = [
-    note({ id: 'a', anchor: 'option', optionId: 'o1', role: 'commercial' }),
-    note({ id: 'b', anchor: 'option', optionId: 'o1', role: 'rationale' }),
-    note({ id: 'c', anchor: 'option', optionId: 'o2', role: 'rationale' }),
-    note({ id: 'd', anchor: 'work',   workId: 'w1',   role: 'sourcing' }),
-    note({ id: 'e', anchor: 'project', role: 'brief' }),
+    note({ id: 'a', anchor: 'option', optionId: 'o1', displayOrder: 1 }),
+    note({ id: 'b', anchor: 'option', optionId: 'o1', displayOrder: 0 }),
+    note({ id: 'c', anchor: 'option', optionId: 'o2' }),
+    note({ id: 'd', anchor: 'work', workId: 'w1' }),
+    note({ id: 'e', anchor: 'project' }),
+    note({ id: 'f', anchor: 'budget' }),
   ]
 
   test('only the thing asked for', () => {
     assert.deepEqual(notesOn(notes, 'option', 'o1').map(n => n.id), ['b', 'a'])
     assert.deepEqual(notesOn(notes, 'option', 'o2').map(n => n.id), ['c'])
     assert.deepEqual(notesOn(notes, 'work', 'w1').map(n => n.id), ['d'])
-    assert.deepEqual(notesOn(notes, 'project').map(n => n.id), ['e'])
   })
 
-  test('they come back in the order a proposal reads', () => {
-    // rationale before commercial, whatever order they were written in.
-    assert.deepEqual(notesOn(notes, 'option', 'o1').map(n => n.role), ['rationale', 'commercial'])
+  test('project and budget are separate sections, not one', () => {
+    assert.deepEqual(notesOn(notes, 'project').map(n => n.id), ['e'])
+    assert.deepEqual(notesOn(notes, 'budget').map(n => n.id), ['f'])
+  })
+
+  test('they come back in the order they were written', () => {
+    assert.deepEqual(notesOn(notes, 'option', 'o1').map(n => n.displayOrder), [0, 1])
   })
 
   test('an anchor with nothing on it is empty, not undefined', () => {
@@ -142,16 +157,16 @@ describe('finding the notes on a thing', () => {
   })
 })
 
-describe('a note narrowed to some of an artist’s works', () => {
+describe('a note covering several works', () => {
   const consignment = note({
-    id: 'set', anchor: 'artist', artistKey: 'agnes martin',
-    role: 'sourcing', workIds: ['w1', 'w2'],
+    id: 'set', anchor: 'artist', artistKey: 'agnes martin', workIds: ['w1', 'w2'],
   })
-  const onTheWork = note({ id: 'own', anchor: 'work', workId: 'w1', role: 'rationale' })
-  const notes = [consignment, onTheWork]
+  const onTheWork = note({ id: 'own', anchor: 'work', workId: 'w1' })
+  const aboutTheArtist = note({ id: 'artist', anchor: 'artist', artistKey: 'agnes martin' })
+  const notes = [consignment, onTheWork, aboutTheArtist]
 
   test('a work sees both its own note and the set it belongs to', () => {
-    assert.deepEqual(notesMentioning(notes, 'w1').map(n => n.id), ['own', 'set'])
+    assert.deepEqual(notesMentioning(notes, 'w1').sort((a, b) => a.id.localeCompare(b.id)).map(n => n.id), ['own', 'set'])
   })
 
   test('a work in the set but with no note of its own still sees the set', () => {
@@ -162,8 +177,38 @@ describe('a note narrowed to some of an artist’s works', () => {
     assert.deepEqual(notesMentioning(notes, 'w3'), [])
   })
 
-  test('the set note is still an artist note', () => {
-    assert.deepEqual(notesOn(notes, 'artist', 'agnes martin').map(n => n.id), ['set'])
+  test('a general artist note is not pulled onto every work', () => {
+    // It has no work set, so it belongs to the artist and is read there.
+    assert.ok(!notesMentioning(notes, 'w1').some(n => n.id === 'artist'))
+  })
+
+  test('a set note is still an artist note', () => {
+    assert.deepEqual(
+      notesOn(notes, 'artist', 'agnes martin').map(n => n.id).sort(),
+      ['artist', 'set'],
+    )
+  })
+})
+
+describe('naming what a set covers', () => {
+  const names: Record<string, string> = { w1: 'Sprinters 1', w2: 'Sprinters 2', w3: 'Sprinters 3', w4: 'Street 2' }
+  const nameOf = (id: string) => names[id]
+
+  test('two works are both named', () => {
+    assert.equal(workSetLabel(['w1', 'w2'], nameOf), 'Sprinters 1 and Sprinters 2')
+  })
+
+  test('more than two name the first two and count the rest', () => {
+    // A bare count gives no way to tell two sets apart at a glance.
+    assert.equal(workSetLabel(['w1', 'w2', 'w3', 'w4'], nameOf), 'Sprinters 1, Sprinters 2 and 2 more')
+  })
+
+  test('a work that has since been deleted is skipped, not printed as undefined', () => {
+    assert.equal(workSetLabel(['w1', 'gone'], nameOf), 'Sprinters 1')
+  })
+
+  test('nothing to name is empty', () => {
+    assert.equal(workSetLabel([], nameOf), '')
   })
 })
 
@@ -180,40 +225,10 @@ describe('what the export may see', () => {
     const notes = [note({ id: 'empty', body: '   ' }), note({ id: 'real', body: 'text' })]
     assert.deepEqual(notesForExport(notes).map(n => n.id), ['real'])
   })
-
-  test('filtering happens once, so it cannot be forgotten in one of six places', () => {
-    const notes = [note({ share: 'private', body: 'x' })]
-    assert.equal(notesForExport(notes).length, 0)
-    assert.equal(groupNotesByRole(notesForExport(notes)).length, 0)
-  })
 })
 
-describe('grouping for the export', () => {
-  test('roles come out in proposal order, empty ones left out', () => {
-    const notes = [
-      note({ id: 'c', role: 'commercial' }),
-      note({ id: 'b', role: 'brief' }),
-      note({ id: 'r', role: 'rationale' }),
-    ]
-    assert.deepEqual(groupNotesByRole(notes).map(g => g.role), ['brief', 'rationale', 'commercial'])
-  })
-
-  test('several notes in one role keep their own order', () => {
-    const notes = [
-      note({ id: 'second', role: 'brief', displayOrder: 1 }),
-      note({ id: 'first', role: 'brief', displayOrder: 0 }),
-    ]
-    assert.deepEqual(groupNotesByRole(notes)[0].notes.map(n => n.id), ['first', 'second'])
-  })
-})
-
-describe('the label', () => {
-  test('says the role', () => {
-    assert.equal(noteLabel(note({ role: 'sourcing' })), 'Sourcing')
-  })
-
-  test('says so when a note is private', () => {
-    // It has to be visible at a glance which notes will not reach the client.
-    assert.equal(noteLabel(note({ role: 'sourcing', share: 'private' })), 'Sourcing · private')
+describe('counting what is actually written', () => {
+  test('blank notes are not counted', () => {
+    assert.equal(writtenCount([note({ body: 'x' }), note({ body: '  ' }), note({ body: '' })]), 1)
   })
 })

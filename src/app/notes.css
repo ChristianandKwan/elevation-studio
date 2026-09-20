@@ -135,3 +135,33 @@
   color: var(--accent); padding: 3px 6px;
   border: 1px solid var(--accent-light); border-radius: var(--radius-xs);
 }
+
+/* ── An artist's notes in the index ─────────────────────── */
+.artist-note-tools {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 0 4px;
+}
+.artist-note-tab {
+  font-size: 11px; padding: 3px 8px; cursor: pointer;
+  background: none; color: var(--mid);
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+}
+.artist-note-tab:hover { color: var(--accent); border-color: var(--accent); }
+.artist-note-tab.on { color: var(--accent); border-color: var(--accent); background: var(--accent-light); }
+.artist-pick-hint { font-size: 11px; color: var(--mid); }
+.artist-note-open { padding: 4px 0 12px; }
+
+/* Picking the works a note is about. The checkbox sits outside the row so
+   the row itself is untouched — it is the same row whether or not a note is
+   being written, and nothing in it shifts. */
+.index-pick-row { display: flex; align-items: center; gap: 10px; }
+.index-pick-box { flex: none; width: 15px; height: 15px; cursor: pointer; }
+.index-pickable { background: var(--warm-white); border-radius: var(--radius-sm); }
+
+/* What a multi-work note covers, named rather than counted — a count alone
+   gives no way to tell two sets apart. */
+.note-covers {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--accent); padding: 3px 6px;
+  border: 1px solid var(--accent-light); border-radius: var(--radius-xs);
+}

@@ -7,7 +7,7 @@ import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail,
 import { wallSizeLabel } from '@/lib/wall'
 import BlankWallModal from './BlankWallModal'
 import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
-import type { Note, NoteRole } from '@/lib/notes'
+import type { Note } from '@/lib/notes'
 import {
   FRAME_COLORS, frameLabel, MOUNT_COLORS, mountLabel, MOUNT_DEFAULT_MM, mountIsUniform,
 } from '@/lib/frames'
@@ -34,7 +34,7 @@ interface Props {
   onBudgetChange?: (budget: number | null) => void
   /** Notes on this option only — the full record lives on the Notes screen. */
   optionNotes?: Note[]
-  onAddNote?: (role: NoteRole) => void
+  onAddNote?: () => void
   onChangeNote?: (noteId: string, patch: NotePatch) => void
   onDeleteNote?: (noteId: string) => void
 }
