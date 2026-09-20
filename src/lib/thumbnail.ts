@@ -18,7 +18,9 @@
 // components, route handlers, and server actions may import from here.
 import sharp from 'sharp'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import {
+  lipShadow, FRAME_LIP_SPREAD, MOUNT_LIP_SPREAD, mountLipOpacity, SHADOW_PUSH,
+} from '@/lib/frameShadow'
 import { frameRgb, mountRgb, frameGrainSvg } from '@/lib/frames'
 
 const THUMB_W = 600 // max thumbnail width in pixels
@@ -62,9 +64,10 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
  * `blur` is in thumbnail pixels.
  */
 async function frameLipShade(
-  w: number, h: number, angle: number | null | undefined, blur: number, opacity: number
+  w: number, h: number, angle: number | null | undefined, blur: number, opacity: number,
+  spread: number = FRAME_LIP_SPREAD,
 ): Promise<Buffer> {
-  const lip = frameLipShadow(angle, blur)
+  const lip = lipShadow(angle, blur, spread)
   // lip.blur is twice the standard deviation; 0.55 matches the wall shadow's sigma above.
   const sigma = Math.max(0.3, (lip.blur / 2) * 0.55)
   const ox = Math.round(lip.x)
@@ -230,10 +233,15 @@ export async function buildThumbnailBuffer(
         // ── 2. Artwork (+ brightness, frame) ─────────────────────────
         let pipeline = sharp(artBuf).resize(artThumbW, artThumbH, { fit: 'fill' })
 
-        // The frame's lip shades the artwork itself, not just the wall.
-        if (framePxThumb > 0 && hasShadow) {
+        // The mount's own lip, onto the artwork. Card is 2–3mm thick against a
+        // frame's 10–20mm, so this is a sixth of the frame's shadow — enough
+        // to say the picture sits behind an opening, no more.
+        if (hasMount && hasShadow) {
           try {
-            const shade = await frameLipShade(artThumbW, artThumbH, art.shadowAngle, shadowBlur * scale, shadowOpacity)
+            const shade = await frameLipShade(
+              artThumbW, artThumbH, art.shadowAngle, shadowBlur * scale,
+              mountLipOpacity(shadowOpacity), MOUNT_LIP_SPREAD,
+            )
             pipeline = sharp(await pipeline.png().toBuffer()).composite([{ input: shade, blend: 'over' }])
           } catch { /* skip lip shadow */ }
         }
@@ -252,6 +260,19 @@ export async function buildThumbnailBuffer(
           })
           artThumbW += mountPx.left + mountPx.right
           artThumbH += mountPx.top + mountPx.bottom
+        }
+
+        // The frame's lip shades whatever sits immediately inside it — the
+        // mount when there is one, the artwork when there is not. This has to
+        // come after the mount is on, or the shadow lands on the picture and
+        // the card around it stays flat.
+        if (framePxThumb > 0 && hasShadow) {
+          try {
+            const shade = await frameLipShade(
+              artThumbW, artThumbH, art.shadowAngle, shadowBlur * scale, shadowOpacity,
+            )
+            pipeline = sharp(await pipeline.png().toBuffer()).composite([{ input: shade, blend: 'over' }])
+          } catch { /* skip lip shadow */ }
         }
 
         if (framePxThumb > 0) {

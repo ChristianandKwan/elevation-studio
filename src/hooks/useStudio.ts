@@ -12,7 +12,10 @@ export type ArtworkLineItemPatch = Partial<Pick<
 import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
-import { frameLipShadeElement, frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import {
+  frameLipShadeElement, frameLipShadow, mountLipShadeElement, mountLipShadow,
+  mountLipOpacity, SHADOW_PUSH,
+} from '@/lib/frameShadow'
 import { frameGrainElement, paintFrameGrain } from '@/lib/frameGrain'
 import { placementRow, workRow } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
@@ -892,10 +895,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           }
         }
 
-        // The frame's lip shades the artwork itself, not just the wall.
-        if (art.frameType && art.frameWidthMm && sc &&
-            art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
-          div.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur, art.shadowOpacity))
+        // Two lips, because two edges stand proud. The frame's falls on
+        // whatever is immediately inside it — the mount when there is one —
+        // which `inset:0` gives for free, since the mount is this div's
+        // padding. The mount's own falls on the artwork, inset by its widths.
+        const lit = art.shadowBlur != null && art.shadowBlur > 0
+          && art.shadowOpacity != null && art.shadowOpacity > 0
+        if (art.frameType && art.frameWidthMm && sc && lit) {
+          div.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur!, art.shadowOpacity!))
+        }
+        if (sc && lit) {
+          const m = bandsPx(art, sc.dispPxPerCm).mount
+          if (m.top || m.right || m.bottom || m.left) {
+            div.appendChild(mountLipShadeElement(
+              art.shadowAngle, art.shadowBlur!, mountLipOpacity(art.shadowOpacity!),
+              `${m.top}px ${m.right}px ${m.bottom}px ${m.left}px`,
+            ))
+          }
         }
       }
 
@@ -2202,26 +2218,47 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const blur = art.shadowBlur ?? 0
       const shadowOpacity = art.shadowOpacity ?? 0
 
-      // The frame's lip shades the artwork, as the overlay's inset box-shadow
-      // does. A ring around the artwork is filled outside the clip, so only
-      // the shadow it throws inwards lands on the tile.
-      if (frame > 0 && blur > 0 && shadowOpacity > 0) {
-        const lip = frameLipShadow(art.shadowAngle, blur * dispToOrig)
+      // A lip's shadow: a ring filled outside the clip, so only what it throws
+      // inwards lands on the tile. Used twice — once for the frame, once for
+      // the mount — because two edges stand proud of what they cover.
+      const paintLip = (
+        rx: number, ry: number, rw: number, rh: number,
+        lip: { x: number; y: number; blur: number }, opacity: number,
+      ) => {
         const reach = Math.ceil(lip.blur * 1.5 + Math.abs(lip.x) + Math.abs(lip.y)) + 1
         tctx.save()
         tctx.beginPath()
-        tctx.rect(frame, frame, w, h)
+        tctx.rect(rx, ry, rw, rh)
         tctx.clip()
-        tctx.shadowColor = `rgba(0,0,0,${shadowOpacity})`
+        tctx.shadowColor = `rgba(0,0,0,${opacity})`
         tctx.shadowBlur = lip.blur
         tctx.shadowOffsetX = lip.x
         tctx.shadowOffsetY = lip.y
         tctx.fillStyle = '#000'
         tctx.beginPath()
-        tctx.rect(frame - reach, frame - reach, w + reach * 2, h + reach * 2)
-        tctx.rect(frame, frame, w, h)
+        tctx.rect(rx - reach, ry - reach, rw + reach * 2, rh + reach * 2)
+        tctx.rect(rx, ry, rw, rh)
         tctx.fill('evenodd')
         tctx.restore()
+      }
+
+      if (blur > 0 && shadowOpacity > 0) {
+        // The frame shades what sits inside it: the mount, or the artwork when
+        // there is no mount.
+        if (frame > 0) {
+          paintLip(
+            frame, frame, tile.width - frame * 2, tile.height - frame * 2,
+            frameLipShadow(art.shadowAngle, blur * dispToOrig), shadowOpacity,
+          )
+        }
+        // The mount shades the artwork — a sixth as deep and two-thirds as
+        // dark, because card is thin and its bevel catches light.
+        if (mountDrawn) {
+          paintLip(
+            bands.outer.left, bands.outer.top, w, h,
+            mountLipShadow(art.shadowAngle, blur * dispToOrig), mountLipOpacity(shadowOpacity),
+          )
+        }
       }
 
       // Drop shadow, baked into its own layer. CSS paints the shadow behind an

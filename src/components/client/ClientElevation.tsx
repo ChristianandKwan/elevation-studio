@@ -4,7 +4,9 @@ import { useRef, useEffect, useState } from 'react'
 import NextImage from 'next/image'
 import { formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
-import { frameLipShadeElement, SHADOW_PUSH } from '@/lib/frameShadow'
+import {
+  frameLipShadeElement, mountLipShadeElement, mountLipOpacity, SHADOW_PUSH,
+} from '@/lib/frameShadow'
 import { ArcSpinner } from '@/components/ui/Spinner'
 import { frameHex, mountHex, bandsPx, isWoodFrame } from '@/lib/frames'
 import { frameGrainElement } from '@/lib/frameGrain'
@@ -503,10 +505,21 @@ function ClientCanvas({
           ))
         }
 
-        // The frame's lip shades the artwork itself, not just the wall.
-        if (art.frameType && art.frameWidthMm && sc &&
-            art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
-          aw.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur, art.shadowOpacity))
+        // Two lips, as in the studio: the frame's onto the mount (inset:0 —
+        // the mount is this element's padding), the mount's onto the artwork.
+        const lit = art.shadowBlur != null && art.shadowBlur > 0
+          && art.shadowOpacity != null && art.shadowOpacity > 0
+        if (art.frameType && art.frameWidthMm && sc && lit) {
+          aw.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur!, art.shadowOpacity!))
+        }
+        if (bands && lit) {
+          const m = bands.mount
+          if (m.top || m.right || m.bottom || m.left) {
+            aw.appendChild(mountLipShadeElement(
+              art.shadowAngle, art.shadowBlur!, mountLipOpacity(art.shadowOpacity!),
+              `${m.top}px ${m.right}px ${m.bottom}px ${m.left}px`,
+            ))
+          }
         }
 
         const tag = document.createElement('div')
