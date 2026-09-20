@@ -1952,6 +1952,11 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function patchArtworkLocal(artId: string, patch: Partial<Artwork>) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
+      // Redraw the wall. The artworks are DOM overlays, not React children,
+      // and the studio view stays mounted while the index and budget are on
+      // screen — so without this a size changed elsewhere sits in state with
+      // the canvas still showing the old one until the page is reloaded.
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       // Mark only this artwork as already written, never the whole option: a
       // sibling may have an unsaved drag still sitting in the debounce, and
       // calling rememberSaved for all of them would drop it.

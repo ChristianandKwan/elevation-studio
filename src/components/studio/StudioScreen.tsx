@@ -417,6 +417,15 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       .filter(a => a.workId === workId)
       .forEach(a => studio.patchArtworkLocal(a.id, patch))
 
+    // Size is the one work-level field the wall actually draws, so a resize
+    // from the index or the budget makes every dashboard picture holding this
+    // work out of date. Nothing else here changes what the wall looks like.
+    if (patch.wCm !== undefined || patch.hCm !== undefined) {
+      elevations.forEach(e => e.elevation_options.forEach(o => {
+        if (o.artworks.some(a => a.workId === workId)) studio.scheduleThumbnailRegen(o.id)
+      }))
+    }
+
     const merged = { ...workPending.current.get(workId), ...patch }
     workPending.current.set(workId, merged)
     const existing = workTimers.current.get(workId)
@@ -425,7 +434,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       workId,
       setTimeout(() => { void flushWorkWrite(workId) }, WRITE_DELAY_MS),
     )
-  }, [studio, flushWorkWrite])
+  }, [studio, flushWorkWrite, elevations])
 
   const flushNoteWrite = useCallback(async (optionRowId: string) => {
     const pending = notePending.current.get(optionRowId)
