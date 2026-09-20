@@ -32,6 +32,32 @@ const DISCOUNT_HINT: Record<DiscountStatus, string> = {
 }
 
 export default function ArtworkLineEditor({ artwork, vatMode, onChange, onDone }: Props) {
+  return (
+    <div className="ble">
+      <div className="ble-head">
+        <div>
+          <span className="ble-title">{artwork.name}</span>
+          {artwork.artist && <span className="ble-artist">{artwork.artist}</span>}
+        </div>
+        <button type="button" className="btn btn-sm btn-primary" onClick={onDone}>Done</button>
+      </div>
+
+      <MoneyFields artwork={artwork} onChange={onChange} />
+
+      <div className="ble-foot">
+        <span>This work in the budget</span>
+        <strong>{fmtGbp(artworkLineTotal(artwork, vatMode))}</strong>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The money on a work: price, VAT, discount, the costs that travel with it,
+ * and the note. Shared with the index's editor, so the two cannot disagree
+ * about what a discount means.
+ */
+export function MoneyFields({ artwork, onChange }: Pick<Props, 'artwork' | 'onChange'>) {
   const net = netPrice(artwork)
   const tbcNet = tbcNetPrice(artwork)
 
@@ -48,15 +74,6 @@ export default function ArtworkLineEditor({ artwork, vatMode, onChange, onDone }
   }
 
   return (
-    <div className="ble">
-      <div className="ble-head">
-        <div>
-          <span className="ble-title">{artwork.name}</span>
-          {artwork.artist && <span className="ble-artist">{artwork.artist}</span>}
-        </div>
-        <button type="button" className="btn btn-sm btn-primary" onClick={onDone}>Done</button>
-      </div>
-
       <div className="ble-grid">
         {/* ── Price ─────────────────────────────────────────────────── */}
         <div className="ble-field">
@@ -256,11 +273,5 @@ export default function ArtworkLineEditor({ artwork, vatMode, onChange, onDone }
           )}
         </div>
       </div>
-
-      <div className="ble-foot">
-        <span>This work in the budget</span>
-        <strong>{fmtGbp(artworkLineTotal(artwork, vatMode))}</strong>
-      </div>
-    </div>
   )
 }

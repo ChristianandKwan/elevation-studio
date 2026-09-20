@@ -215,9 +215,10 @@ async function runSweep({ dryRun, maxDeletions, source }: SweepOptions) {
 
   try {
     // 2. Everything the database still points at.
-    const [options, artworks] = await Promise.all([
+    // Artwork images hang off works (migration 026), not off placements.
+    const [options, works] = await Promise.all([
       selectAll(svc, 'elevation_options', 'id, image_path, thumbnail_path'),
-      selectAll(svc, 'artworks', 'image_path'),
+      selectAll(svc, 'works', 'image_path'),
     ])
 
     const liveElevPaths = new Set(
@@ -228,7 +229,7 @@ async function runSweep({ dryRun, maxDeletions, source }: SweepOptions) {
     )
     const liveOptionIds = new Set(options.map(o => o.id as string))
     const liveArtPaths = new Set(
-      artworks.map(a => a.image_path as string | null).filter(Boolean) as string[]
+      works.map(w => w.image_path as string | null).filter(Boolean) as string[]
     )
 
     // A run that finds no live paths at all almost certainly means the reads

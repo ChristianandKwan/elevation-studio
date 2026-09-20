@@ -23,8 +23,6 @@ interface DashProject {
   status: string
   thumbnailUrl: string | null
   elevCount: number
-  artCount: number
-  artworks: unknown[]
   origW: number
   origH: number
   scalePxPerCm: number | null

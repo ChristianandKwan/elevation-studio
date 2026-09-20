@@ -10,7 +10,8 @@ interface Props {
   elevation: BudgetElevationData
   vatMode: boolean
   isConsultant: boolean
-  onArtworkChange?: (artworkId: string, patch: BudgetArtworkPatch) => void
+  /** Keyed by work, not placement: the money belongs to the work wherever it hangs. */
+  onArtworkChange?: (workId: string, patch: BudgetArtworkPatch) => void
   onNoteChange?: (elevationId: string, optionKey: string, note: string, shownToClient: boolean) => void
 }
 
@@ -61,7 +62,7 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
                 artwork={a}
                 vatMode={vatMode}
                 isConsultant={isConsultant}
-                onChange={onArtworkChange && (patch => onArtworkChange(a.id, patch))}
+                onChange={onArtworkChange && (patch => onArtworkChange(a.workId, patch))}
               />
             ))
           )}

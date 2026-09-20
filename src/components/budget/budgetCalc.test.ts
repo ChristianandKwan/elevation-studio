@@ -42,6 +42,7 @@ let seq = 0
 function art(partial: Partial<BudgetArtwork> = {}): BudgetArtwork {
   return {
     id: `a${seq++}`,
+    workId: `w${seq}`,
     name: 'Untitled',
     artist: '',
     wCm: 100,

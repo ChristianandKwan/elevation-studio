@@ -4,7 +4,9 @@ import { getCurrentUser } from '@/lib/supabase/auth'
 import StudioScreen from '@/components/studio/StudioScreen'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 import { sortOptions } from '@/lib/options'
-import { readLineItemFields, readOptionNoteFields } from '@/lib/lineItems'
+import { readOptionNoteFields } from '@/lib/lineItems'
+import { PLACEMENT_WITH_WORK_SELECT, WORK_COLUMNS } from '@/lib/works'
+import { placementsToArtworks, rowToWork } from '@/lib/workRows'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -32,37 +34,51 @@ export default async function ProjectPage({ params }: Props) {
     .eq('id', user!.id)
     .single()
 
-  // Fetch elevations with options and artworks
-  const { data: elevations } = await supabase
-    .from('elevations')
-    .select(`
-      id, name, display_order, client_picked_option, visible_to_client,
-      elevation_options(
-        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
-        skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
-        artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity,
-          note, note_shown_to_client, vat_applies, discount_status, discount_percent, sub_line_items
+  // Elevations → options → placements, each placement with its work joined
+  // in. Works themselves are fetched separately below, because the index
+  // lists every work in the project whether or not it hangs anywhere.
+  const [{ data: elevations }, { data: workRows }, { data: artistRows }] = await Promise.all([
+    supabase
+      .from('elevations')
+      .select(`
+        id, name, display_order, client_picked_option, visible_to_client,
+        elevation_options(
+          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+          skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
+          artworks(${PLACEMENT_WITH_WORK_SELECT})
         )
-      )
-    `)
-    .eq('project_id', id)
-    .order('display_order', { ascending: true })
+      `)
+      .eq('project_id', id)
+      .order('display_order', { ascending: true }),
+    supabase
+      .from('works')
+      .select(WORK_COLUMNS)
+      .eq('project_id', id)
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    // Artists across every project this consultant can see, for the
+    // pick-from-previous list. RLS scopes the read.
+    supabase.from('works').select('artist').neq('artist', '').limit(2000),
+  ])
 
-  // Collect all image paths up-front, deduplicated across elevations/options
+  // Collect all image paths up-front, deduplicated. Every artwork image now
+  // hangs off a work, so the project's works cover every placement too.
   const allOptions = (elevations ?? []).flatMap(elev => elev.elevation_options ?? [])
   const elevPaths = [...new Set(allOptions.map((o: any) => o.image_path).filter(Boolean))] as string[]
-  const artPaths = [...new Set(allOptions.flatMap((o: any) => (o.artworks ?? []).map((a: any) => a.image_path)).filter(Boolean))] as string[]
+  const artPaths = [...new Set((workRows ?? []).map(w => w.image_path as string | null).filter(Boolean))] as string[]
 
   // Two batched createSignedUrls calls in parallel — one per bucket.
   // TTL is deliberately long: the studio never reloads on its own, so these
   // URLs have to outlive a working session. See STUDIO_SIGNED_URL_TTL.
   const [{ data: elevSigned }, { data: artSigned }] = await Promise.all([
     supabase.storage.from('elevation-images').createSignedUrls(elevPaths, STUDIO_SIGNED_URL_TTL),
-    supabase.storage.from('artwork-images').createSignedUrls(artPaths, STUDIO_SIGNED_URL_TTL),
+    artPaths.length
+      ? supabase.storage.from('artwork-images').createSignedUrls(artPaths, STUDIO_SIGNED_URL_TTL)
+      : Promise.resolve({ data: [] as Array<{ path: string | null; signedUrl: string }> }),
   ])
   const elevMap = new Map(elevSigned?.map(e => [e.path, e.signedUrl]) ?? [])
   const artMap = new Map(artSigned?.map(e => [e.path, e.signedUrl]) ?? [])
+  const artUrlFor = (path: string | null) => (path ? artMap.get(path) ?? null : null)
 
   // Rehydrate the per-option / per-artwork structure using the maps
   const elevationsWithUrls = (elevations ?? []).map(elev => {
@@ -76,41 +92,22 @@ export default async function ProjectPage({ params }: Props) {
       skew_br_x?: number | null; skew_br_y?: number | null;
       skew_bl_x?: number | null; skew_bl_y?: number | null;
       skew_active?: boolean;
-      artworks: Array<{
-        id: string; name: string; image_path: string;
-        w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
-        visible: boolean; price: number; artist: string; display_order: number;
-      }>;
+      artworks: Array<Record<string, unknown>>;
       foreground_masks: unknown;
     }) => {
       const imageUrl = opt.image_path ? (elevMap.get(opt.image_path) ?? null) : null
-
-      const artworks = (opt.artworks ?? [])
-        .sort((a, b) => a.display_order - b.display_order)
-        .map(art => ({
-          ...art,
-          imageUrl: artMap.get(art.image_path) ?? null,
-          imagePath: art.image_path,
-          xF: art.x_fraction,
-          yF: art.y_fraction,
-          wCm: art.w_cm,
-          hCm: art.h_cm,
-          artist: (art as any).artist ?? '',
-          frameType: (art as any).frame_type ?? null,
-          frameWidthMm: (art as any).frame_width_mm ?? null,
-          brightness: (art as any).brightness ?? 1,
-          fade: (art as any).fade ?? null,
-          shadowAngle: (art as any).shadow_angle ?? null,
-          shadowBlur: (art as any).shadow_blur ?? null,
-          shadowOpacity: (art as any).shadow_opacity ?? null,
-          ...readLineItemFields(art as unknown as Record<string, unknown>),
-        }))
-
+      const artworks = placementsToArtworks(opt.artworks, artUrlFor)
       return { ...opt, imageUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
     })
     // Display order is decided in exactly one place — see src/lib/options.ts.
     return { ...elev, elevation_options: sortOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null, visibleToClient: (elev as any).visible_to_client ?? true }
   })
+
+  const works = (workRows ?? []).map(w => rowToWork(w as Record<string, unknown>, artUrlFor((w.image_path as string | null) ?? null)))
+
+  const artistSuggestions = [...new Set(
+    (artistRows ?? []).map(r => (typeof r.artist === 'string' ? r.artist.trim() : '')).filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }))
 
   // Most recent client token, expired or not. The expiry filter used to live in
   // this query, which meant an expired link was indistinguishable from never
@@ -138,6 +135,8 @@ export default async function ProjectPage({ params }: Props) {
     <StudioScreen
       project={{ ...project, consultantName: profile?.name ?? 'Consultant', budget: (project as any).budget ?? null }}
       elevations={elevationsWithUrls}
+      initialWorks={works}
+      artistSuggestions={artistSuggestions}
       existingToken={clientLinkExpired ? null : (tokenRow?.token ?? null)}
       clientLinkExpired={clientLinkExpired}
       activityLogs={(activityLogs ?? []).map(a => ({ id: a.id, type: a.type, text: a.text, createdAt: a.created_at }))}
