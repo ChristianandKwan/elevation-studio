@@ -886,8 +886,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
               sz.h + bands.mount.top + bands.mount.bottom + bands.frame * 2,
               bands.frame,
               sc.dispPxPerCm,
-              bands.outer.left,
-              bands.outer.top,
+              bands.frame,
+              bands.frame,
             ))
           }
         }

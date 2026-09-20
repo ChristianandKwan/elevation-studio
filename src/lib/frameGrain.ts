@@ -12,9 +12,12 @@ import {
  * the other. At a 20mm frame this is barely perceptible; it earns its place
  * on the wide frames, where a flat fill reads as a colour swatch.
  *
- * Returns an element to append to the overlay. It is positioned against the
- * overlay's padding box, so it is offset outward by the mount and the frame
- * to sit over the border. Never over the artwork itself.
+ * Returns an element to append to the overlay. An absolutely positioned child
+ * resolves against its ancestor's *padding* box, and the mount is that padding
+ * — so the only thing between this and the border box is the border itself.
+ * Pass the frame width, not the whole outer band, or a mounted work drags its
+ * grain a mount's width up and to the left of the frame. Never over the
+ * artwork itself.
  */
 export function frameGrainElement(
   frameType: string,

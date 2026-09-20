@@ -498,8 +498,8 @@ function ClientCanvas({
             awH + bands.mount.top + bands.mount.bottom + bands.frame * 2,
             bands.frame,
             sc,
-            bands.outer.left,
-            bands.outer.top,
+            bands.frame,
+            bands.frame,
           ))
         }
 

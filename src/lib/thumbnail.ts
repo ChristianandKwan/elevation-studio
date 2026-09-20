@@ -230,9 +230,6 @@ export async function buildThumbnailBuffer(
         // ── 2. Artwork (+ brightness, frame) ─────────────────────────
         let pipeline = sharp(artBuf).resize(artThumbW, artThumbH, { fit: 'fill' })
 
-        const brightness = art.brightness ?? 1
-        if (brightness !== 1) pipeline = pipeline.modulate({ brightness })
-
         // The frame's lip shades the artwork itself, not just the wall.
         if (framePxThumb > 0 && hasShadow) {
           try {
@@ -279,6 +276,16 @@ export async function buildThumbnailBuffer(
                 .composite([{ input: Buffer.from(grain), blend: 'over' }])
             } catch { /* a frame without grain is better than no artwork */ }
           }
+        }
+
+        // Brightness last, over the artwork *and* its mount and frame.
+        // On the wall this is a CSS filter on the whole overlay, and the PNG
+        // export composes the tile before applying it — so dimming only the
+        // picture, as this used to, left the mount and frame at full strength.
+        // An ivory mount came back to the dashboard looking bright white.
+        const brightness = art.brightness ?? 1
+        if (brightness !== 1) {
+          pipeline = sharp(await pipeline.png().toBuffer()).modulate({ brightness })
         }
 
         // Fade: multiply alpha so the elevation behind shows through

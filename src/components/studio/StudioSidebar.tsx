@@ -769,17 +769,23 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
                 <span className="dim-unit" style={{ marginLeft: 3 }}>mm</span>
               </>
             )}
-            {art.mountColor && (
+          </div>
+
+          {/* The toggle gets its own line: the Mount row already carries a
+              label, a select, a number and its unit, and a fifth control ran
+              off the edge of the sidebar. */}
+          {art.mountColor && (
+            <div className="aw-mount-toggle-row">
               <button
                 type="button"
                 className="aw-mount-sides-btn"
                 title={sidesOpen ? 'Use one width all round' : 'Set each side separately'}
                 onClick={e => { e.stopPropagation(); setSidesOpen(o => !o) }}
               >
-                {sidesOpen ? 'All round' : 'Sides'}
+                {sidesOpen ? 'Same all round' : 'Different sides'}
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {art.mountColor && sidesOpen && (
             <div className="aw-mount-sides" onClick={e => e.stopPropagation()}>

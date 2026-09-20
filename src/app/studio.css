@@ -254,10 +254,13 @@
 
 /* Mount. The "Sides" toggle is deliberately quiet — most mounts are cut the
    same all round, and the four-up grid is the exception. */
+/* Sits under the Mount row, aligned with its controls rather than its label. */
+.aw-mount-toggle-row { display: flex; justify-content: flex-end; margin: -2px 0 6px 0; }
 .aw-mount-sides-btn {
-  margin-left: 5px; padding: 4px 7px; font-family: var(--font-karla, 'Karla'); font-size: 10px;
-  border: 1px solid var(--border); background: transparent; color: var(--mid);
-  cursor: pointer; border-radius: var(--radius-xs); white-space: nowrap; transition: all .15s;
+  padding: 3px 6px; font-family: var(--font-karla, 'Karla'); font-size: 10px;
+  border: none; background: transparent; color: var(--mid);
+  cursor: pointer; white-space: nowrap; transition: color .15s;
+  text-decoration: underline; text-underline-offset: 2px;
 }
 .aw-mount-sides-btn:hover { color: var(--charcoal); border-color: var(--charcoal); }
 .aw-mount-sides {
