@@ -18,6 +18,11 @@ interface Props {
   onDelete: (noteId: string) => void
   /** Names a multi-work note's set, so it reads as more than a count. */
   workName?: (workId: string) => string | undefined
+  /**
+   * Show what this note is for on the card itself, beside its buttons, for
+   * the places with no section heading above to carry it.
+   */
+  promptInline?: boolean
   /** Tightens spacing for the studio sidebar and the index, which have none to spare. */
   compact?: boolean
 }
@@ -30,7 +35,7 @@ interface Props {
  * and dropping it is most of what this panel is now.
  */
 export default function NotePanel({
-  notes, anchor, onAdd, onChange, onDelete, workName, compact = false,
+  notes, anchor, onAdd, onChange, onDelete, workName, promptInline = false, compact = false,
 }: Props) {
   return (
     <div className={`note-panel${compact ? ' compact' : ''}`}>
@@ -40,6 +45,7 @@ export default function NotePanel({
           note={n}
           anchor={anchor}
           workName={workName}
+          promptInline={promptInline}
           // A note can show up somewhere it is not anchored — a note covering
           // several works appears on each of them. It is the same note, so
           // editing it here changes it everywhere; saying so is the
@@ -60,11 +66,12 @@ export default function NotePanel({
 }
 
 function NoteCard({
-  note, anchor, workName, borrowed = false, onChange, onDelete,
+  note, anchor, workName, promptInline = false, borrowed = false, onChange, onDelete,
 }: {
   note: Note
   anchor: NoteAnchor
   workName?: (workId: string) => string | undefined
+  promptInline?: boolean
   /** Shown here but written elsewhere — editing it changes it there too. */
   borrowed?: boolean
   onChange: (patch: NotePatch) => void
@@ -115,6 +122,9 @@ function NoteCard({
         {borrowed && !covers && (
           <span className="note-borrowed">From {ANCHOR_META[note.anchor].inline}</span>
         )}
+        {promptInline && !covers && !borrowed && (
+          <span className="note-prompt">{ANCHOR_META[anchor].prompt}</span>
+        )}
 
         <div className="note-card-actions">
           <button
@@ -146,7 +156,7 @@ function NoteCard({
         ref={taRef}
         className="note-body"
         value={body}
-        placeholder={ANCHOR_META[anchor].prompt}
+        placeholder={promptInline ? '' : ANCHOR_META[anchor].prompt}
         onChange={e => setBody(e.target.value)}
         onBlur={commit}
         autoFocus={note.body === '' && !borrowed}

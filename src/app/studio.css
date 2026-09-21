@@ -30,21 +30,38 @@
   letter-spacing: .12em; color: var(--charcoal); pointer-events: none;
   white-space: nowrap;
 }
-/* The title is centred on the header, while .studio-header-right never shrinks,
-   so past a certain narrowness the two collide. The threshold depends on how
-   many buttons are on the right, which is why there are two of them:
-     · normal        → right side 435px, title 185px → collides below 1103px
-     · approved      → adds "✓ Approved" + Unapprove → collides below 1411px
-   Measured in a browser at 22px with the real fonts loaded, then rounded up
-   for slack. Re-measure these whenever a button joins the right-hand group:
-   the Index tab added ~59px and the old thresholds (939 / 1309) let the
-   toggle ride over the wordmark for a 160px band of window widths.
-   .studio-header--wide-actions is set by StudioScreen whenever the wider set
-   is on screen. */
-@media (max-width: 1124px) {
+/* The title is centred on the header, while .studio-header-right never
+   shrinks, so past a certain narrowness the two collide. The width of the
+   right-hand group depends on which view is open and whether the option is
+   approved, so there is a threshold for each.
+
+   ┌────────────────────────────────┬────────┬──────────┬────────┐
+   │ right-hand group               │ width  │ collides │ used   │
+   ├────────────────────────────────┼────────┼──────────┼────────┤
+   │ tabs + feedback (index/notes/  │  286px │   805px  │  820px │
+   │   budget views)                │        │          │        │
+   │ + Share + Export (studio)      │  411px │  1055px  │ 1080px │
+   │ + ✓ Approved + Unapprove       │  565px │  1363px  │ 1390px │
+   └────────────────────────────────┴────────┴──────────┴────────┘
+
+   Title is 185px. Collision point is 2 × (title/2 + 4 + 20 + group), where 20
+   is .studio-header's padding and 4 is the slack the first version of this
+   table used. The "used" column rounds that up again.
+
+   ── RE-MEASURE WHENEVER A BUTTON JOINS OR A LABEL CHANGES ──
+   This has now silently broken twice: the Index tab added ~59px against
+   thresholds of 939/1309, and the Notes tab added another ~60px against
+   1103/1434. Both times the toggle rode over the wordmark across a ~160px
+   band of window widths, and both times nothing failed — it just looked
+   wrong at one size. There is no test that can catch it; measure in a
+   browser with the real fonts loaded and update the table above. */
+@media (max-width: 820px) {
   .header-app-title { display: none; }
 }
-@media (max-width: 1434px) {
+@media (max-width: 1080px) {
+  .studio-header--studio-actions .header-app-title { display: none; }
+}
+@media (max-width: 1390px) {
   .studio-header--wide-actions .header-app-title { display: none; }
 }
 .save-status--error  { color: var(--red); }

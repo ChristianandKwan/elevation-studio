@@ -46,6 +46,8 @@ interface DbElevation {
     name?: string | null
     imageUrl: string | null
     imagePath: string | null
+    /** The composited wall this option already caches for the dashboard. */
+    thumbnailUrl?: string | null
     orig_w: number
     orig_h: number
     scale_px_per_cm: number | null
@@ -1169,6 +1171,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   // Widest right-hand button group: studio view with an approved option, which
   // adds the "✓ Approved" chip and the Unapprove button. See studio.css.
+  // Which set of buttons is on the right, which is what decides where the
+  // wordmark has to give way. See the table in studio.css.
+  const headerHasStudioActions = view === 'studio'
   const headerHasWideActions = view === 'studio' && !!activeOptData?.approved
 
   return (
@@ -1186,7 +1191,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           is in its widest form (the approved state adds a chip and an Unapprove
           button), so the centred "Elevation Studio" title can hide before it
           collides rather than overlapping the buttons. */}
-      <div className={`studio-header${headerHasWideActions ? ' studio-header--wide-actions' : ''}`}>
+      <div className={`studio-header${headerHasStudioActions ? ' studio-header--studio-actions' : ''}${headerHasWideActions ? ' studio-header--wide-actions' : ''}`}>
         <div className="studio-header-left">
           <button
             className="studio-back"
@@ -1263,11 +1268,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   </button>
                 </>
               )}
-              <button className="btn btn-sm btn-ghost" onClick={() => studio.setShowShareModal(true)}>
-                Share with client
+              {/* Short labels: the header is the most crowded row in the app
+                  and these two were the widest things in it. The full meaning
+                  moves to the tooltip rather than being lost. */}
+              <button className="btn btn-sm btn-ghost" title="Share this project with the client" onClick={() => studio.setShowShareModal(true)}>
+                Share
               </button>
-              <button className="btn btn-sm" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
-                Export PNG
+              <button className="btn btn-sm" title="Export this wall as a PNG image" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
+                Export
               </button>
             </>
           )}

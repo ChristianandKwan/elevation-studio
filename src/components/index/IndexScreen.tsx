@@ -177,28 +177,41 @@ function ArtistGroupSection({
             >
               {showAbout ? 'Hide notes about this artist' : `Notes about ${label}`}
             </button>
-            {works.length > 1 && (
-              picking ? (
-                <>
-                  <span className="artist-pick-hint">
-                    {picked.size === 0
-                      ? 'Tick the works this note is about'
-                      : `${picked.size} picked`}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-primary" disabled={picked.size === 0} onClick={finish}>
-                    Write about these
-                  </button>
-                  <button type="button" className="btn btn-sm" onClick={() => { setPicked(new Set()); setPicking(false) }}>
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button type="button" className="artist-note-tab" onClick={() => setPicking(true)}>
-                  Note about several works
-                </button>
-              )
+            {works.length > 1 && !picking && (
+              // A real button rather than another quiet tab: this is the one
+              // thing on the screen nobody finds on their own.
+              <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
+                Note about several works
+              </button>
             )}
           </div>
+
+          {picking && (
+            <div className="artist-picking">
+              <div className="artist-picking-title">
+                Pick the works this note covers, then write it once.
+              </div>
+              <p className="artist-picking-blurb">
+                Useful when something is true of several pieces but not all of
+                them — one consignment, one series, a shared lead time. The
+                note appears on each work you pick, and editing it anywhere
+                changes it everywhere.
+              </p>
+              <div className="artist-picking-actions">
+                <span className="artist-pick-hint">
+                  {picked.size === 0
+                    ? 'Nothing picked yet'
+                    : `${picked.size} of ${works.length} picked`}
+                </span>
+                <button type="button" className="btn btn-sm btn-primary" disabled={picked.size === 0} onClick={finish}>
+                  Write about these
+                </button>
+                <button type="button" className="btn btn-sm" onClick={() => { setPicked(new Set()); setPicking(false) }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {showAbout && (
             <div className="artist-note-open">
@@ -280,7 +293,15 @@ function WorkNotes({
 
   if (!open) {
     return (
-      <button type="button" className="work-notes-toggle" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="work-notes-toggle"
+        // On a work with nothing written yet, "+ Note" opens the panel AND
+        // starts the note. Opening a panel whose only content is another
+        // button saying much the same thing made this two clicks for one
+        // intention.
+        onClick={() => { setOpen(true); if (notes.length === 0) onAdd() }}
+      >
         {written > 0
           ? `${written} note${written === 1 ? '' : 's'} on ${work.name}`
           : '+ Note'}
@@ -297,6 +318,9 @@ function WorkNotes({
         onChange={onChange}
         onDelete={onDelete}
         workName={nameOf}
+        // No section heading down here to carry the prompt, so each card
+        // shows it on the line with its own buttons.
+        promptInline
         compact
       />
     </div>

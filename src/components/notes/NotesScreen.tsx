@@ -7,7 +7,13 @@ import { labelOptions } from '@/lib/options'
 interface NotesElevation {
   id: string
   name: string
-  elevation_options: Array<{ id: string; option: string; sort_order?: number | null; name?: string | null }>
+  elevation_options: Array<{
+    id: string
+    option: string
+    sort_order?: number | null
+    name?: string | null
+    thumbnailUrl?: string | null
+  }>
 }
 
 interface Props {
@@ -56,6 +62,7 @@ export default function NotesScreen({
 
         <Section
           anchor="project"
+          suffix={projectName}
           notes={notesOn(notes, 'project')}
           onAdd={() => onAdd('project', null)}
           onChange={onChange}
@@ -93,7 +100,16 @@ export default function NotesScreen({
                   a note about the elevation. */}
               {options.length > 1 && options.map(opt => (
                 <div key={opt.id} className="notes-suborder">
-                  <div className="notes-sub-kicker">{opt.title}</div>
+                  {/* The wall as it stands. An option letter on its own says
+                      nothing about which arrangement is being written about,
+                      and these are already composited for the dashboard. */}
+                  <div className="notes-option-head">
+                    {opt.thumbnailUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="notes-option-thumb" src={opt.thumbnailUrl} alt="" />
+                    )}
+                    <div className="notes-sub-kicker">{opt.title}</div>
+                  </div>
                   <NotePanel
                     notes={notesOn(notes, 'option', opt.id)}
                     anchor="option"
@@ -121,9 +137,11 @@ export default function NotesScreen({
 
 /** A project-level heading: its prompt, and the notes under it. */
 function Section({
-  anchor, notes, onAdd, onChange, onDelete,
+  anchor, suffix, notes, onAdd, onChange, onDelete,
 }: {
   anchor: NoteAnchor
+  /** Named after the heading — "The project · Nepean". */
+  suffix?: string
   notes: Note[]
   onAdd: () => void
   onChange: (noteId: string, patch: NotePatch) => void
@@ -132,7 +150,10 @@ function Section({
   return (
     <section className="index-group">
       <div className="budget-section-kicker index-kicker">
-        <span>{ANCHOR_META[anchor].label}</span>
+        <span>
+          {ANCHOR_META[anchor].label}
+          {suffix && <span className="notes-section-suffix"> · {suffix}</span>}
+        </span>
       </div>
       <p className="notes-hint">{ANCHOR_META[anchor].prompt}</p>
       <NotePanel

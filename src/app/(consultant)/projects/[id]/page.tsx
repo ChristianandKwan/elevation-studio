@@ -8,6 +8,7 @@ import { readOptionNoteFields } from '@/lib/lineItems'
 import { PLACEMENT_WITH_WORK_SELECT, WORK_COLUMNS } from '@/lib/works'
 import { placementsToArtworks, rowToWork } from '@/lib/workRows'
 import { artistKey, rowToNote, type NoteRow } from '@/lib/notes'
+import { blankWallDataUrl } from '@/lib/wall'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -44,7 +45,7 @@ export default async function ProjectPage({ params }: Props) {
       .select(`
         id, name, display_order, client_picked_option, visible_to_client,
         elevation_options(
-          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+          id, option, sort_order, created_at, name, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
           skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
           artworks(${PLACEMENT_WITH_WORK_SELECT})
         )
@@ -66,18 +67,26 @@ export default async function ProjectPage({ params }: Props) {
   // hangs off a work, so the project's works cover every placement too.
   const allOptions = (elevations ?? []).flatMap(elev => elev.elevation_options ?? [])
   const elevPaths = [...new Set(allOptions.map((o: any) => o.image_path).filter(Boolean))] as string[]
+  // The composited wall each option already caches for the dashboard. The
+  // notes screen shows them so it is obvious which option is being written
+  // about — an option letter on its own tells you nothing.
+  const thumbPaths = [...new Set(allOptions.map((o: any) => o.thumbnail_path).filter(Boolean))] as string[]
   const artPaths = [...new Set((workRows ?? []).map(w => w.image_path as string | null).filter(Boolean))] as string[]
 
   // Two batched createSignedUrls calls in parallel — one per bucket.
   // TTL is deliberately long: the studio never reloads on its own, so these
   // URLs have to outlive a working session. See STUDIO_SIGNED_URL_TTL.
-  const [{ data: elevSigned }, { data: artSigned }] = await Promise.all([
+  const [{ data: elevSigned }, { data: artSigned }, { data: thumbSigned }] = await Promise.all([
     supabase.storage.from('elevation-images').createSignedUrls(elevPaths, STUDIO_SIGNED_URL_TTL),
     artPaths.length
       ? supabase.storage.from('artwork-images').createSignedUrls(artPaths, STUDIO_SIGNED_URL_TTL)
       : Promise.resolve({ data: [] as Array<{ path: string | null; signedUrl: string }> }),
+    thumbPaths.length
+      ? supabase.storage.from('thumbnails').createSignedUrls(thumbPaths, STUDIO_SIGNED_URL_TTL)
+      : Promise.resolve({ data: [] as Array<{ path: string | null; signedUrl: string }> }),
   ])
   const elevMap = new Map(elevSigned?.map(e => [e.path, e.signedUrl]) ?? [])
+  const thumbMap = new Map(thumbSigned?.map(e => [e.path, e.signedUrl]) ?? [])
   const artMap = new Map(artSigned?.map(e => [e.path, e.signedUrl]) ?? [])
   const artUrlFor = (path: string | null) => (path ? artMap.get(path) ?? null : null)
 
@@ -85,6 +94,7 @@ export default async function ProjectPage({ params }: Props) {
   const elevationsWithUrls = (elevations ?? []).map(elev => {
     const options = (elev.elevation_options ?? []).map((opt: {
       id: string; option: string; sort_order: number; created_at: string; name: string | null; image_path: string | null;
+      thumbnail_path: string | null;
       orig_w: number; orig_h: number; scale_px_per_cm: number | null;
       wall_w_cm: number | null; wall_h_cm: number | null; wall_color: string | null;
       approved: boolean; approved_at: string | null;
@@ -98,8 +108,16 @@ export default async function ProjectPage({ params }: Props) {
       foreground_masks: unknown;
     }) => {
       const imageUrl = opt.image_path ? (elevMap.get(opt.image_path) ?? null) : null
+      // Falls back to drawing a plain wall, and to nothing at all for a
+      // photograph whose thumbnail has not been rendered yet. Never the bare
+      // elevation photo — that is the expensive path the dashboard avoids.
+      const thumbnailUrl = opt.thumbnail_path
+        ? (thumbMap.get(opt.thumbnail_path) ?? null)
+        : opt.wall_color
+          ? blankWallDataUrl(opt.orig_w || 1600, opt.orig_h || 900, opt.wall_color)
+          : null
       const artworks = placementsToArtworks(opt.artworks, artUrlFor)
-      return { ...opt, imageUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
+      return { ...opt, imageUrl, thumbnailUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
     })
     // Display order is decided in exactly one place — see src/lib/options.ts.
     return { ...elev, elevation_options: sortOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null, visibleToClient: (elev as any).visible_to_client ?? true }
