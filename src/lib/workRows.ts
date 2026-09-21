@@ -44,8 +44,10 @@ export function rowToWork(row: Row, imageUrl: string | null): Work {
 /**
  * A placement row with its work joined in (`work:works(...)`), flattened to
  * the studio's Artwork. Null for a placement whose work is missing — a row
- * the old code wrote between running migration 026 and deploying; 027
- * attaches those, and until then the wall simply doesn't show them.
+ * the old code wrote between running migration 026 and deploying. 028
+ * attaches any stragglers and makes work_id required, so this cannot happen
+ * again; the check stays because a wall that quietly omits one artwork is a
+ * better failure than one that throws.
  */
 export function placementToArtwork(row: Row, imageUrl: string | null): Artwork | null {
   const work = row.work as Row | null | undefined
