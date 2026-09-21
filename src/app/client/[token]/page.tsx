@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import LoadFailed from '@/components/ui/LoadFailed'
 import { createServiceClient } from '@/lib/supabase/server'
 import ClientPortal from '@/components/client/ClientPortal'
 import ClientLinkExpired from '@/components/client/ClientLinkExpired'
@@ -78,7 +79,7 @@ export default async function ClientPortalPage({ params }: Props) {
 
   // If query failed (e.g. skew columns not yet migrated), fall back without them
   if (elevError || !elevations) {
-    const { data: fallback } = await supabase
+    const { data: fallback, error: fallbackErr } = await supabase
       .from('elevations')
       .select(`
         id, name, display_order, client_picked_option,
@@ -91,6 +92,13 @@ export default async function ClientPortalPage({ params }: Props) {
       .eq('visible_to_client', true)
       .order('display_order', { ascending: true })
     elevations = fallback as typeof elevations
+    elevError = fallbackErr
+  }
+
+  // Both attempts failed. Rendering on would show the client a proposal with
+  // no walls in it, which reads as the consultant having sent them nothing.
+  if (elevError) {
+    return <LoadFailed what="proposal" detail="" audience="client" />
   }
 
   // Collect all image paths up-front, deduplicated across elevations/options

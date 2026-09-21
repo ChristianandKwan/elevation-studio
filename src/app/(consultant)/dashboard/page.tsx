@@ -3,6 +3,8 @@ import { getCurrentUser } from '@/lib/supabase/auth'
 import DashboardClient from '@/components/dashboard/DashboardClient'
 import { sortOptions } from '@/lib/options'
 import { blankWallDataUrl } from '@/lib/wall'
+import { firstLoadFailure, looksLikeSchemaDrift } from '@/lib/loadGuard'
+import LoadFailed from '@/components/ui/LoadFailed'
 
 /**
  * Dashboard project thumbnails used to be composited inline on every
@@ -36,7 +38,7 @@ export default async function DashboardPage() {
   // Fetch projects with elevations + first option + approval status.
   // We no longer need the full artwork list for rendering (it's baked
   // into the cached thumbnail), but we still need approval counts.
-  const { data: projects } = await supabase
+  const projectsRes = await supabase
     .from('projects')
     .select(`
       id, name, client_name, status, created_at,
@@ -50,6 +52,14 @@ export default async function DashboardPage() {
     .eq('consultant_id', user!.id)
     .eq('archived', false)
     .order('created_at', { ascending: false })
+
+  // An empty dashboard and a dashboard that could not load look identical,
+  // and one of them says "you have no projects" to somebody who has twelve.
+  const loadFailure = firstLoadFailure([['projects', projectsRes]])
+  if (loadFailure) {
+    return <LoadFailed {...loadFailure} schemaDrift={looksLikeSchemaDrift(loadFailure)} />
+  }
+  const projects = projectsRes.data
 
   // Extract first option per project: first elevation by display_order, its first option by position
   const projectMeta = (projects ?? []).map(p => {
