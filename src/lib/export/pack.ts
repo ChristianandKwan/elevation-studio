@@ -41,12 +41,11 @@ import { parseSetAside } from '@/lib/works'
 import type { BudgetConsultantFee, BudgetCustomLineItem, BudgetInstallation } from '@/types'
 import { buildMarkdown, fileSlug } from './markdown'
 import { decodeCapturedImage } from './capturedImage'
+import { EXPORTS_BUCKET, exportObjectPath } from './bucket'
 import type {
   ExportBudgetLine, ExportChoices, ExportElevation, ExportNote,
   ExportSnapshot, ExportWork,
 } from './types'
-
-export const EXPORTS_BUCKET = 'exports'
 
 /** How long the download link lives. Long enough to click, short enough to expire. */
 const DOWNLOAD_TTL = 60 * 60
@@ -848,7 +847,7 @@ export async function buildExportPack(
   const pack = await assemblePack(supabase, projectId, choices, consultantName, budgetImage)
   if (!pack) return null
 
-  const path = `${projectId}.zip`
+  const path = exportObjectPath(projectId)
 
   const { error: upErr } = await supabase.storage
     .from(EXPORTS_BUCKET)
