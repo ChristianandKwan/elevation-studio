@@ -77,7 +77,6 @@ export default function ExportModal({
     return next
   })
 
-  const [includeWallRenders, setWallRenders] = useState(DEFAULT_CHOICES.includeWallRenders)
   const [includeBareWalls, setBareWalls] = useState(DEFAULT_CHOICES.includeBareWalls)
   const [includeWorkImages, setWorkImages] = useState(DEFAULT_CHOICES.includeWorkImages)
   const [includeBudgetImage, setBudgetImage] = useState(DEFAULT_CHOICES.includeBudgetImage)
@@ -121,7 +120,10 @@ export default function ExportModal({
     setStage(includeBudgetImage ? 'budget' : 'pack')
     try {
       const choices: ExportChoices = {
-        optionIds, includeWallRenders, includeBareWalls, includeWorkImages,
+        optionIds,
+        // Always: picking an option above is what asks for its picture.
+        includeWallRenders: true,
+        includeBareWalls, includeWorkImages,
         includeBudgetImage, includeSetAside, includeThumbnails,
       }
       // Taken here rather than on the server: the budget's appearance is a
@@ -183,7 +185,7 @@ export default function ExportModal({
         </div>
 
         <div className="field">
-          <label className="field-label">Which walls, and which versions of each</label>
+          <label className="field-label">Which elevations, and which options of each</label>
           {elevations.length === 0 ? (
             <p className="export-hint">This project has no elevations yet.</p>
           ) : (
@@ -240,23 +242,12 @@ export default function ExportModal({
         </div>
 
         <div className="field">
-          <label className="field-label">What goes in the pack</label>
-          <label className="export-check">
-            <input type="checkbox" checked={includeWallRenders}
-              onChange={e => setWallRenders(e.target.checked)} />
-            <span>
-              The walls, hung
-              <span className="export-check-note"> — each option as it will look, framed on the wall</span>
-            </span>
-          </label>
-          <label className="export-check">
-            <input type="checkbox" checked={includeBareWalls}
-              onChange={e => setBareWalls(e.target.checked)} />
-            <span>
-              The empty walls
-              <span className="export-check-note"> — the same room with nothing hung, one per elevation</span>
-            </span>
-          </label>
+          <label className="field-label">What else goes in the pack?</label>
+          {/* The walls themselves are not a choice here. Which walls go in is
+              what the options above already say, and a second checkbox that
+              could contradict that selection was one control too many. So
+              every included option gets its picture, and this list is only
+              the things that are genuinely extra. */}
           <label className="export-check">
             <input type="checkbox" checked={includeWorkImages}
               onChange={e => setWorkImages(e.target.checked)} />
@@ -271,6 +262,14 @@ export default function ExportModal({
             <span>
               The budget as a page
               <span className="export-check-note"> — the budget screen as it would print, on A4</span>
+            </span>
+          </label>
+          <label className="export-check">
+            <input type="checkbox" checked={includeBareWalls}
+              onChange={e => setBareWalls(e.target.checked)} />
+            <span>
+              The empty walls
+              <span className="export-check-note"> — the same room with nothing hung, one per elevation</span>
             </span>
           </label>
           <label className="export-check">

@@ -28,7 +28,15 @@ export interface ExportChoices {
   optionIds: string[]
   /** Include works somebody has taken out of the running. Off by default. */
   includeSetAside: boolean
-  /** The wall as it will look, framed and hung: one picture per option. */
+  /**
+   * The wall as it will look, framed and hung: one picture per option.
+   *
+   * The export screen always sends this true — ticking an option is what
+   * asks for its picture, and a second control that could contradict that
+   * selection was one too many. It stays in the shape because the route
+   * honours it, and a pack of markdown with no walls is a coherent thing to
+   * ask for; nothing in the UI asks for it today.
+   */
   includeWallRenders: boolean
   /**
    * The room with nothing on it, one per elevation.
