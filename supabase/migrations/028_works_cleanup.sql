@@ -61,13 +61,23 @@ where work_id is null
 -- A work backfilled just now would have no `artist_id`, which is the very
 -- orphaning 032 existed to stop. Mint any missing artist and point the work
 -- at them, exactly as 032 does — same normalisation, same conflict rule.
+with spellings as (
+  select
+    artist_name_key(w.artist) as key,
+    btrim(regexp_replace(w.artist, '\s+', ' ', 'g')) as spelling,
+    count(*) as n
+  from works w
+  where w.artist_id is null
+    and artist_name_key(w.artist) <> ''
+  group by 1, 2
+),
+canonical as (
+  select distinct on (key) key, spelling
+  from spellings
+  order by key, n desc, length(spelling) desc, spelling
+)
 insert into artist_profiles (name, name_key)
-select distinct
-  btrim(regexp_replace(w.artist, '\s+', ' ', 'g')),
-  artist_name_key(w.artist)
-from works w
-where w.artist_id is null
-  and artist_name_key(w.artist) <> ''
+select spelling, key from canonical
 on conflict (name_key) do nothing;
 
 update works w
