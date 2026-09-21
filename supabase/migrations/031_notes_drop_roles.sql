@@ -19,10 +19,10 @@
 --
 --  Deploy order: this drops a column, so it would normally be deploy-code-
 --  first. It is safe in either order here, and the safety is checked rather
---  than assumed: `notes` is empty, and no deployed code reads it — 030's
---  tables went in on their own branch and the app that uses them has not
---  reached production. The guard below refuses to run if that stops being
---  true.
+--  than assumed: no deployed code reads `notes` — 030's tables went in on
+--  their own branch and the app that uses them has not reached production.
+--  The guard below refuses to run if anybody has written a note, so it
+--  cannot quietly destroy someone's text if that stops being true.
 --
 --  Safe to re-run: every step is idempotent.
 --
@@ -30,13 +30,17 @@
 --  in the 026 plan. It has not been written yet.
 -- ══════════════════════════════════════════════════════════
 
--- Refuse to drop the column if anybody has already written notes. Dropping a
+-- Refuse to drop the column if anybody has written anything. Dropping a
 -- column is not recoverable, and "it was empty when I wrote this" is exactly
 -- the assumption worth checking at run time rather than trusting.
 --
+-- Empty notes do not count. Under 030 a role had to be chosen before a box
+-- appeared, so opening a note and typing nothing left a row whose only
+-- content was the role this migration removes — an artefact of the friction
+-- being taken out, not something anybody wrote. Those are swept below.
+--
 -- The check is skipped once the column is gone, so a second run of this file
--- is a no-op rather than an error — by then there may well be notes, and
--- there is nothing left to lose.
+-- is a no-op rather than an error.
 do $$
 declare
   n int;
@@ -45,12 +49,27 @@ begin
     select 1 from information_schema.columns
     where table_name = 'notes' and column_name = 'role'
   ) then
-    select count(*) into n from notes;
+    select count(*) into n from notes where length(btrim(body)) > 0;
     if n > 0 then
       raise exception
-        'notes holds % row(s). 031 drops notes.role — read them before running this.', n;
+        'notes holds % note(s) with text in them. 031 drops notes.role — read them before running this.', n;
     end if;
   end if;
+end $$;
+
+-- Sweep the empty ones. A note with no text and no set of works attached
+-- carries nothing but its role, and its role is about to stop existing.
+-- Anything with a work set is kept whatever its body says: somebody chose
+-- those works, and that choice is content.
+do $$
+declare
+  n int;
+begin
+  delete from notes
+  where length(btrim(body)) = 0
+    and not exists (select 1 from note_works nw where nw.note_id = notes.id);
+  get diagnostics n = row_count;
+  raise notice '031: removed % empty note(s) left behind by the role picker.', n;
 end $$;
 
 alter table notes drop constraint if exists notes_role_check;
