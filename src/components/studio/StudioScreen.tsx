@@ -13,7 +13,8 @@ import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
 import { ArcSpinner, DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
-import { captureBudgetImage, PAGE_W } from '@/components/budget/captureBudget'
+import { captureBudgetImage, PAGE_W, PAGE_PAD } from '@/components/budget/captureBudget'
+import { storedVatMode } from '@/components/budget/vatMode'
 import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog, Work } from '@/types'
@@ -1676,6 +1677,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           aria-hidden="true"
           style={{
             position: 'fixed', top: 0, left: -10000, width: PAGE_W,
+            // Margins. The printed page has the printer's; this one has none
+            // of its own, and without them the budget runs to the paper edge.
+            padding: PAGE_PAD,
             background: 'var(--warm-white)', pointerEvents: 'none',
           }}
         >
@@ -1687,6 +1691,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             isConsultant={true}
             isPreviewingClientView={false}
             clientBudget={budget}
+            // The view the consultant is actually reading. Without this the
+            // copy starts ex-VAT and may be photographed before the stored
+            // preference lands.
+            initialVatMode={storedVatMode(project.id)}
           />
         </div>
       )}

@@ -36,6 +36,16 @@ import { MAX_DATA_URL_CHARS } from '@/lib/export/capturedImage'
  */
 export const PAGE_W = 794
 
+/**
+ * Margins for the captured page.
+ *
+ * A printed budget gets the printer's margins for free; a screenshot gets
+ * none, and the first one ran to the paper edge on all four sides. This is
+ * roughly a 12mm margin at the same scale, which is what stops the page
+ * reading as a screenshot and starts it reading as a page.
+ */
+export const PAGE_PAD = 44
+
 /** Doubled so the text is still sharp when the picture is placed at size. */
 const CAPTURE_SCALE = 2
 
