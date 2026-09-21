@@ -36,6 +36,7 @@ import { parseSubLineItems, parseDiscountStatus, parseDiscountPercent } from '@/
 import { parseSetAside } from '@/lib/works'
 import type { BudgetConsultantFee, BudgetCustomLineItem, BudgetInstallation } from '@/types'
 import { buildMarkdown, fileSlug } from './markdown'
+import { decodeCapturedImage } from './capturedImage'
 import type {
   ExportBudgetLine, ExportChoices, ExportElevation, ExportNote,
   ExportSnapshot, ExportWork,
@@ -349,6 +350,7 @@ function buildBudget(
   budgetRow: BudgetRow | null,
   clientBudget: number | null,
   budgetNotes: ExportNote[],
+  imageFile: string | null,
 ) {
   const lines: ExportBudgetLine[] = []
   let total = 0
@@ -437,7 +439,11 @@ function buildBudget(
     totalMax += amount
   }
 
-  return { lines, total, totalMax: Math.max(total, totalMax), clientBudget, notes: budgetNotes }
+  return {
+    imageFile, lines, total,
+    totalMax: Math.max(total, totalMax),
+    clientBudget, notes: budgetNotes,
+  }
 }
 
 /** How many works are actually going out, which is what installation is tiered on. */
@@ -470,6 +476,13 @@ export async function assemblePack(
   projectId: string,
   choices: ExportChoices,
   consultantName: string,
+  /**
+   * The budget page, photographed in the browser and sent up with the
+   * request. It cannot be rendered here: the budget's appearance is a
+   * rendered screen, and drawing it a second time server-side would be a
+   * second implementation of a layout that already exists.
+   */
+  budgetImage?: unknown,
 ): Promise<AssembledPack | null> {
   const { project, elevations, works, notes, artists, budget } = await readProject(supabase, projectId)
   if (!project) return null
@@ -521,6 +534,16 @@ export async function assemblePack(
       const path = uniquePath(taken, 'images/thumbnails', fileSlug(elev.name, 'elevation'), '.png')
       files.push({ path, bytes })
       thumbPaths.set(opt.id, path)
+    }
+  }
+
+  // ── The budget page, where one was taken ──
+  let budgetImageFile: string | null = null
+  if (choices.includeBudgetImage) {
+    const captured = decodeCapturedImage(budgetImage)
+    if (captured) {
+      budgetImageFile = uniquePath(taken, 'images', 'budget', captured.ext)
+      files.push({ path: budgetImageFile, bytes: captured.bytes })
     }
   }
 
@@ -617,6 +640,7 @@ export async function assemblePack(
       budget,
       project.budget ?? null,
       notesFor(visible, 'budget', null, nameOf),
+      budgetImageFile,
     ),
     choices,
   }
@@ -658,8 +682,9 @@ export async function buildExportPack(
   projectId: string,
   choices: ExportChoices,
   consultantName: string,
+  budgetImage?: unknown,
 ): Promise<PackResult | null> {
-  const pack = await assemblePack(supabase, projectId, choices, consultantName)
+  const pack = await assemblePack(supabase, projectId, choices, consultantName, budgetImage)
   if (!pack) return null
 
   const path = `${projectId}.zip`

@@ -27,6 +27,14 @@ export interface ExportChoices {
   includeWorkImages: boolean
   /** The small cached option thumbnails. Rarely wanted beside the renders. */
   includeThumbnails: boolean
+  /**
+   * The budget screen as it would print, photographed in the browser.
+   *
+   * The markdown already carries the budget as a table, so this is not the
+   * figures — it is the page. Downstream can lay the numbers out itself or
+   * use the picture as it stands.
+   */
+  includeBudgetImage: boolean
 }
 
 export const DEFAULT_CHOICES: Omit<ExportChoices, 'optionIds'> = {
@@ -34,6 +42,7 @@ export const DEFAULT_CHOICES: Omit<ExportChoices, 'optionIds'> = {
   includeWallRenders: true,
   includeWorkImages: true,
   includeThumbnails: false,
+  includeBudgetImage: true,
 }
 
 /** A note, already filtered to the ones that may leave the studio. */
@@ -118,6 +127,8 @@ export interface ExportBudgetLine {
 }
 
 export interface ExportBudget {
+  /** Path inside the zip of the budget page, where one was taken. */
+  imageFile: string | null
   lines: ExportBudgetLine[]
   total: number
   /** The dearest end, where any line is a range. Equals `total` otherwise. */

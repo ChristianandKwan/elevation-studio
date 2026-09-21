@@ -44,6 +44,7 @@ function readChoices(raw: unknown): ExportChoices | null {
     includeWallRenders: bool(body.includeWallRenders, DEFAULT_CHOICES.includeWallRenders),
     includeWorkImages: bool(body.includeWorkImages, DEFAULT_CHOICES.includeWorkImages),
     includeThumbnails: bool(body.includeThumbnails, DEFAULT_CHOICES.includeThumbnails),
+    includeBudgetImage: bool(body.includeBudgetImage, DEFAULT_CHOICES.includeBudgetImage),
   }
 }
 
@@ -56,10 +57,13 @@ export async function POST(
     return NextResponse.json({ error: 'Missing projectId' }, { status: 400 })
   }
 
-  const choices = readChoices(await request.json().catch(() => null))
+  const body = await request.json().catch(() => null)
+  const choices = readChoices(body)
   if (!choices) {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 })
   }
+  // Checked in the pack rather than here, where it would be checked twice.
+  const budgetImage = (body as Record<string, unknown> | null)?.budgetImage
 
   // 1. Auth. RLS enforces consultant-owns-project on this read.
   const userClient = await createClient()
@@ -92,6 +96,7 @@ export async function POST(
       projectId,
       choices,
       profile?.name ?? '',
+      budgetImage,
     )
     if (!pack) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })

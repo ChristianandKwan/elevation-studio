@@ -213,7 +213,13 @@ function budgetSection(budget: ExportBudget): string[] {
       `| ${line.sub ? '&nbsp;&nbsp;↳ ' : ''}${line.label} | ${moneyRange(line.amount, line.amountMax)} |`),
     `| **Total ex VAT** | **${moneyRange(budget.total, budget.totalMax)}** |`,
   ]
-  const out: string[] = ['## Budget', tight(rows)]
+  const out: string[] = ['## Budget']
+
+  // The page first, then the figures. Both describe the same budget: the
+  // picture is what it looks like printed, the table is what it says, and
+  // downstream can use either.
+  if (budget.imageFile) out.push(`![The budget](${budget.imageFile})`)
+  out.push(tight(rows))
 
   if (budget.clientBudget != null) {
     out.push(facts([['Client budget', `${money(budget.clientBudget)} ex VAT`]]))

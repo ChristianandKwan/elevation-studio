@@ -10,6 +10,11 @@ interface Props {
   elevations: IndexElevation[]
   /** How many works are set aside, so the checkbox can say what it would add. */
   setAsideCount: number
+  /**
+   * Photograph the budget as it would print. Returns null if it could not be
+   * taken, which costs the pack that one picture and nothing else.
+   */
+  onCaptureBudget: () => Promise<string | null>
   onClose: () => void
 }
 
@@ -41,7 +46,7 @@ function fileSize(bytes: number): string {
  * tenth.
  */
 export default function ExportModal({
-  projectId, projectName, elevations, setAsideCount, onClose,
+  projectId, projectName, elevations, setAsideCount, onCaptureBudget, onClose,
 }: Props) {
   /**
    * The option chosen per elevation, or null where the elevation is out.
@@ -67,8 +72,11 @@ export default function ExportModal({
   const [includeWallRenders, setWallRenders] = useState(DEFAULT_CHOICES.includeWallRenders)
   const [includeWorkImages, setWorkImages] = useState(DEFAULT_CHOICES.includeWorkImages)
   const [includeThumbnails, setThumbnails] = useState(DEFAULT_CHOICES.includeThumbnails)
+  const [includeBudgetImage, setBudgetImage] = useState(DEFAULT_CHOICES.includeBudgetImage)
 
   const [busy, setBusy] = useState(false)
+  /** Which half of the work is running, so the wait can say what it is doing. */
+  const [stage, setStage] = useState<'budget' | 'pack'>('pack')
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<PackResponse | null>(null)
 
@@ -86,14 +94,20 @@ export default function ExportModal({
   async function runExport() {
     setBusy(true)
     setError(null)
+    setStage(includeBudgetImage ? 'budget' : 'pack')
     try {
       const choices: ExportChoices = {
-        optionIds, includeSetAside, includeWallRenders, includeWorkImages, includeThumbnails,
+        optionIds, includeSetAside, includeWallRenders, includeWorkImages,
+        includeThumbnails, includeBudgetImage,
       }
+      // Taken here rather than on the server: the budget's appearance is a
+      // rendered screen, and the only place that screen exists is a browser.
+      const budgetImage = includeBudgetImage ? await onCaptureBudget() : null
+      setStage('pack')
       const res = await fetch(`/api/export/${projectId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(choices),
+        body: JSON.stringify({ ...choices, budgetImage }),
       })
       const body = await res.json().catch(() => null)
       if (!res.ok) {
@@ -231,6 +245,14 @@ export default function ExportModal({
             </span>
           </label>
           <label className="export-check">
+            <input type="checkbox" checked={includeBudgetImage}
+              onChange={e => setBudgetImage(e.target.checked)} />
+            <span>
+              The budget as a page
+              <span className="export-check-note"> — the budget screen as it would print, on A4</span>
+            </span>
+          </label>
+          <label className="export-check">
             <input type="checkbox" checked={includeThumbnails}
               onChange={e => setThumbnails(e.target.checked)} />
             <span>
@@ -254,7 +276,9 @@ export default function ExportModal({
         </div>
         {busy && (
           <p className="export-hint export-hint--busy">
-            Rendering each wall at full size. A big project takes a few seconds.
+            {stage === 'budget'
+              ? 'Laying the budget out as a page…'
+              : 'Rendering each wall at full size. A big project takes a few seconds.'}
           </p>
         )}
       </div>

@@ -14,6 +14,12 @@ import type { Artist } from '@/lib/artists'
 
 interface Props {
   projectId: string
+  /**
+   * Photograph the budget as it would print, for the export pack. Lives in
+   * StudioScreen because that is where the budget's data already is; the
+   * index only forwards it to the export screen.
+   */
+  onCaptureBudget: () => Promise<string | null>
   projectName: string
   clientName: string
   works: Work[]
@@ -50,7 +56,7 @@ interface Props {
  * what it costs, this is the record of what was looked at.
  */
 export default function IndexScreen({
-  projectId, projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
+  projectId, onCaptureBudget, projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
   notes, onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote,
   artists, onSetWorkArtist, onRenameArtist, onArtistNoteChange,
 }: Props) {
@@ -91,6 +97,7 @@ export default function IndexScreen({
             projectName={projectName}
             elevations={elevations}
             setAsideCount={setAsideCount}
+            onCaptureBudget={onCaptureBudget}
             onClose={() => setExporting(false)}
           />
         )}

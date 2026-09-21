@@ -25,6 +25,7 @@ const CHOICES: ExportChoices = {
   includeWallRenders: true,
   includeWorkImages: true,
   includeThumbnails: false,
+  includeBudgetImage: false,
 }
 
 function work(over: Partial<ExportWork> = {}): ExportWork {
@@ -93,7 +94,7 @@ describe('the document holds its shape', () => {
     // A blank line between two rows ends the table, and every row after it
     // renders as literal pipes. This shipped broken once.
     const md = buildMarkdown(snapshot({
-      budget: {
+      budget: { imageFile: null,
         lines: [{ label: 'Street 1', amount: 4500 }, { label: 'Framing', amount: 400, sub: true }],
         total: 4900, totalMax: 4900, clientBudget: null, notes: [],
       },
@@ -285,7 +286,7 @@ describe('budget', () => {
     // Client-facing language: the export reports the gap and stops. Whether
     // being over is a problem is the consultant's conversation to have.
     const md = buildMarkdown(snapshot({
-      budget: {
+      budget: { imageFile: null,
         lines: [{ label: 'Street 1', amount: 4500 }],
         total: 4500, totalMax: 4500, clientBudget: 4000, notes: [],
       },
@@ -298,14 +299,39 @@ describe('budget', () => {
 
   test('an exact match is said plainly', () => {
     const md = buildMarkdown(snapshot({
-      budget: { lines: [], total: 4000, totalMax: 4000, clientBudget: 4000, notes: [] },
+      budget: { imageFile: null, lines: [], total: 4000, totalMax: 4000, clientBudget: 4000, notes: [] },
     }))
     assert.ok(md.includes('matches the budget exactly'))
   })
 
-  test('an indicative line is shown as a range, not a single figure', () => {
+  test('the budget page is referenced from the budget section', () => {
     const md = buildMarkdown(snapshot({
       budget: {
+        imageFile: 'images/budget.png',
+        lines: [{ label: 'Street 1', amount: 4500 }],
+        total: 4500, totalMax: 4500, clientBudget: null, notes: [],
+      },
+    }))
+    // The picture first, then the figures — both describe the same budget.
+    const section = md.slice(md.indexOf('## Budget'))
+    assert.ok(section.indexOf('![The budget](images/budget.png)') < section.indexOf('| Line | Amount |'))
+  })
+
+  test('without a page, the table stands on its own', () => {
+    const md = buildMarkdown(snapshot({
+      budget: {
+        imageFile: null,
+        lines: [{ label: 'Street 1', amount: 4500 }],
+        total: 4500, totalMax: 4500, clientBudget: null, notes: [],
+      },
+    }))
+    assert.ok(!md.includes('![The budget]'))
+    assert.ok(md.includes('| Line | Amount |'))
+  })
+
+  test('an indicative line is shown as a range, not a single figure', () => {
+    const md = buildMarkdown(snapshot({
+      budget: { imageFile: null,
         lines: [
           { label: 'Street 1', amount: 4500 },
           { label: 'Installation (indicative)', amount: 250, amountMax: 350 },
@@ -321,7 +347,7 @@ describe('budget', () => {
     // One end is over and the other under. Saying either would be false at
     // the far end, and saying "over budget" would be a verdict besides.
     const md = buildMarkdown(snapshot({
-      budget: {
+      budget: { imageFile: null,
         lines: [{ label: 'Installation (indicative)', amount: 250, amountMax: 350 }],
         total: 4900, totalMax: 5100, clientBudget: 5000, notes: [],
       },
@@ -332,7 +358,7 @@ describe('budget', () => {
 
   test('sub-lines are indented under the work they belong to', () => {
     const md = buildMarkdown(snapshot({
-      budget: {
+      budget: { imageFile: null,
         lines: [
           { label: 'Street 1', amount: 4500 },
           { label: 'Framing', amount: 400, sub: true },
