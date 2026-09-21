@@ -17,8 +17,10 @@ import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog, Work } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
+import { fmtGbp } from '@/components/budget/budgetCalc'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
-import { toWorkColumns, placementsOf } from '@/lib/works'
+import { toWorkColumns, placementsOf, workFieldsOf } from '@/lib/works'
+import { createWriteQueue, enqueue } from '@/lib/writeQueue'
 import type { WorkPatch, IndexElevation } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import IndexScreen from '@/components/index/IndexScreen'
@@ -139,6 +141,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [works, setWorks] = useState<Work[]>(initialWorks)
   const [showIndexAddModal, setShowIndexAddModal] = useState(false)
   const [pendingDeleteWorkId, setPendingDeleteWorkId] = useState<string | null>(null)
+  // The works picked to be merged, and which of them survives. Null when the
+  // confirmation is closed.
+  const [pendingMerge, setPendingMerge] = useState<{ ids: string[]; keepId: string } | null>(null)
   const [isPreviewingClientView, setIsPreviewingClientView] = useState(false)
   const [returningToDashboard, setReturningToDashboard] = useState(false)
   const [showIntroLoader, setShowIntroLoader] = useState(true)
@@ -148,10 +153,22 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     return () => clearTimeout(t)
   }, [])
 
-  function onStatus(msg: string) {
+  /**
+   * Stable by design, and it matters far more than it looks.
+   *
+   * As a plain function this was a new value on every render, which made
+   * `flushWorkWrite` and `flushNoteWrite` new on every render, which made the
+   * flush-on-leave effect below re-run on every render — and *its cleanup*
+   * clears the debounce timers and writes immediately. So the 600ms debounce
+   * never survived a render, every keystroke became its own request, and two
+   * requests for one row could land out of order. A rename typed as
+   * "Street 2" → "Street " → "Street 1" could end up stored as "Street ",
+   * with the screen still showing "Street 1" because that half is optimistic.
+   */
+  const onStatus = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
-  }
+  }, [])
 
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
@@ -436,23 +453,35 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const notePending = useRef(new Map<string, { note: string; shownToClient: boolean }>())
   const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
+  /**
+   * One queue per row, so two writes to the same work cannot overtake each
+   * other. The debounce means this rarely has anything to wait for — type,
+   * pause, one request — but "rarely" is not "never": a flush already in
+   * flight when the next one is queued used to be a race, and the loser of
+   * that race was whichever reply happened to arrive last, not whichever was
+   * typed last.
+   */
+  const workWrites = useRef(createWriteQueue())
+
   const flushWorkWrite = useCallback(async (workId: string) => {
     const patch = workPending.current.get(workId)
     workPending.current.delete(workId)
     workTimers.current.delete(workId)
     if (!patch) return
 
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('works')
-      .update(toWorkColumns(patch))
-      .eq('id', workId)
-      .select('id')
+    await enqueue(workWrites.current, workId, async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('works')
+        .update(toWorkColumns(patch))
+        .eq('id', workId)
+        .select('id')
 
-    // `select` matters: without it an update that matches nothing, or that
-    // row-level security filters out, comes back with no error at all.
-    if (error) onStatus('Not saved: ' + error.message)
-    else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
+      // `select` matters: without it an update that matches nothing, or that
+      // row-level security filters out, comes back with no error at all.
+      if (error) onStatus('Not saved: ' + error.message)
+      else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
+    })
   }, [onStatus])
 
   // ─── NOTES ───────────────────────────────────────────────────────
@@ -686,24 +715,29 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     )
   }, [studio, flushWorkWrite, elevations])
 
+  /** Same queue, same reason, for the note an option carries. */
+  const noteWrites = useRef(createWriteQueue())
+
   const flushNoteWrite = useCallback(async (optionRowId: string) => {
     const pending = notePending.current.get(optionRowId)
     notePending.current.delete(optionRowId)
     noteTimers.current.delete(optionRowId)
     if (!pending) return
 
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('elevation_options')
-      .update({
-        consultant_note: pending.note,
-        consultant_note_shown_to_client: pending.shownToClient,
-      })
-      .eq('id', optionRowId)
-      .select('id')
+    await enqueue(noteWrites.current, optionRowId, async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('elevation_options')
+        .update({
+          consultant_note: pending.note,
+          consultant_note_shown_to_client: pending.shownToClient,
+        })
+        .eq('id', optionRowId)
+        .select('id')
 
-    if (error) onStatus('Note not saved: ' + error.message)
-    else if (!data || data.length === 0) onStatus('Note not saved: this option could not be found')
+      if (error) onStatus('Note not saved: ' + error.message)
+      else if (!data || data.length === 0) onStatus('Note not saved: this option could not be found')
+    })
   }, [onStatus])
 
   const handleOptionNoteChange = useCallback((
@@ -739,6 +773,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [elevations, flushNoteWrite])
 
   // Leaving the page with a write still queued would lose it.
+  //
+  // This must run on mount and unmount ONLY. Its cleanup clears the debounce
+  // timers and writes immediately, so if anything in the dependency array
+  // changes per render, the cleanup fires per render and the debounce above
+  // is dead — every keystroke becomes its own request and two of them can
+  // land out of order. That is exactly what happened while `onStatus` was a
+  // plain function. Both dependencies are `useCallback`s over a stable
+  // `onStatus`; keep them that way.
   useEffect(() => {
     const wTimers = workTimers.current
     const nTimers = noteTimers.current
@@ -1231,6 +1273,87 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     void logActivity('work_deleted', `${PRACTICE_NAME} deleted ${work.name} from the project`)
   }
 
+  /**
+   * Fold one or more works into a keeper. Before 026 the same print hung on
+   * two options meant two uploads, and the Index is where those show up.
+   *
+   * The database does the work in `merge_works` (033) so placements, note
+   * sets and note anchors cannot half-move. Each dropped work is its own call
+   * and its own transaction: if the third of five fails, the first two are
+   * still properly merged and the message says where it stopped.
+   */
+  async function mergeWorks(keepId: string, dropIds: string[]) {
+    const keep = works.find(w => w.id === keepId)
+    if (!keep || dropIds.length === 0) return
+    const supabase = createClient()
+
+    const merged: string[] = []
+    let placementsDropped = 0
+    // A keeper with no picture of its own takes the one it is merging in; the
+    // database says so in `adopted_image` and the signed URL comes with it.
+    let keptWork: Work = keep
+    let failure: string | null = null
+
+    for (const dropId of dropIds) {
+      const drop = works.find(w => w.id === dropId)
+      const { data, error } = await supabase.rpc('merge_works', { p_keep: keepId, p_drop: dropId })
+      if (error) { failure = error.message; break }
+      const res = (data ?? {}) as {
+        image_path: string | null
+        placements_dropped: number | null
+        adopted_image: boolean | null
+      }
+      // The file goes only once the row that pointed at it is gone, so a
+      // failure never leaves a work whose image has been deleted.
+      if (res.image_path) await supabase.storage.from('artwork-images').remove([res.image_path])
+      if (res.adopted_image && drop) {
+        keptWork = { ...keptWork, imagePath: drop.imagePath, imageUrl: drop.imageUrl }
+      }
+      placementsDropped += res.placements_dropped ?? 0
+      merged.push(dropId)
+    }
+
+    if (merged.length > 0) {
+      const dropped = new Set(merged)
+
+      const affectedOptionIds = elevations.flatMap(e =>
+        e.elevation_options.filter(o => o.artworks.some(a => dropped.has(a.workId))).map(o => o.id))
+
+      setElevations(prev => prev.map(e => ({
+        ...e,
+        elevation_options: e.elevation_options.map(o => {
+          if (!o.artworks.some(a => dropped.has(a.workId))) return o
+          const seen = new Set(o.artworks.filter(a => a.workId === keepId).map(a => a.workId))
+          const artworks = o.artworks.flatMap(a => {
+            if (!dropped.has(a.workId)) return [a]
+            if (seen.has(keepId)) return []
+            seen.add(keepId)
+            return [{ ...a, workId: keepId, ...workFieldsOf(keptWork) }]
+          })
+          return { ...o, artworks }
+        }),
+      })))
+      setWorks(prev => prev
+        .filter(w => !dropped.has(w.id))
+        .map(w => w.id === keepId ? keptWork : w))
+      studio.repointPlacementsOfWork(merged, keptWork)
+      affectedOptionIds.forEach(id => studio.scheduleThumbnailRegen(id))
+      void logActivity('works_merged', `${PRACTICE_NAME} merged ${merged.length + 1} records of ${keep.name} into one`)
+    }
+
+    if (failure) {
+      onStatus(merged.length === 0
+        ? 'Could not merge: ' + failure
+        : `Merged ${merged.length}, then stopped: ${failure}`)
+      return
+    }
+    const parts = [`${merged.length + 1} records of ${keep.name} are now one work`]
+    if (placementsDropped > 0) {
+      parts.push(`${placementsDropped} duplicate placement${placementsDropped === 1 ? '' : 's'} removed from a wall`)
+    }
+    onStatus(parts.join(' · '))
+  }
+
   // What the index needs to say where each work hangs.
   const indexElevations: IndexElevation[] = elevations.map(e => ({
     id: e.id,
@@ -1515,6 +1638,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           notes={notes}
           onAddNote={addNote}
           onAddWorkSetNote={addWorkSetNote}
+          onMergeWorks={ids => setPendingMerge({ ids, keepId: ids[0] })}
           onChangeNote={changeNote}
           onDeleteNote={deleteNote}
           artists={artists}
@@ -1571,6 +1695,108 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   onClick={() => { const id = pendingDeleteWorkId; setPendingDeleteWorkId(null); void deleteWork(id) }}
                 >
                   Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {pendingMerge && (() => {
+        const picked = pendingMerge.ids
+          .map(id => works.find(w => w.id === id))
+          .filter((w): w is Work => !!w)
+        if (picked.length < 2) return null
+        const keep = picked.find(w => w.id === pendingMerge.keepId) ?? picked[0]
+        const drops = picked.filter(w => w.id !== keep.id)
+        // Every option the keeper already hangs on that a dropped work is
+        // also on. Those placements cannot both survive — a work hangs on an
+        // option once — so say so before it happens rather than after.
+        const keepOptionIds = new Set(
+          elevations.flatMap(e => e.elevation_options
+            .filter(o => o.artworks.some(a => a.workId === keep.id))
+            .map(o => o.id)))
+        const clashes = elevations.flatMap(e => e.elevation_options
+          .filter(o => keepOptionIds.has(o.id) && o.artworks.some(a => drops.some(d => d.id === a.workId)))
+          .map(() => e.name))
+        const prices = new Set(picked.map(w => w.price))
+        const names = new Set(picked.map(w => w.name.trim()))
+
+        return (
+          <div className="modal-bg open" onClick={() => setPendingMerge(null)}>
+            <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Which record should be kept?</div>
+              <div className="modal-sub">
+                The one you keep carries the name, price and notes. The others are
+                deleted and everywhere they hang moves across.
+              </div>
+
+              <div className="merge-choices">
+                {picked.map(w => {
+                  const placed = placementsOf(w.id, indexElevations)
+                  const isKeeper = w.id === keep.id
+                  return (
+                    <label key={w.id} className={`merge-choice${isKeeper ? ' merge-choice--keep' : ''}`}>
+                      <input
+                        type="radio"
+                        name="merge-keeper"
+                        checked={isKeeper}
+                        onChange={() => setPendingMerge({ ...pendingMerge, keepId: w.id })}
+                      />
+                      <span className="merge-choice-thumb">
+                        {w.imageUrl
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={w.imageUrl} alt="" />
+                          : <span className="index-thumb-empty">No image</span>}
+                      </span>
+                      <span className="merge-choice-text">
+                        <span className="merge-choice-name">{w.name}</span>
+                        <span className="merge-choice-meta">
+                          {w.wCm} × {w.hCm} cm · {fmtGbp(w.price)}
+                        </span>
+                        <span className="merge-choice-meta">
+                          {placed.length > 0
+                            ? placed.map(pl => `${pl.elevationName} · ${pl.labels.join(', ')}`).join('  ·  ')
+                            : 'Not on a wall'}
+                        </span>
+                      </span>
+                      <span className="merge-choice-tag">{isKeeper ? 'Keep' : 'Delete'}</span>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {names.size > 1 && (
+                <p className="modal-sub merge-warn">
+                  These records have different names. Check the pictures above are
+                  the same print before merging.
+                </p>
+              )}
+              {prices.size > 1 && (
+                <p className="modal-sub merge-warn">
+                  Prices differ ({[...prices].map(fmtGbp).join(' and ')}). The kept
+                  record&rsquo;s price is the one that stands.
+                </p>
+              )}
+              {clashes.length > 0 && (
+                <p className="modal-sub merge-warn">
+                  Both hang on {[...new Set(clashes)].join(' and ')}. A work hangs on
+                  an option once, so the duplicate placement comes off that wall.
+                </p>
+              )}
+
+              <div className="modal-footer">
+                <button className="btn" onClick={() => setPendingMerge(null)}>Cancel</button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const { id } = keep
+                    const dropIds = drops.map(d => d.id)
+                    setPendingMerge(null)
+                    void mergeWorks(id, dropIds)
+                  }}
+                >
+                  Merge into {keep.name}
                 </button>
               </div>
             </div>

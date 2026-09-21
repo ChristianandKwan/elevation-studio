@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import WorkEditor from './WorkEditor'
 import { fmtGbp, netPrice, tbcNetPrice } from '@/components/budget/budgetCalc'
-import { WORK_STATUS_LABEL } from '@/lib/works'
+import { SET_ASIDE_BADGE } from '@/lib/works'
 import type { IndexElevation, Placed, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
 
@@ -48,7 +48,7 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
   const noteHidden = !work.noteShownToClient
 
   return (
-    <div className={`index-row index-row--${work.status}`}>
+    <div className={`index-row${work.setAside ? ' index-row--aside' : ''}`}>
       <div className="index-thumb">
         {work.imageUrl
           // eslint-disable-next-line @next/next/no-img-element
@@ -67,7 +67,11 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
             {discounted && <span className="budget-price-was">{fmtGbp(work.price)}</span>}
             {fmtGbp(net)}
           </span>
-          <span className={`index-status index-status--${work.status}`}>{WORK_STATUS_LABEL[work.status]}</span>
+          {work.setAside
+            ? <span className={`index-status index-status--${work.setAside}`}>{SET_ASIDE_BADGE[work.setAside]}</span>
+            // Live is the ordinary case and says nothing. Where the work
+            // stands is the chip row below, worked out from the placements.
+            : <span className="index-status index-status--none" aria-hidden="true" />}
           <button type="button" className="budget-line-edit" onClick={() => setEditing(true)}>Edit</button>
         </div>
 

@@ -14,10 +14,20 @@ export type OptionKey = string
 export type DiscountStatus = 'none' | 'confirmed' | 'tbc'
 
 /**
- * Where a work stands in the curation. Everything the consultant looked at
- * is kept — a declined work keeps the note saying why it was not put forward.
+ * Who set a work aside. Null — the usual case — means it is live.
+ *
+ * This replaced proposed / considered / declined in 034. That set conflated
+ * where a work stood with *us* and where it stood with the *client* —
+ * "declined" never said which — and most of it was derivable anyway: a work
+ * on a client-visible option is proposed, a work on no option is under
+ * consideration. Derived facts stored in a column go stale, so the Index
+ * works those out from the placements instead.
+ *
+ * What is left is the part that genuinely has to be recorded, and the part
+ * that has to name who decided. The reason is not an enum: it goes in the
+ * note, where it can be a sentence.
  */
-export type WorkStatus = 'proposed' | 'considered' | 'declined'
+export type SetAside = 'us' | 'client'
 
 export type SubLineItemKind = 'framing' | 'duty' | 'shipping' | 'other'
 
@@ -77,8 +87,9 @@ export interface Work {
   edition: string | null
   /** The gallery or publisher it comes from. */
   source: string | null
-  status: WorkStatus
-  /** The elevation it is in mind for, hung there or not. */
+  /** Who set it aside, or null for live. Where it *hangs* is not stored — see SetAside. */
+  setAside: SetAside | null
+  /** The elevation it is earmarked for. Only meaningful, and only shown, when it hangs nowhere. */
   consideredFor: string | null
   displayOrder: number
 }

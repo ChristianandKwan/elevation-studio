@@ -32,6 +32,12 @@ interface Props {
   onAddNote: (anchor: NoteAnchor, id: string | null) => void
   /** A note covering several works at once, made by picking them first. */
   onAddWorkSetNote: (artistKey: string, workIds: string[]) => void
+  /**
+   * Fold several records of one print into a single work. The picked ids go
+   * up; which one survives is chosen in the confirmation, where the pictures
+   * can be seen side by side.
+   */
+  onMergeWorks: (workIds: string[]) => void
   onChangeNote: (noteId: string, patch: NotePatch) => void
   onDeleteNote: (noteId: string) => void
 }
@@ -43,7 +49,7 @@ interface Props {
  */
 export default function IndexScreen({
   projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
-  notes, onAddNote, onAddWorkSetNote, onChangeNote, onDeleteNote,
+  notes, onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote,
   artists, onSetWorkArtist, onRenameArtist, onArtistNoteChange,
 }: Props) {
   const nameOf = useMemo(() => {
@@ -52,7 +58,7 @@ export default function IndexScreen({
   }, [works])
   const groups = useMemo(() => groupWorksByArtist(works), [works])
   const placedCount = works.filter(w => placementsOf(w.id, elevations).length > 0).length
-  const declinedCount = works.filter(w => w.status === 'declined').length
+  const setAsideCount = works.filter(w => w.setAside).length
 
   return (
     <div className="index-view">
@@ -64,7 +70,7 @@ export default function IndexScreen({
               {clientName && <>{clientName} · </>}
               {works.length} work{works.length === 1 ? '' : 's'}
               {works.length > 0 && <> · {placedCount} on a wall</>}
-              {declinedCount > 0 && <> · {declinedCount} declined</>}
+              {setAsideCount > 0 && <> · {setAsideCount} set aside</>}
             </p>
           </div>
           <button type="button" className="btn btn-sm btn-primary" onClick={onAddWork}>+ Add work</button>
@@ -103,6 +109,7 @@ export default function IndexScreen({
                 onDeleteWork={onDeleteWork}
                 onAddNote={onAddNote}
                 onAddWorkSetNote={onAddWorkSetNote}
+                onMergeWorks={onMergeWorks}
                 onChangeNote={onChangeNote}
                 onDeleteNote={onDeleteNote}
               />
@@ -127,7 +134,7 @@ function ArtistGroupSection({
   artist, artists, label, works, elevations, notes, nameOf,
   onRenameArtist, onArtistNoteChange, onSetWorkArtist,
   onWorkChange, onDeleteWork,
-  onAddNote, onAddWorkSetNote, onChangeNote, onDeleteNote,
+  onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote,
 }: {
   /** Undefined for the unattributed group, which is the absence of an artist. */
   artist?: Artist
@@ -144,11 +151,15 @@ function ArtistGroupSection({
   onDeleteWork: (workId: string) => void
   onAddNote: (anchor: NoteAnchor, id: string | null) => void
   onAddWorkSetNote: (artistId: string, workIds: string[]) => void
+  onMergeWorks: (workIds: string[]) => void
   onChangeNote: (noteId: string, patch: NotePatch) => void
   onDeleteNote: (noteId: string) => void
 }) {
   const artistKeyValue = artist?.id ?? ''
-  const [picking, setPicking] = useState(false)
+  // Two things are done by picking works: writing one note across several,
+  // and folding duplicates into one. They share the checkboxes and differ in
+  // what the button at the end does.
+  const [picking, setPicking] = useState<'note' | 'merge' | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [showAbout, setShowAbout] = useState(false)
 
@@ -161,10 +172,18 @@ function ArtistGroupSection({
     })
   }
 
-  function finish() {
-    if (picked.size > 0) onAddWorkSetNote(artistKeyValue, [...picked])
+  const enough = picking === 'merge' ? picked.size >= 2 : picked.size > 0
+
+  function stop() {
     setPicked(new Set())
-    setPicking(false)
+    setPicking(null)
+  }
+
+  function finish() {
+    if (!enough) return
+    if (picking === 'merge') onMergeWorks([...picked])
+    else onAddWorkSetNote(artistKeyValue, [...picked])
+    stop()
   }
 
   const artistNotes = artistKeyValue ? notesOn(notes, 'artist', artistKeyValue) : []
@@ -203,35 +222,50 @@ function ArtistGroupSection({
               </button>
             )}
             {works.length > 1 && !picking && (
-              // A real button rather than another quiet tab: this is the one
-              // thing on the screen nobody finds on their own.
-              <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
-                Note about several works
-              </button>
+              <>
+                {/* A real button rather than another quiet tab: this is the
+                    one thing on the screen nobody finds on their own. */}
+                <button type="button" className="btn btn-sm" onClick={() => setPicking('note')}>
+                  Note about several works
+                </button>
+                <button type="button" className="btn btn-sm" onClick={() => setPicking('merge')}>
+                  Merge duplicates
+                </button>
+              </>
             )}
           </div>
 
           {picking && (
             <div className="artist-picking">
               <div className="artist-picking-title">
-                Pick the works this note covers, then write it once.
+                {picking === 'merge'
+                  ? 'Pick the records that are the same print.'
+                  : 'Pick the works this note covers, then write it once.'}
               </div>
               <p className="artist-picking-blurb">
-                Useful when something is true of several pieces but not all of
-                them — one consignment, one series, a shared lead time. The
-                note appears on each work you pick, and editing it anywhere
-                changes it everywhere.
+                {picking === 'merge'
+                  ? `The same print uploaded twice is two records here, each with its
+                     own file. Pick them and you choose which one to keep; everywhere
+                     the others hang moves across, and their files go. Check the
+                     pictures rather than the names — two records can share a name and
+                     be different prints.`
+                  : `Useful when something is true of several pieces but not all of
+                     them — one consignment, one series, a shared lead time. The note
+                     appears on each work you pick, and editing it anywhere changes it
+                     everywhere.`}
               </p>
               <div className="artist-picking-actions">
                 <span className="artist-pick-hint">
                   {picked.size === 0
                     ? 'Nothing picked yet'
-                    : `${picked.size} of ${works.length} picked`}
+                    : picking === 'merge' && picked.size < 2
+                      ? 'Pick at least two'
+                      : `${picked.size} of ${works.length} picked`}
                 </span>
-                <button type="button" className="btn btn-sm btn-primary" disabled={picked.size === 0} onClick={finish}>
-                  Write about these
+                <button type="button" className="btn btn-sm btn-primary" disabled={!enough} onClick={finish}>
+                  {picking === 'merge' ? 'Merge these' : 'Write about these'}
                 </button>
-                <button type="button" className="btn btn-sm" onClick={() => { setPicked(new Set()); setPicking(false) }}>
+                <button type="button" className="btn btn-sm" onClick={stop}>
                   Cancel
                 </button>
               </div>
