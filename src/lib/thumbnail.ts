@@ -417,11 +417,8 @@ interface OptionRowForThumbnail {
   wall_color: string | null
   foreground_masks: unknown
   artworks: Array<{
-    image_path: string
     x_fraction: number
     y_fraction: number
-    w_cm: number
-    h_cm: number
     visible: boolean
     brightness: number | null
     fade: number | null
@@ -435,7 +432,7 @@ interface OptionRowForThumbnail {
     shadow_angle: number | null
     shadow_blur: number | null
     shadow_opacity: number | null
-    /** The work this placement shows. Null only for a straggler row (see migration 026). */
+    /** The work this placement shows. Not null since 028; defended anyway. */
     work: { image_path: string | null; w_cm: number; h_cm: number } | null
   }>
 }
