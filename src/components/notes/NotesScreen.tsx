@@ -1,7 +1,7 @@
 'use client'
 
 import NotePanel, { type NotePatch } from './NotePanel'
-import { ANCHOR_META, notesOn, writtenCount, type Note, type NoteAnchor } from '@/lib/notes'
+import { ANCHOR_META, notesOn, notesOwnedBy, writtenCount, type Note, type NoteAnchor } from '@/lib/notes'
 import { labelOptions } from '@/lib/options'
 
 interface NotesElevation {
@@ -65,7 +65,7 @@ export default function NotesScreen({
           suffix={projectName}
           // A note covering a set of works can be anchored to the project
           // when those works have no artist. It belongs to them, not here.
-          notes={notesOn(notes, 'project').filter(n => n.workIds.length === 0)}
+          notes={notesOwnedBy(notes, 'project')}
           onAdd={() => onAdd('project', null)}
           onChange={onChange}
           onDelete={onDelete}

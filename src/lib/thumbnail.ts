@@ -26,6 +26,16 @@ import { wallRgb } from '@/lib/wall'
 
 const THUMB_W = 600 // max thumbnail width in pixels
 
+/**
+ * How wide a wall comes out in the export pack.
+ *
+ * Wide enough that a framed print reads as a framed print when the proposal
+ * is laid out, small enough that a project's worth of them is still a zip
+ * somebody can email. It is not a print-resolution render and is not trying
+ * to be — `exportPng` remains the one-wall, full-quality path.
+ */
+export const EXPORT_WALL_W = 1600
+
 export interface ArtworkEntry {
   url: string
   xF: number
@@ -102,6 +112,14 @@ export type ElevSource = string | { color: string }
  * Pure compositing: takes a wall source + signed artwork URLs + artwork
  * metadata and returns a PNG `Buffer`. Returns `null` on failure (caller
  * falls back).
+ *
+ * `outWidth` is the width of the PNG that comes out. It defaults to the
+ * dashboard's thumbnail size, which is every caller but the export pack —
+ * that one asks for `EXPORT_WALL_W`, because a 600px wall is a thumbnail of
+ * a proposal rather than an illustration of one. Everything downstream of
+ * this line is a fraction of the output width, so the geometry follows on
+ * its own; nothing is resized after compositing, which is what keeps the
+ * frames and mounts crisp at the larger size.
  */
 export async function buildThumbnailBuffer(
   elev: ElevSource,
@@ -109,10 +127,12 @@ export async function buildThumbnailBuffer(
   origW: number,
   origH: number,
   scalePxPerCm: number | null,
-  foregroundMasks: MaskPolygon[] | null = null
+  foregroundMasks: MaskPolygon[] | null = null,
+  outWidth: number = THUMB_W
 ): Promise<Buffer | null> {
   try {
-    const scale = THUMB_W / origW
+    const W = Math.max(1, Math.round(outWidth))
+    const scale = W / origW
     const thumbH = Math.round(origH * scale)
 
     // A plain wall is created at thumbnail size rather than created large and
@@ -123,7 +143,7 @@ export async function buildThumbnailBuffer(
       ? await fetchBuffer(elev)
       : await sharp({
           create: {
-            width: THUMB_W, height: thumbH, channels: 4,
+            width: W, height: thumbH, channels: 4,
             background: { ...wallRgb(elev.color), alpha: 1 },
           },
         }).png().toBuffer()
@@ -132,7 +152,7 @@ export async function buildThumbnailBuffer(
 
     // No scale or no artworks — bare wall thumbnail (no foreground to apply)
     if (!scalePxPerCm || artworks.length === 0) {
-      return await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
+      return await sharp(elevBuf).resize(W, thumbH, { fit: 'fill' }).png().toBuffer()
     }
 
     const compositeInputs: sharp.OverlayOptions[] = []
@@ -146,7 +166,7 @@ export async function buildThumbnailBuffer(
         const artOrigH = Math.round(art.hCm * scalePxPerCm)
         let artThumbW = Math.max(1, Math.round(artOrigW * scale))
         let artThumbH = Math.max(1, Math.round(artOrigH * scale))
-        const left = Math.round(art.xF * THUMB_W)
+        const left = Math.round(art.xF * W)
         const top  = Math.round(art.yF * thumbH)
 
         const shadowBlur    = art.shadowBlur    ?? 0
@@ -369,7 +389,7 @@ export async function buildThumbnailBuffer(
       }
     }
 
-    const elevResized = await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
+    const elevResized = await sharp(elevBuf).resize(W, thumbH, { fit: 'fill' }).png().toBuffer()
 
     // If any foreground masks exist, overlay a masked copy of the elevation on top so
     // foreground shapes hide artworks behind them (mirrors the studio PNG export pipeline).
@@ -378,13 +398,13 @@ export async function buildThumbnailBuffer(
       const pathD = polys
         .map(poly => {
           const pts = poly
-            .map((pt, i) => `${i === 0 ? 'M' : 'L'}${(pt.x * THUMB_W).toFixed(2)} ${(pt.y * thumbH).toFixed(2)}`)
+            .map((pt, i) => `${i === 0 ? 'M' : 'L'}${(pt.x * W).toFixed(2)} ${(pt.y * thumbH).toFixed(2)}`)
             .join(' ')
           return `${pts} Z`
         })
         .join(' ')
       const maskSvg = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${THUMB_W}" height="${thumbH}" viewBox="0 0 ${THUMB_W} ${thumbH}"><path d="${pathD}" fill="#fff"/></svg>`
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${thumbH}" viewBox="0 0 ${W} ${thumbH}"><path d="${pathD}" fill="#fff"/></svg>`
       )
       try {
         const fgLayer = await sharp(elevResized)

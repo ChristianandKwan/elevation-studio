@@ -107,6 +107,34 @@ writes to real data**. Use a project you don't mind changing.
 
 ---
 
+## Storage buckets
+
+There are four, all private. Three hold files a database row points at; the
+fourth does not, and the difference decides how each is cleaned up.
+
+| Bucket | Holds | Cleaned up by |
+|---|---|---|
+| `elevation-images` | wall photographs | the nightly sweep |
+| `artwork-images` | the works themselves | the nightly sweep |
+| `thumbnails` | composited dashboard thumbnails | the nightly sweep |
+| `exports` | one export pack per project | overwriting, and project deletion |
+
+`/api/admin/sweep-storage` runs at 03:00 and deletes files no live row
+references. It names its three buckets explicitly.
+
+**Do not add `exports` to that sweep.** It has a safety rail that aborts the
+whole run on any bucket where *nothing* matched a live database row — a rail
+that exists because a changed path format would otherwise report every file
+as an orphan. No row anywhere points at an export pack, so every object in
+that bucket reads as an orphan and the sweep would refuse to run at all,
+taking the other three buckets down with it.
+
+`exports` needs no sweep instead: the object is `<project_id>.zip` and is
+overwritten on every export, so it cannot grow beyond one file per project.
+Deleting a project removes its pack (`DashboardClient.deleteProject`).
+
+---
+
 ## Environment variables
 
 Set in the Vercel dashboard under Settings → Environment Variables, and they

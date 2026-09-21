@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useStudio } from '@/hooks/useStudio'
@@ -13,6 +13,8 @@ import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
 import { ArcSpinner, DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
+import { captureBudgetImage, PAGE_W, PAGE_PAD } from '@/components/budget/captureBudget'
+import { storedVatMode } from '@/components/budget/vatMode'
 import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog, Work } from '@/types'
@@ -1354,12 +1356,98 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     onStatus(parts.join(' · '))
   }
 
-  // What the index needs to say where each work hangs.
-  const indexElevations: IndexElevation[] = elevations.map(e => ({
+  /**
+   * Photographing the budget for the export pack.
+   *
+   * The export runs from the Index, where the budget is not mounted at all,
+   * so a second read-only copy is mounted off-screen just long enough to be
+   * photographed. `capturingBudget` is what puts it there; the promise below
+   * is resolved by the effect that waits for it to paint.
+   *
+   * Read-only matters: `onArtworkChange` and `onOptionNoteChange` are left
+   * off, so nothing this copy does can write to the project.
+   */
+  const [capturingBudget, setCapturingBudget] = useState(false)
+  const budgetCaptureHost = useRef<HTMLDivElement | null>(null)
+  const budgetCaptureResolve = useRef<((url: string | null) => void) | null>(null)
+
+  const captureBudgetForExport = useCallback((): Promise<string | null> => {
+    // A second request while one is in flight would strand the first promise.
+    if (budgetCaptureResolve.current) return Promise.resolve(null)
+    return new Promise<string | null>(resolve => {
+      budgetCaptureResolve.current = resolve
+      setCapturingBudget(true)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!capturingBudget) return
+    let cancelled = false
+    ;(async () => {
+      const host = budgetCaptureHost.current
+      const url = host ? await captureBudgetImage(host) : null
+      if (cancelled) return
+      const resolve = budgetCaptureResolve.current
+      budgetCaptureResolve.current = null
+      setCapturingBudget(false)
+      resolve?.(url)
+    })()
+    return () => { cancelled = true }
+  }, [capturingBudget])
+
+  /**
+   * What the budget screen reads. Built here rather than inline so the live
+   * budget and the off-screen copy the export photographs are fed from one
+   * expression — two copies of this mapping would drift the first time a
+   * field was added, and the export would quietly show a stale budget.
+   */
+  const budgetElevations = useMemo(() => elevations.map<BudgetElevationData>(e => ({
     id: e.id,
     name: e.name,
-    options: labelOptions(e.elevation_options).map(o => ({ label: o.label, workIds: o.artworks.map(a => a.workId) })),
-  }))
+    clientPickedOption: e.clientPickedOption,
+    hiddenFromClient: !e.visibleToClient,
+    options: labelOptions(e.elevation_options).map(o => ({
+      key: o.option,
+      label: o.label,
+      title: o.title,
+      name: cleanOptionName(o.name),
+      consultantNote: o.consultantNote ?? '',
+      consultantNoteShownToClient: o.consultantNoteShownToClient ?? true,
+      artworks: o.artworks.map(a => ({
+        id: a.id,
+        workId: a.workId,
+        name: a.name,
+        artist: a.artist ?? '',
+        wCm: a.wCm,
+        hCm: a.hCm,
+        price: a.price,
+        visible: a.visible,
+        note: a.note ?? '',
+        noteShownToClient: a.noteShownToClient ?? true,
+        vatApplies: a.vatApplies ?? true,
+        discountStatus: a.discountStatus ?? 'none',
+        discountPercent: a.discountPercent ?? null,
+        subLineItems: a.subLineItems ?? [],
+      })),
+    })),
+  })), [elevations])
+
+  // What the index needs to say where each work hangs.
+  const indexElevations: IndexElevation[] = elevations.map(e => {
+    const labelled = labelOptions(e.elevation_options)
+    return {
+      id: e.id,
+      name: e.name,
+      options: labelled.map(o => ({
+        id: o.id,
+        label: o.label,
+        title: o.title,
+        workIds: o.artworks.map(a => a.workId),
+      })),
+      clientPickedOption: e.clientPickedOption ?? null,
+      optionKeys: labelled.map(o => o.option),
+    }
+  })
 
   const { state } = studio
 
@@ -1580,41 +1668,43 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       )}
 
       {/* Budget view — mounted only when active */}
+      {/* Off-screen copy of the budget, mounted only while the export is
+          photographing it. Positioned away rather than hidden: an element
+          with `display: none` has no layout and nothing to photograph. */}
+      {capturingBudget && (
+        <div
+          ref={budgetCaptureHost}
+          aria-hidden="true"
+          style={{
+            position: 'fixed', top: 0, left: -10000, width: PAGE_W,
+            // Margins. The printed page has the printer's; this one has none
+            // of its own, and without them the budget runs to the paper edge.
+            padding: PAGE_PAD,
+            background: 'var(--warm-white)', pointerEvents: 'none',
+          }}
+        >
+          <BudgetScreen
+            projectId={project.id}
+            projectName={project.name}
+            clientName={project.client_name}
+            elevations={budgetElevations}
+            isConsultant={true}
+            isPreviewingClientView={false}
+            clientBudget={budget}
+            // The view the consultant is actually reading. Without this the
+            // copy starts ex-VAT and may be photographed before the stored
+            // preference lands.
+            initialVatMode={storedVatMode(project.id)}
+          />
+        </div>
+      )}
+
       {view === 'budget' && (
         <BudgetScreen
           projectId={project.id}
           projectName={project.name}
           clientName={project.client_name}
-          elevations={elevations.map<BudgetElevationData>(e => ({
-            id: e.id,
-            name: e.name,
-            clientPickedOption: e.clientPickedOption,
-            hiddenFromClient: !e.visibleToClient,
-            options: labelOptions(e.elevation_options).map(o => ({
-              key: o.option,
-              label: o.label,
-              title: o.title,
-              name: cleanOptionName(o.name),
-              consultantNote: o.consultantNote ?? '',
-              consultantNoteShownToClient: o.consultantNoteShownToClient ?? true,
-              artworks: o.artworks.map(a => ({
-                id: a.id,
-                workId: a.workId,
-                name: a.name,
-                artist: a.artist ?? '',
-                wCm: a.wCm,
-                hCm: a.hCm,
-                price: a.price,
-                visible: a.visible,
-                note: a.note ?? '',
-                noteShownToClient: a.noteShownToClient ?? true,
-                vatApplies: a.vatApplies ?? true,
-                discountStatus: a.discountStatus ?? 'none',
-                discountPercent: a.discountPercent ?? null,
-                subLineItems: a.subLineItems ?? [],
-              })),
-            })),
-          }))}
+          elevations={budgetElevations}
           isConsultant={true}
           isPreviewingClientView={isPreviewingClientView}
           onPreviewToggle={() => setIsPreviewingClientView(v => !v)}
@@ -1628,6 +1718,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       {/* Index view — every work in the project, placed or not. Mounted only when active. */}
       {view === 'index' && (
         <IndexScreen
+          projectId={project.id}
+          onCaptureBudget={captureBudgetForExport}
           projectName={project.name}
           clientName={project.client_name}
           works={works}

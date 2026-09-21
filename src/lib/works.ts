@@ -187,13 +187,35 @@ export function groupWorksByArtist(works: Work[]): ArtistGroup[] {
 export interface IndexElevation {
   id: string
   name: string
-  options: Array<{ label: string; workIds: string[] }>
+  /**
+   * `id` and `title` are here for the export, which has to name an option to
+   * the consultant and then send its id to the server. `label` and `workIds`
+   * are what the index itself reads, to say where a work hangs.
+   */
+  options: Array<{ id: string; label: string; title: string; workIds: string[] }>
+  /** The stored key of the option the client picked, where they have. */
+  clientPickedOption: string | null
+  /** The stored key of each option, parallel to `options`, for the above. */
+  optionKeys: string[]
 }
 
 export interface Placed { elevationId: string; elevationName: string; labels: string[] }
 
-/** Where a work is hung: each elevation it is on, with the option labels. */
-export function placementsOf(workId: string, elevations: IndexElevation[]): Placed[] {
+/**
+ * Where a work is hung: each elevation it is on, with the option labels.
+ *
+ * Takes only the fields it reads rather than a whole `IndexElevation`. The
+ * export added `id`, `title` and the picked key to that shape and none of
+ * them mean anything here; demanding them would make every caller and every
+ * test carry fields this function never looks at.
+ */
+export interface PlacementSource {
+  id: string
+  name: string
+  options: Array<{ label: string; workIds: string[] }>
+}
+
+export function placementsOf(workId: string, elevations: PlacementSource[]): Placed[] {
   const out: Placed[] = []
   for (const e of elevations) {
     const labels = e.options.filter(o => o.workIds.includes(workId)).map(o => o.label)

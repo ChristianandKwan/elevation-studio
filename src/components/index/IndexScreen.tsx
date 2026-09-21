@@ -7,11 +7,19 @@ import type { IndexElevation, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
 import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
 import ArtistStandingNote from '@/components/notes/ArtistStandingNote'
-import { ANCHOR_META, notesMentioning, notesOn, type Note, type NoteAnchor } from '@/lib/notes'
+import { ANCHOR_META, notesMentioning, notesOwnedBy, type Note, type NoteAnchor } from '@/lib/notes'
 import ArtistNameEditor from './ArtistNameEditor'
+import ExportModal from '@/components/export/ExportModal'
 import type { Artist } from '@/lib/artists'
 
 interface Props {
+  projectId: string
+  /**
+   * Photograph the budget as it would print, for the export pack. Lives in
+   * StudioScreen because that is where the budget's data already is; the
+   * index only forwards it to the export screen.
+   */
+  onCaptureBudget: () => Promise<string | null>
   projectName: string
   clientName: string
   works: Work[]
@@ -48,7 +56,7 @@ interface Props {
  * what it costs, this is the record of what was looked at.
  */
 export default function IndexScreen({
-  projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
+  projectId, onCaptureBudget, projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
   notes, onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote,
   artists, onSetWorkArtist, onRenameArtist, onArtistNoteChange,
 }: Props) {
@@ -59,6 +67,7 @@ export default function IndexScreen({
   const groups = useMemo(() => groupWorksByArtist(works), [works])
   const placedCount = works.filter(w => placementsOf(w.id, elevations).length > 0).length
   const setAsideCount = works.filter(w => w.setAside).length
+  const [exporting, setExporting] = useState(false)
 
   return (
     <div className="index-view">
@@ -73,8 +82,25 @@ export default function IndexScreen({
               {setAsideCount > 0 && <> · {setAsideCount} set aside</>}
             </p>
           </div>
-          <button type="button" className="btn btn-sm btn-primary" onClick={onAddWork}>+ Add work</button>
+          <div className="index-head-actions">
+            {/* Inside the content, not the header group — see index-view.css. */}
+            <button type="button" className="btn btn-sm" onClick={() => setExporting(true)}>
+              Export pack
+            </button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={onAddWork}>+ Add work</button>
+          </div>
         </div>
+
+        {exporting && (
+          <ExportModal
+            projectId={projectId}
+            projectName={projectName}
+            elevations={elevations}
+            setAsideCount={setAsideCount}
+            onCaptureBudget={onCaptureBudget}
+            onClose={() => setExporting(false)}
+          />
+        )}
 
         {/* The artist inputs in the editor and the add modal both read this
             list. It is the artist rows themselves now, not a list scraped
@@ -186,9 +212,8 @@ function ArtistGroupSection({
     stop()
   }
 
-  const artistNotes = artistKeyValue ? notesOn(notes, 'artist', artistKeyValue) : []
   // A note covering a set is read on the works it covers, not again up here.
-  const aboutTheArtist = artistNotes.filter(n => n.workIds.length === 0)
+  const aboutTheArtist = artistKeyValue ? notesOwnedBy(notes, 'artist', artistKeyValue) : []
 
   return (
     <section className="index-group">
@@ -321,6 +346,7 @@ function ArtistGroupSection({
               one written on it directly. */}
           <WorkNotes
             notes={notesMentioning(notes, w.id)}
+            workId={w.id}
             nameOf={nameOf}
             onAdd={() => onAddNote('work', w.id)}
             onChange={onChangeNote}
@@ -338,9 +364,11 @@ function ArtistGroupSection({
  * stays a list to scan.
  */
 function WorkNotes({
-  notes, nameOf, onAdd, onChange, onDelete,
+  notes, workId, nameOf, onAdd, onChange, onDelete,
 }: {
   notes: Note[]
+  /** Which work these are being read on — see NotePanel's `onWork`. */
+  workId: string
   nameOf: (id: string) => string | undefined
   onAdd: () => void
   onChange: (noteId: string, patch: NotePatch) => void
@@ -361,6 +389,7 @@ function WorkNotes({
         onChange={onChange}
         onDelete={onDelete}
         workName={nameOf}
+        onWork={workId}
         // No section heading down here to carry the prompt, so each card
         // shows it on the line with its own buttons.
         promptInline

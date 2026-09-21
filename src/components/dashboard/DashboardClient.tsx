@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { EXPORTS_BUCKET, exportObjectPath } from '@/lib/export/bucket'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import StatusToast from '@/components/ui/StatusToast'
 import { ArcSpinner } from '@/components/ui/Spinner'
@@ -173,6 +174,12 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
         elev_paths.length  ? supabase.storage.from('elevation-images').remove(elev_paths)  : Promise.resolve(),
         thumb_paths.length ? supabase.storage.from('thumbnails').remove(thumb_paths)        : Promise.resolve(),
         art_paths.length   ? supabase.storage.from('artwork-images').remove(art_paths)      : Promise.resolve(),
+        // The export pack, if one was ever built. Its path is the project id
+        // and nothing records it, so there is no path list to return — and
+        // nothing sweeps this bucket either: sweep-storage aborts on a bucket
+        // where no file matches a live row, which every export is. If it is
+        // not removed here it is not removed at all. See migration 036.
+        supabase.storage.from(EXPORTS_BUCKET).remove([exportObjectPath(id)]),
       ])
 
       setProjects(prev => prev.filter(p => p.id !== id))
