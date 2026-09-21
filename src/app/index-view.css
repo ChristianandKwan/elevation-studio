@@ -1,0 +1,135 @@
+/* ══════════════════════════════════════════════════════════
+   INDEX VIEW — every work in the project, placed or not
+   Shares the budget's row language (titles, dims, badges and
+   the line editor) so a work reads the same on both screens.
+══════════════════════════════════════════════════════════ */
+
+.index-view { flex: 1; overflow-y: auto; background: var(--cream); display: flex; flex-direction: column; }
+.index-content { max-width: 780px; margin: 0 auto; padding: 40px 24px 64px; width: 100%; }
+
+.index-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 36px; }
+.index-title { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 28px; font-weight: 400; margin-bottom: 3px; }
+.index-sub { font-size: 13px; color: var(--mid); }
+
+/* One section per artist */
+.index-group { margin-bottom: 36px; }
+.index-kicker { display: flex; align-items: baseline; justify-content: space-between; }
+.index-kicker-count { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 12px; }
+
+/* A work */
+.index-row { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+.index-kicker + .index-row { border-top: none; }
+.index-row--declined .index-thumb,
+.index-row--declined .budget-artwork-title { opacity: .55; }
+
+/* A work is whatever shape it is; the box is always square. Centring with
+   flex rather than grid matters: in a grid the image's own box grew to its
+   natural height and was clipped to its top, so tall works showed only their
+   top edge. Bounding it with max-width/max-height lets both dimensions shrink
+   to fit and leaves the spare space as margin. */
+.index-thumb {
+  width: 56px; height: 56px; flex-shrink: 0;
+  background: var(--warm-white); border: 1px solid var(--border);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+.index-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+.index-thumb-empty { font-size: 9.5px; color: var(--mid); text-align: center; line-height: 1.2; padding: 4px; }
+
+.index-main { flex: 1; min-width: 0; }
+.index-main-row { display: flex; align-items: flex-start; gap: 10px; }
+.index-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.index-meta { font-size: 12px; color: var(--mid); }
+.index-meta--source { font-style: italic; }
+
+/* Where the work stands — muted, per the house rule against loud status */
+.index-status {
+  font-size: 10.5px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: var(--radius-xs); flex-shrink: 0; margin-top: 1px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.index-status--proposed   { color: var(--green);  background: var(--green-light);  border-color: rgba(46,107,79,.25); }
+.index-status--considered { color: var(--accent); background: var(--accent-light); border-color: rgba(139,111,71,.25); }
+.index-status--declined   { color: var(--mid);    background: rgba(0,0,0,.04);     border-color: var(--border); }
+
+/* Where it hangs */
+.index-where { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; align-items: center; }
+.index-chip {
+  font-size: 11px; color: var(--charcoal); background: var(--warm-white);
+  border: 1px solid var(--border); padding: 2px 8px; border-radius: var(--radius-xs);
+}
+.index-chip--considered,
+.index-chip--unplaced { color: var(--mid); border-style: dashed; background: transparent; }
+.index-chip--warn { color: var(--red); background: var(--red-light); border-color: rgba(185,64,64,.25); }
+
+.index-empty { padding: 48px 0; text-align: center; color: var(--mid); font-size: 13px; line-height: 1.6; }
+.index-empty p + p { margin-top: 4px; }
+
+/* Editing a work: the budget's line editor, with the work's own fields above the money */
+.index-editor-actions { display: flex; align-items: center; gap: 14px; }
+.index-editor-grid { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.index-size { display: flex; gap: 8px; flex-wrap: wrap; }
+.index-select {
+  width: 100%; max-width: 320px; padding: 7px 9px;
+  font-family: var(--font-karla, 'Karla'); font-size: 12.5px;
+  border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
+  border-radius: var(--radius-xs); outline: none;
+}
+.index-select:focus { border-color: var(--charcoal); }
+
+/* Picking a work the project already has (Add Artwork → From this project) */
+.work-pick-tabs { margin-bottom: 14px; }
+.work-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.work-pick {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+}
+.work-pick.selected { border-color: var(--charcoal); }
+.work-pick input { accent-color: var(--charcoal); margin: 0; }
+.work-pick-thumb {
+  width: 40px; height: 40px; background: white; border: 1px solid var(--border);
+  overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+}
+.work-pick-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+.work-pick-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.work-pick-title {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 15px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.work-pick-meta { font-size: 11.5px; color: var(--mid); }
+
+@media (max-width: 560px) {
+  .index-main-row { flex-wrap: wrap; }
+}
+
+@media print {
+  .index-head .btn,
+  .index-editor-actions { display: none !important; }
+  .index-view { overflow: visible; }
+  .index-row { page-break-inside: avoid; }
+}
+
+/* ── An artist's name, editable where it is shown ────────── */
+/* Renaming used to mean editing every work of theirs one at a time. The
+   heading bears the name, so the heading is where it changes. */
+.artist-name { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.artist-rename-btn {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 6px; cursor: pointer; color: var(--mid);
+  background: none; border: 1px solid transparent; border-radius: var(--radius-xs);
+  opacity: 0; transition: opacity .12s;
+}
+/* Kept out of the way until the heading is hovered — renaming an artist is a
+   deliberate act, not something to trip over while scanning a list. */
+.index-kicker:hover .artist-rename-btn,
+.artist-rename-btn:focus-visible { opacity: 1; }
+.artist-rename-btn:hover { color: var(--accent); border-color: var(--accent); }
+.artist-name-input {
+  font-family: inherit; font-size: inherit; letter-spacing: inherit;
+  text-transform: none; color: var(--charcoal);
+  padding: 3px 7px; min-width: 200px;
+  border: 1px solid var(--charcoal); border-radius: var(--radius-sm); background: white;
+}
+.artist-rename-hint {
+  font-size: 10.5px; letter-spacing: 0; text-transform: none;
+  color: var(--mid); font-weight: 400;
+}

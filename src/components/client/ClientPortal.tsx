@@ -12,6 +12,7 @@ import { optionTitleFor, optionTagClass } from '@/lib/options'
 
 interface ClientArtwork {
   id: string
+  workId: string
   name: string
   imageUrl: string | null
   wCm: number
@@ -48,6 +49,10 @@ interface ClientOption {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
+  /** Set instead of imageUrl when this wall was entered as a measurement. */
+  wall_w_cm?: number | null
+  wall_h_cm?: number | null
+  wall_color?: string | null
   approved: boolean
   approved_at: string | null
   foreground_masks?: unknown
@@ -117,15 +122,23 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     return s
   })
 
-  // Whether an elevation needs explicit picking (>1 option has an image)
+  // An option is ready to show once it has a wall — a photograph the
+  // consultant uploaded, or a wall they entered as a measurement and a
+  // colour. These used to test for the photograph alone, which would have
+  // hidden every plain-wall option from the client.
+  function hasWall(o: ClientOption): boolean {
+    return !!o.imageUrl || !!o.wall_color
+  }
+
+  // Whether an elevation needs explicit picking (>1 option has a wall)
   function needsPick(elev: ClientElevationData): boolean {
-    return elev.elevation_options.filter(o => o.imageUrl).length > 1
+    return elev.elevation_options.filter(hasWall).length > 1
   }
 
   // Resolve the active option for an elevation (respecting pick state)
   function resolveOpt(elev: ClientElevationData): string | null {
     if (pickedOptions[elev.id]) return pickedOptions[elev.id]!
-    return elev.elevation_options.find(o => o.imageUrl)?.option ?? null
+    return elev.elevation_options.find(hasWall)?.option ?? null
   }
 
   // Initial active tab: prefer picked, then first with image
@@ -295,6 +308,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       consultantNoteShownToClient: opt.consultantNoteShownToClient ?? true,
       artworks: opt.artworks.map(a => ({
         id: a.id,
+        workId: a.workId,
         name: a.name,
         artist: a.artist ?? '',
         wCm: a.wCm,
@@ -565,7 +579,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         {/* Elevation tab bar */}
         <div className="client-tab-bar">
           {elevations.map((elev, i) => {
-            const optsWithImages = elev.elevation_options.filter(o => o.imageUrl)
+            const optsWithImages = elev.elevation_options.filter(hasWall)
             const multiOption = optsWithImages.length > 1
             const picked = pickedOptions[elev.id]
 

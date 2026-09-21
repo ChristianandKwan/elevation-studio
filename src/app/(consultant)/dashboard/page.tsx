@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import DashboardClient from '@/components/dashboard/DashboardClient'
 import { sortOptions } from '@/lib/options'
+import { blankWallDataUrl } from '@/lib/wall'
 
 /**
  * Dashboard project thumbnails used to be composited inline on every
@@ -42,7 +43,7 @@ export default async function DashboardPage() {
       elevations(
         id, client_picked_option, display_order,
         elevation_options(
-          id, option, sort_order, created_at, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, approved
+          id, option, sort_order, created_at, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved
         )
       )
     `)
@@ -88,13 +89,18 @@ export default async function DashboardPage() {
       thumbnailUrl = thumbMap.get(firstOption.thumbnail_path) ?? null
     } else if (firstOption?.image_path) {
       thumbnailUrl = fallbackMap.get(firstOption.image_path) ?? null
+    } else if (firstOption?.wall_color) {
+      // A plain wall in the gap before its first thumbnail is rendered. Drawing
+      // the wall costs nothing and is honest about the project's shape; the
+      // alternative is a placeholder that makes a set-up project look empty.
+      thumbnailUrl = blankWallDataUrl(
+        firstOption.orig_w || 1600, firstOption.orig_h || 900, firstOption.wall_color,
+      )
     }
     return {
       ...p,
       thumbnailUrl,
       elevCount,
-      artCount: 0,
-      artworks: [],
       origW: firstOption?.orig_w ?? 0,
       origH: firstOption?.orig_h ?? 0,
       scalePxPerCm: firstOption?.scale_px_per_cm ?? null,

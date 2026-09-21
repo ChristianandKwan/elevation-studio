@@ -103,26 +103,3 @@ export function newSubLineItem(kind: SubLineItemKind): SubLineItem {
       return { ...base, label: '', mode: 'fixed', vatApplies: true }
   }
 }
-
-/** Map the budget's patch shape onto the columns it writes. */
-export function toArtworkColumns(
-  patch: Partial<{
-    price: number
-    vatApplies: boolean
-    discountStatus: DiscountStatus
-    discountPercent: number | null
-    subLineItems: SubLineItem[]
-    note: string
-    noteShownToClient: boolean
-  }>,
-): Record<string, unknown> {
-  const row: Record<string, unknown> = {}
-  if (patch.price !== undefined) row.price = patch.price
-  if (patch.vatApplies !== undefined) row.vat_applies = patch.vatApplies
-  if (patch.discountStatus !== undefined) row.discount_status = patch.discountStatus
-  if (patch.discountPercent !== undefined) row.discount_percent = patch.discountPercent
-  if (patch.subLineItems !== undefined) row.sub_line_items = patch.subLineItems
-  if (patch.note !== undefined) row.note = patch.note
-  if (patch.noteShownToClient !== undefined) row.note_shown_to_client = patch.noteShownToClient
-  return row
-}

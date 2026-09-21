@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Artwork, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState, SubLineItem } from '@/types'
+import type { Artwork, Work, Scale, CalibState, MaskPoint, ForegroundMasks, MaskDrawState, SubLineItem } from '@/types'
 
 /** The line-item fields an edit panel may patch on one artwork. */
 export type ArtworkLineItemPatch = Partial<Pick<
@@ -12,21 +12,28 @@ export type ArtworkLineItemPatch = Partial<Pick<
 import { wallQuadToSkewMatrix, wallQuadToHomography } from '@/lib/homography'
 import { drawImageWarped } from '@/lib/warp'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
-import { frameLipShadeElement, frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import {
+  frameLipShadeElement, frameLipShadow, mountLipShadeElement, mountLipShadow,
+  mountLipOpacity, SHADOW_PUSH,
+} from '@/lib/frameShadow'
+import { frameGrainElement, paintFrameGrain } from '@/lib/frameGrain'
+import { placementRow, workRow } from '@/lib/works'
+import { uploadWork, type WorkMeta } from '@/lib/workUpload'
+import { frameHex, mountHex, isWoodFrame, bandsPx } from '@/lib/frames'
+import { blankWallDataUrl, blankWallPixels, clampCm, wallHex } from '@/lib/wall'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
+// A server-side render takes 4–9 s. Leaving the studio waits for one so the
+// dashboard shows the wall as it was left, but gives up after this so a slow
+// render can't hold the consultant on the page.
+const THUMBNAIL_FLUSH_CAP_MS = 10000
 
 /**
  * Frame colours, shared by the on-screen overlay and the PNG export so the
  * exported file matches the canvas. `lib/thumbnail.ts` holds the same five
  * colours as RGB triples for sharp.
  */
-const FRAME_COLORS: Record<string, string> = {
-  black: '#1a1a1a', white: '#f0ede8',
-  'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
-}
-
 /**
  * How far above the elevation photograph's own resolution the PNG export is
  * rendered, and the ceiling that keeps a large photo from producing a canvas
@@ -76,6 +83,15 @@ export interface StudioElev {
   origH: number
   dispW: number
   dispH: number
+  /**
+   * Set when this wall is a measurement rather than a photograph. The image
+   * above is then a generated rectangle of this colour, which is enough for
+   * everything on screen; the PNG export fills the colour directly instead,
+   * so an export never depends on a data URL surviving a canvas.
+   */
+  wallColor?: string | null
+  wallWCm?: number | null
+  wallHCm?: number | null
 }
 
 export type SkewCorners = [[number, number], [number, number], [number, number], [number, number]]
@@ -150,15 +166,28 @@ interface UseStudioOptions {
   onElevationUploaded?: (data: { imagePath: string; imageUrl: string; origW: number; origH: number }) => void
   /** Called when the scale calibration is confirmed for the current option */
   onScaleSet?: (scalePxPerCm: number) => void
-  /** Called when artworks are successfully added to the current option */
-  onArtworksAdded?: (artworks: Array<Artwork & { imageUrl: string | null }>) => void
+  /**
+   * Called when the current option is given, or re-given, a plain wall. Carries
+   * everything the row now holds, because setting a wall this way writes the
+   * derived pixel size and scale at the same time as the size and colour.
+   */
+  onBlankWallSet?: (data: {
+    origW: number; origH: number; scalePxPerCm: number
+    wallWCm: number; wallHCm: number; wallColor: string
+  }) => void
+  /**
+   * Called when artworks are placed on the current option. `works` holds any
+   * works created in the process (uploads); placing a work the project
+   * already had passes an empty list.
+   */
+  onArtworksAdded?: (artworks: Array<Artwork & { imageUrl: string | null }>, works: Work[]) => void
   /** Called when an artwork is deleted from the current option */
   onArtworkDeleted?: (id: string) => void
   /** Called only when foreground masks actually changed and were persisted, so sibling options sharing the wall photo can be synced */
   onForegroundSaved?: (masks: ForegroundMasks) => void
 }
 
-export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
+export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onBlankWallSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
   const [state, setState] = useState<StudioState>({
     elev: null,
     scale: null,
@@ -193,6 +222,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   onElevationUploadedRef.current = onElevationUploaded
   const onScaleSetRef = useRef(onScaleSet)
   onScaleSetRef.current = onScaleSet
+  const onBlankWallSetRef = useRef(onBlankWallSet)
+  onBlankWallSetRef.current = onBlankWallSet
   const onArtworksAddedRef = useRef(onArtworksAdded)
   onArtworksAddedRef.current = onArtworksAdded
   const onArtworkDeletedRef = useRef(onArtworkDeleted)
@@ -243,20 +274,33 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // previous tab's pending render. Fire-and-forget; failures are
   // non-fatal (the dashboard falls back to the plain elevation URL).
   const thumbnailTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const thumbnailInFlight = useRef<string | null>(null)
   const thumbnailDirty = useRef(new Set<string>())
+  // The renders run one at a time, chained. Holding the chain as a promise is
+  // what lets `flushPendingAndRegen` wait for it: the dashboard reads a PNG
+  // from storage, so leaving before the render lands shows the *previous*
+  // state of the wall.
+  const thumbnailChain = useRef<Promise<void> | null>(null)
 
-  const runThumbnailRegen = useCallback<(id: string) => Promise<void>>(async id => {
-    if (thumbnailInFlight.current) { thumbnailDirty.current.add(id); return }
-    thumbnailInFlight.current = id
-    thumbnailDirty.current.delete(id)
-    try {
-      await fetch(`/api/thumbnails/${id}`, { method: 'POST' })
-    } catch { /* non-fatal */ }
-    thumbnailInFlight.current = null
-    // Anything that changed while that render ran gets one more pass.
-    const next = thumbnailDirty.current.values().next().value
-    if (next) void runThumbnailRegen(next)
+  const runThumbnailRegen = useCallback((id: string): Promise<void> => {
+    thumbnailDirty.current.add(id)
+    // A render is already running: it will pick this id up before it settles,
+    // so the caller can wait on the same chain.
+    if (thumbnailChain.current) return thumbnailChain.current
+    const drain = async (): Promise<void> => {
+      while (thumbnailDirty.current.size > 0) {
+        const next = thumbnailDirty.current.values().next().value as string
+        thumbnailDirty.current.delete(next)
+        try {
+          await fetch(`/api/thumbnails/${next}`, { method: 'POST' })
+        } catch { /* non-fatal */ }
+      }
+      thumbnailChain.current = null
+    }
+    // The id above is always queued, so `drain` suspends on its first fetch
+    // and this assignment lands before the chain can clear itself.
+    const running = drain()
+    thumbnailChain.current = running
+    return running
   }, [])
 
   const scheduleThumbnailRegen = useCallback((id: string = optionId) => {
@@ -270,13 +314,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }, THUMBNAIL_DEBOUNCE_MS))
   }, [optionId, runThumbnailRegen])
 
-  /** Run every debounce-pending render now (leaving the studio), plus `alsoId` if given. */
-  const flushThumbnailRegens = useCallback((alsoId?: string) => {
+  /**
+   * Run every debounce-pending render now (leaving the studio) and resolve
+   * when they have all landed. Resolves immediately when nothing is pending
+   * and nothing is running — an option nobody touched is not re-rendered.
+   */
+  const flushThumbnailRegens = useCallback((): Promise<void> => {
     const ids = new Set(thumbnailTimers.current.keys())
     thumbnailTimers.current.forEach(t => clearTimeout(t))
     thumbnailTimers.current.clear()
-    if (alsoId) ids.add(alsoId)
-    ids.forEach(id => { void runThumbnailRegen(id) })
+    ids.forEach(id => { thumbnailDirty.current.add(id) })
+    if (thumbnailDirty.current.size === 0) return thumbnailChain.current ?? Promise.resolve()
+    const first = thumbnailDirty.current.values().next().value as string
+    return runThumbnailRegen(first)
   }, [runThumbnailRegen])
 
   // ─── WHAT THE DATABASE LAST SAW ───────────────────────────────────
@@ -286,38 +336,16 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // snapshots let persistOption write only what actually changed. They
   // are set when an option loads and after each successful write.
   const lastSavedMasks = useRef<string>('null')
-  const lastSavedArts = useRef(new Map<string, string>())
-
-  /** The columns a save writes for one artwork, in the shape the DB takes. */
-  function artworkRow(art: Artwork) {
-    return {
-      x_fraction: art.xF,
-      y_fraction: art.yF,
-      w_cm: art.wCm,
-      h_cm: art.hCm,
-      visible: art.visible,
-      price: art.price,
-      artist: art.artist,
-      note: art.note,
-      note_shown_to_client: art.noteShownToClient,
-      vat_applies: art.vatApplies,
-      discount_status: art.discountStatus,
-      discount_percent: art.discountPercent,
-      sub_line_items: art.subLineItems,
-      brightness: art.brightness ?? 1,
-      fade: art.fade ?? null,
-      name: art.name,
-      frame_type: art.frameType ?? null,
-      frame_width_mm: art.frameWidthMm ?? null,
-      shadow_angle: art.shadowAngle ?? null,
-      shadow_blur: art.shadowBlur ?? null,
-      shadow_opacity: art.shadowOpacity ?? null,
-    }
-  }
+  // Two snapshots, because a save writes two tables: the placement (where it
+  // hangs, frame, lighting) by its own id, and the work (name, size, money,
+  // notes) by work id. The halves are defined once, in src/lib/works.ts.
+  const lastSavedPlacements = useRef(new Map<string, string>())
+  const lastSavedWorks = useRef(new Map<string, string>())
 
   function rememberSaved(masks: ForegroundMasks, arts: Artwork[]) {
     lastSavedMasks.current = JSON.stringify(masks.length > 0 ? masks : null)
-    lastSavedArts.current = new Map(arts.map(a => [a.id, JSON.stringify(artworkRow(a))]))
+    lastSavedPlacements.current = new Map(arts.map(a => [a.id, JSON.stringify(placementRow(a))]))
+    lastSavedWorks.current = new Map(arts.map(a => [a.workId, JSON.stringify(workRow(a))]))
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────
@@ -851,19 +879,60 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
           })
         }
 
-        // Frame border
-        if (art.frameType && art.frameWidthMm && sc) {
-          const framePx = Math.round((art.frameWidthMm / 10) * sc.dispPxPerCm)
-          div.style.border = `${framePx}px solid ${FRAME_COLORS[art.frameType] ?? FRAME_COLORS.black}`
-          div.style.boxSizing = 'content-box'
+        // Mount and frame. The artwork keeps the div's content box, the mount
+        // is padding and the frame is the border, so both grow outward from
+        // the recorded position exactly as they did before mounts existed.
+        if (sc) {
+          const bands = bandsPx(art, sc.dispPxPerCm)
+          if (bands.mount.top || bands.mount.right || bands.mount.bottom || bands.mount.left) {
+            div.style.padding =
+              `${bands.mount.top}px ${bands.mount.right}px ${bands.mount.bottom}px ${bands.mount.left}px`
+            div.style.background = mountHex(art.mountColor)
+            div.style.boxSizing = 'content-box'
+          }
+          if (bands.frame > 0) {
+            div.style.border = `${bands.frame}px solid ${frameHex(art.frameType)}`
+            div.style.boxSizing = 'content-box'
+          }
         }
 
         div.appendChild(img)
 
-        // The frame's lip shades the artwork itself, not just the wall.
-        if (art.frameType && art.frameWidthMm && sc &&
-            art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
-          div.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur, art.shadowOpacity))
+        // Grain, on the wood frames only. Four rails rather than one band,
+        // because grain runs along the length of each piece of timber — which
+        // is what stops a wide frame reading as a colour swatch.
+        if (sc && isWoodFrame(art.frameType)) {
+          const bands = bandsPx(art, sc.dispPxPerCm)
+          if (bands.frame > 0) {
+            div.appendChild(frameGrainElement(
+              art.frameType!,
+              sz.w + bands.mount.left + bands.mount.right + bands.frame * 2,
+              sz.h + bands.mount.top + bands.mount.bottom + bands.frame * 2,
+              bands.frame,
+              sc.dispPxPerCm,
+              bands.frame,
+              bands.frame,
+            ))
+          }
+        }
+
+        // Two lips, because two edges stand proud. The frame's falls on
+        // whatever is immediately inside it — the mount when there is one —
+        // which `inset:0` gives for free, since the mount is this div's
+        // padding. The mount's own falls on the artwork, inset by its widths.
+        const lit = art.shadowBlur != null && art.shadowBlur > 0
+          && art.shadowOpacity != null && art.shadowOpacity > 0
+        if (art.frameType && art.frameWidthMm && sc && lit) {
+          div.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur!, art.shadowOpacity!))
+        }
+        if (sc && lit) {
+          const m = bandsPx(art, sc.dispPxPerCm).mount
+          if (m.top || m.right || m.bottom || m.left) {
+            div.appendChild(mountLipShadeElement(
+              art.shadowAngle, art.shadowBlur!, mountLipOpacity(art.shadowOpacity!),
+              `${m.top}px ${m.right}px ${m.bottom}px ${m.left}px`,
+            ))
+          }
         }
       }
 
@@ -1128,6 +1197,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function loadOption(opts: {
     imageUrl: string | null; imagePath: string | null;
     origW: number; origH: number; scalePxPerCm: number | null;
+    wallWCm?: number | null; wallHCm?: number | null; wallColor?: string | null;
     artworks: Array<Artwork & { imageUrl: string | null }>;
     foregroundMasks: ForegroundMasks | null;
     skewCorners?: SkewCorners | null;
@@ -1144,14 +1214,25 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       setBusy(false)
     }
 
-    if (!opts.imageUrl) {
+    // A wall entered as a measurement has no file to fetch. It is turned into
+    // a picture here — a few hundred bytes of SVG at the size the wall was
+    // given — so that everything below this line, from fit-zoom through
+    // artwork placement to the foreground masks, runs on the one code path it
+    // always has. The only renderer that does not take this route is the PNG
+    // export, which fills the colour itself.
+    const blank = !opts.imageUrl && !!opts.wallColor && opts.origW > 0 && opts.origH > 0
+    const sourceUrl = blank
+      ? blankWallDataUrl(opts.origW, opts.origH, opts.wallColor)
+      : opts.imageUrl
+
+    if (!sourceUrl) {
       showEmptyCanvas()
       return
     }
 
     setBusy(true)
     // Reassigned if the signature on the URL we were handed has expired.
-    let elevUrl = opts.imageUrl
+    let elevUrl = sourceUrl
     const img = new Image()
     img.crossOrigin = 'anonymous'
     let retriedSignature = false
@@ -1183,6 +1264,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         origH,
         dispW: 0,
         dispH: 0,
+        wallColor: blank ? wallHex(opts.wallColor) : null,
+        wallWCm: blank ? opts.wallWCm ?? null : null,
+        wallHCm: blank ? opts.wallHCm ?? null : null,
       }
 
       const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
@@ -1310,7 +1394,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         }
       })
     }
-    img.src = opts.imageUrl
+    img.src = sourceUrl
   }
 
   // ─── ELEVATION UPLOAD ────────────────────────────────────────────
@@ -1366,9 +1450,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       saveRelativeZoom(optionId, 1)
 
       // Persist to DB
+      // wall_* are cleared alongside: a photograph replaces a plain wall
+      // outright, and a row carrying both would have half the renderers
+      // drawing the picture and half drawing the colour.
       supabase.from('elevation_options').update({
         image_path: path, orig_w: img.naturalWidth, orig_h: img.naturalHeight,
         scale_px_per_cm: null, foreground_masks: null,
+        wall_w_cm: null, wall_h_cm: null, wall_color: null,
       }).eq('id', optionId).then(({ error }) => {
         if (error) {
           onStatus('Elevation saved to storage but DB update failed — reload to retry')
@@ -1389,6 +1477,97 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
       onElevationUploadedRef.current?.({ imagePath: path, imageUrl: url, origW: img.naturalWidth, origH: img.naturalHeight })
       onStatus('Elevation loaded — draw a scale line to continue')
+      setBusy(false)
+    }
+    img.src = url
+  }
+
+  /**
+   * Give this option a wall that has no photograph — a size in centimetres
+   * and a colour.
+   *
+   * Nothing is uploaded. The pixel dimensions and the scale are worked out
+   * from the size and written with it, which is why there is no calibration
+   * step afterwards: a wall entered as a measurement already knows how many
+   * pixels a centimetre is.
+   *
+   * Unlike replacing a photograph, this keeps the artworks. Re-typing the
+   * size or changing the colour is an edit to the wall, not a new wall, and
+   * taking the pictures down each time would be its own bug. Positions are
+   * held as fractions and sizes in centimetres, so both survive a resize:
+   * a 60 cm print stays 60 cm when the wall grows, and covers less of it.
+   *
+   * Masks and perspective do not survive. Both describe a photograph — there
+   * is no foreground in front of a flat colour, and nothing to correct.
+   */
+  async function setBlankWall(wCm: number, hCm: number, color: string) {
+    const hex = wallHex(color)
+    const { origW, origH, pxPerCm } = blankWallPixels(wCm, hCm)
+    const url = blankWallDataUrl(origW, origH, hex)
+    // Captured before the state swap so a photograph being replaced by a
+    // plain wall still gets its file cleaned up.
+    const previousPath = stateRef.current.elev?.imagePath || null
+
+    setBusy(true)
+    const img = new Image()
+    img.onerror = () => { setBusy(false); onStatus('Could not draw the wall') }
+    img.onload = () => {
+      const elev: StudioElev = {
+        imagePath: '', imageUrl: url, img,
+        origW, origH, dispW: 0, dispH: 0,
+        wallColor: hex, wallWCm: clampCm(wCm), wallHCm: clampCm(hCm),
+      }
+      const scale: Scale = { origPxPerCm: pxPerCm, dispPxPerCm: pxPerCm }
+      const arts = stateRef.current.artworks
+
+      setState(s => ({
+        ...s, elev, scale, artworks: arts, selId: null, selIds: new Set(),
+        zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW,
+        skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false,
+      }))
+      renderForegroundSVG([], null, null)
+      renderSkewHandles([], null)
+      rememberSaved([], arts)
+
+      // A wall that just changed size starts at fit; the old per-user zoom was
+      // chosen against a wall of a different shape.
+      saveRelativeZoom(optionId, 1)
+
+      const supabase = createClient()
+      supabase.from('elevation_options').update({
+        image_path: null, orig_w: origW, orig_h: origH,
+        scale_px_per_cm: pxPerCm, foreground_masks: null,
+        skew_tl_x: null, skew_tl_y: null, skew_tr_x: null, skew_tr_y: null,
+        skew_br_x: null, skew_br_y: null, skew_bl_x: null, skew_bl_y: null, skew_active: false,
+        wall_w_cm: clampCm(wCm), wall_h_cm: clampCm(hCm), wall_color: hex,
+      }).eq('id', optionId).then(({ error }) => {
+        if (error) {
+          onStatus('Wall set on screen but not saved — reload to retry')
+          return
+        }
+        // Only once the row has stopped pointing at the photograph is the
+        // file safe to drop.
+        if (previousPath) {
+          removeUnreferencedElevationImage(previousPath, optionId).catch(() => { /* sweep will catch it */ })
+        }
+      })
+      scheduleThumbnailRegen()
+
+      requestAnimationFrame(() => {
+        const elevImg = document.getElementById('elev-img') as HTMLImageElement | null
+        if (elevImg) elevImg.src = url
+        setZoomFit({
+          elev, scale, artworks: arts, selId: null, selIds: new Set(), zoom: 1, fitZoom: 1,
+          calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW,
+          skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false,
+        })
+      })
+
+      onBlankWallSetRef.current?.({
+        origW, origH, scalePxPerCm: pxPerCm,
+        wallWCm: clampCm(wCm), wallHCm: clampCm(hCm), wallColor: hex,
+      })
+      onStatus(`Wall set — ${clampCm(wCm)} × ${clampCm(hCm)} cm`)
       setBusy(false)
     }
     img.src = url
@@ -1650,92 +1829,111 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   // ─── ADD ARTWORKS ─────────────────────────────────────────────────
-  async function addArtworks(files: File[], metas: Array<{
-    name: string; wCm: number; hCm: number; price: number
-    artist: string
-  }>) {
-    const supabase = createClient()
-    let completed = 0
-    const total = files.length
-
-    const results = await Promise.all(files.map(async (file, i) => {
-      const meta = metas[i] ?? metas[0]
-      const path = `${projectId}/${optionId}/art-${crypto.randomUUID()}.${file.name.split('.').pop()}`
-      const { error } = await supabase.storage.from('artwork-images').upload(path, file)
-      if (error) { onStatus('Upload failed: ' + error.message); return null }
-
-      const { data: signed } = await supabase.storage.from('artwork-images').createSignedUrl(path, STUDIO_SIGNED_URL_TTL)
-      const url = signed?.signedUrl
-      if (!url) return null
-
-      const name = meta.name || file.name.replace(/\.[^.]+$/, '')
-      const off = 0.06 * i
-
-      const { data: artRow } = await supabase.from('artworks').insert({
-        option_id: optionId,
-        name,
-        image_path: path,
-        w_cm: meta.wCm,
-        h_cm: meta.hCm,
-        x_fraction: Math.min(0.08 + off, 0.6),
-        y_fraction: Math.min(0.08 + off, 0.6),
-        visible: true,
-        price: meta.price,
-        artist: meta.artist,
-        display_order: i,
-      }).select().single()
-
-      if (!artRow) return null
-
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
+  /** The studio's copy of a freshly placed work, with its image loaded. */
+  async function artworkFromPlacement(work: Work, placementId: string, xF: number, yF: number): Promise<Artwork> {
+    let url = work.imageUrl
+    if (!url && work.imagePath) url = await resignStorageUrl('artwork-images', work.imagePath)
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    if (url) {
+      const src = url
       await new Promise<void>(resolve => {
         img.onload = () => resolve()
         img.onerror = () => resolve()
-        img.src = url
+        img.src = src
       })
+    }
+    return {
+      id: placementId,
+      workId: work.id,
+      name: work.name,
+      imageUrl: url,
+      imagePath: work.imagePath,
+      wCm: work.wCm,
+      hCm: work.hCm,
+      xF,
+      yF,
+      visible: true,
+      price: work.price,
+      artist: work.artist,
+      note: work.note,
+      noteShownToClient: work.noteShownToClient,
+      vatApplies: work.vatApplies,
+      discountStatus: work.discountStatus,
+      discountPercent: work.discountPercent,
+      subLineItems: work.subLineItems,
+      frameType: null,
+      frameWidthMm: null,
+      brightness: 1,
+      img: url ? img : null,
+    }
+  }
 
-      const newArt: Artwork = {
-        id: artRow.id,
-        name,
-        imageUrl: url,
-        imagePath: path,
-        wCm: meta.wCm,
-        hCm: meta.hCm,
-        xF: Math.min(0.08 + off, 0.6),
-        yF: Math.min(0.08 + off, 0.6),
-        visible: true,
-        price: meta.price,
-        artist: meta.artist,
-        note: '',
-        noteShownToClient: true,
-        vatApplies: true,
-        discountStatus: 'none',
-        discountPercent: null,
-        subLineItems: [],
-        frameType: null,
-        frameWidthMm: null,
-        brightness: 1,
-        img,
-      }
+  /** Hang a work on the open option: the placement row, staggered so a batch doesn't land in a pile. */
+  async function insertPlacement(workId: string, i: number): Promise<{ id: string; xF: number; yF: number } | null> {
+    const supabase = createClient()
+    const off = 0.06 * i
+    const xF = Math.min(0.08 + off, 0.6)
+    const yF = Math.min(0.08 + off, 0.6)
+    const { data, error } = await supabase.from('artworks').insert({
+      option_id: optionId,
+      work_id: workId,
+      x_fraction: xF,
+      y_fraction: yF,
+      visible: true,
+      display_order: i,
+    }).select('id').single()
+    if (error || !data) {
+      onStatus('Could not place this work: ' + (error?.message ?? 'unknown error'))
+      return null
+    }
+    return { id: data.id as string, xF, yF }
+  }
 
-      completed++
-      if (total > 1) onStatus(`Uploaded ${completed} of ${total}…`)
-
-      return newArt
-    }))
-
-    const placed = results.filter((a): a is Artwork => a !== null)
+  function commitPlaced(placed: Artwork[], newWorks: Work[], statusText: string) {
     setState(s => {
       const newArts = [...s.artworks, ...placed]
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       return { ...s, artworks: newArts }
     })
-    onArtworksAddedRef.current?.(placed)
+    onArtworksAddedRef.current?.(placed, newWorks)
     if (placed.length > 0) scheduleThumbnailRegen()
-
     setShowArtModal(false)
-    onStatus(placed.length === 1 ? `Artwork placed — drag to position` : `${placed.length} artworks placed`)
+    onStatus(statusText)
+  }
+
+  /** Upload new works and hang each on the open option. */
+  async function addArtworks(files: File[], metas: WorkMeta[]) {
+    let completed = 0
+    const total = files.length
+
+    const results = await Promise.all(files.map(async (file, i) => {
+      const work = await uploadWork(projectId, file, metas[i] ?? metas[0], onStatus)
+      if (!work) return null
+      const placement = await insertPlacement(work.id, i)
+      // The work exists even if hanging it failed — the index will show it.
+      if (!placement) return { work, art: null }
+      const art = await artworkFromPlacement(work, placement.id, placement.xF, placement.yF)
+      completed++
+      if (total > 1) onStatus(`Uploaded ${completed} of ${total}…`)
+      return { work, art }
+    }))
+
+    const newWorks = results.flatMap(r => (r ? [r.work] : []))
+    const placed = results.flatMap(r => (r?.art ? [r.art] : []))
+    commitPlaced(placed, newWorks, placed.length === 1 ? 'Artwork placed — drag to position' : `${placed.length} artworks placed`)
+  }
+
+  /** Hang works the project already has on the open option — no upload. */
+  async function placeExistingWorks(works: Work[]) {
+    const base = stateRef.current.artworks.length
+    const results = await Promise.all(works.map(async (work, i) => {
+      const placement = await insertPlacement(work.id, base + i)
+      if (!placement) return null
+      return artworkFromPlacement(work, placement.id, placement.xF, placement.yF)
+    }))
+    const placed = results.filter((a): a is Artwork => a !== null)
+    commitPlaced(placed, [], placed.length === 1 ? `${placed[0].name} placed — drag to position` : `${placed.length} works placed`)
   }
 
   // ─── SAVE (debounced) ─────────────────────────────────────────────
@@ -1761,8 +1959,12 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const pendingId = optionId
       const hadSave = !!saveTimer.current
       if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-      if (hadSave && pendingId) persistOption(stateRef.current)
-      flushThumbnailRegens(hadSave && pendingId ? pendingId : undefined)
+      // Regen only once the write has landed — a render started alongside the
+      // save composites the wall as it was before it.
+      if (hadSave && pendingId) {
+        void persistOption(stateRef.current).then(() => runThumbnailRegen(pendingId))
+      }
+      void flushThumbnailRegens()
     }
   }, [])
 
@@ -1770,16 +1972,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   // Callers (e.g. the Dashboard back button) await this so the dashboard never renders a stale preview.
   async function flushPendingAndRegen(): Promise<void> {
     if (!optionId) return
-    const currentId = optionId
-    // Option data (artworks + foreground masks)
+    // Option data (artworks + foreground masks). A write that changes the
+    // wall schedules its own regen, which the flush below then picks up —
+    // so an option nobody touched costs nothing here.
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
       await persistOption(stateRef.current)
     }
-    // Thumbnail — fire-and-forget so dashboard navigation isn't blocked on
-    // server-side sharp compositing. Dashboard refetches thumbnails on mount.
-    flushThumbnailRegens(currentId)
+    // Thumbnail. The dashboard serves a PNG built on the server, so leaving
+    // before that render lands shows the wall as it was one edit ago. Wait
+    // for it — but never longer than THUMBNAIL_FLUSH_CAP_MS, because a slow
+    // render must not strand the consultant in the studio. The dashboard is
+    // stale for one refresh in that case, not wrong forever.
+    await Promise.race([
+      flushThumbnailRegens(),
+      new Promise<void>(r => setTimeout(r, THUMBNAIL_FLUSH_CAP_MS)),
+    ])
   }
 
   /**
@@ -1807,17 +2016,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         onForegroundSavedRef.current?.(s.masks)
       }
 
-      // Artworks whose saved columns differ from the snapshot.
-      const changed = s.artworks
-        .map(art => { const row = artworkRow(art); return { art, row, json: JSON.stringify(row) } })
-        .filter(({ art, json }) => lastSavedArts.current.get(art.id) !== json)
-      const results = await Promise.all(
-        changed.map(({ art, row }) => supabase.from('artworks').update(row).eq('id', art.id))
-      )
+      // Placements whose columns differ from the snapshot, and works likewise.
+      // A moved artwork writes its placement; a resized one writes its work.
+      const placements = s.artworks
+        .map(art => { const row = placementRow(art); return { art, row, json: JSON.stringify(row) } })
+        .filter(({ art, json }) => lastSavedPlacements.current.get(art.id) !== json)
+      const worksChanged = s.artworks
+        .map(art => { const row = workRow(art); return { art, row, json: JSON.stringify(row) } })
+        .filter(({ art, json }) => lastSavedWorks.current.get(art.workId) !== json)
+      const results = await Promise.all([
+        ...placements.map(({ art, row }) => supabase.from('artworks').update(row).eq('id', art.id)),
+        ...worksChanged.map(({ art, row }) => supabase.from('works').update(row).eq('id', art.workId)),
+      ])
       const artErr = results.find(r => r.error)?.error
       if (artErr) throw artErr
-      changed.forEach(({ art, json }) => lastSavedArts.current.set(art.id, json))
-      if (changed.length > 0) wrote = true
+      placements.forEach(({ art, json }) => lastSavedPlacements.current.set(art.id, json))
+      worksChanged.forEach(({ art, json }) => lastSavedWorks.current.set(art.workId, json))
+      if (placements.length > 0 || worksChanged.length > 0) wrote = true
 
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
@@ -1829,34 +2044,15 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }
   }
 
-  // ─── DELETE ARTWORK ───────────────────────────────────────────────
+  // ─── REMOVE FROM WALL ─────────────────────────────────────────────
+  /**
+   * Take a work off this option. Only the placement row goes: the work stays
+   * in the project, image and all, and the index still lists it. Deleting
+   * the work itself is the index's job.
+   */
   async function deleteArtwork(artId: string) {
     const supabase = createClient()
-
-    // The file is read before the row goes, and removed after. Deleting the row
-    // alone used to strand the image permanently — the single biggest source of
-    // orphaned files. Artwork images are per-artwork (`art-{uuid}.{ext}`), but
-    // the reference check still runs in case a future duplicate action reuses a
-    // path. Storage removal is best-effort; the sweep endpoint is the backstop.
-    const { data: doomed } = await supabase
-      .from('artworks')
-      .select('image_path')
-      .eq('id', artId)
-      .maybeSingle()
-
     await supabase.from('artworks').delete().eq('id', artId)
-
-    const oldPath = doomed?.image_path as string | null | undefined
-    if (oldPath) {
-      const { data: stillUsed, error } = await supabase
-        .from('artworks')
-        .select('id')
-        .eq('image_path', oldPath)
-        .limit(1)
-      if (!error && (!stillUsed || stillUsed.length === 0)) {
-        await supabase.storage.from('artwork-images').remove([oldPath])
-      }
-    }
 
     setState(s => {
       const newArts = s.artworks.filter(a => a.id !== artId)
@@ -1867,6 +2063,22 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
     })
     onArtworkDeletedRef.current?.(artId)
+    scheduleThumbnailRegen()
+  }
+
+  /**
+   * The index deleted a work. Its placements are already gone from the
+   * database (the delete cascades), so only the studio's copy needs dropping.
+   */
+  function removePlacementsOfWork(workId: string) {
+    setState(s => {
+      if (!s.artworks.some(a => a.workId === workId)) return s
+      const newArts = s.artworks.filter(a => a.workId !== workId)
+      const newSelIds = new Set([...s.selIds].filter(id => newArts.some(a => a.id === id)))
+      const newSelId = s.selId && newSelIds.has(s.selId) ? s.selId : null
+      renderArtworksDOM(newArts, s.elev, s.scale, newSelIds)
+      return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
+    })
     scheduleThumbnailRegen()
   }
 
@@ -1912,11 +2124,19 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function patchArtworkLocal(artId: string, patch: Partial<Artwork>) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
+      // Redraw the wall. The artworks are DOM overlays, not React children,
+      // and the studio view stays mounted while the index and budget are on
+      // screen — so without this a size changed elsewhere sits in state with
+      // the canvas still showing the old one until the page is reloaded.
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       // Mark only this artwork as already written, never the whole option: a
       // sibling may have an unsaved drag still sitting in the debounce, and
       // calling rememberSaved for all of them would drop it.
       const saved = newArts.find(a => a.id === artId)
-      if (saved) lastSavedArts.current.set(artId, JSON.stringify(artworkRow(saved)))
+      if (saved) {
+        lastSavedPlacements.current.set(artId, JSON.stringify(placementRow(saved)))
+        lastSavedWorks.current.set(saved.workId, JSON.stringify(workRow(saved)))
+      }
       return { ...s, artworks: newArts }
     })
   }
@@ -1933,6 +2153,21 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function updateArtworkFrame(artId: string, frameType: string | null, frameWidthMm: number | null) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, frameType, frameWidthMm } : a)
+      renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
+      debounceSave({ ...s, artworks: newArts })
+      return { ...s, artworks: newArts }
+    })
+  }
+
+  /**
+   * The mount: colour and the four widths. Takes a patch rather than a fixed
+   * argument list because the studio edits one figure for all four sides most
+   * of the time and the individual sides only occasionally.
+   */
+  function updateArtworkMount(artId: string, patch: Partial<Pick<Artwork,
+    'mountColor' | 'mountTopMm' | 'mountRightMm' | 'mountBottomMm' | 'mountLeftMm'>>) {
+    setState(s => {
+      const newArts = s.artworks.map(a => a.id === artId ? { ...a, ...patch } : a)
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       debounceSave({ ...s, artworks: newArts })
       return { ...s, artworks: newArts }
@@ -2042,8 +2277,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
 
-    // 1. Draw base elevation
-    ctx.drawImage(s.elev.img, 0, 0, c.width, c.height)
+    // 1. Draw base elevation. A plain wall is filled rather than drawn: the
+    //    image behind it is an SVG data URL, and browsers have historically
+    //    disagreed about whether drawing an SVG taints a canvas — a tainted
+    //    canvas cannot be read back, so the export would fail at the very last
+    //    step. Filling the same colour cannot.
+    if (s.elev.wallColor) {
+      ctx.fillStyle = s.elev.wallColor
+      ctx.fillRect(0, 0, c.width, c.height)
+    } else {
+      ctx.drawImage(s.elev.img, 0, 0, c.width, c.height)
+    }
 
     // 2. Draw artworks — frame, brightness, fade and drop shadow included, so
     //    the file matches the canvas. The export used to draw the bare image,
@@ -2082,17 +2326,17 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       const h = art.hCm * pxPerCm
       const x = art.xF * c.width
       const y = art.yF * c.height
-      // The overlay is content-box with the border outside the artwork, so the
-      // frame grows right and down from (x, y) rather than centring on it.
-      const frame = art.frameType && art.frameWidthMm
-        ? Math.round((art.frameWidthMm / 10) * pxPerCm)
-        : 0
+      // The overlay is content-box with its bands outside the artwork, so the
+      // mount and frame grow right and down from (x, y) rather than centring
+      // on it. Same helper the wall uses, so the export matches the screen.
+      const bands = bandsPx(art, pxPerCm)
+      const frame = bands.frame
 
-      // Compose frame + artwork off-screen so brightness, fade and shadow
-      // apply to the pair as one, exactly as the CSS filter on the overlay div does.
+      // Compose bands + artwork off-screen so brightness, fade and shadow
+      // apply to the whole as one, exactly as the CSS filter on the overlay div does.
       const tile = document.createElement('canvas')
-      tile.width = Math.max(1, Math.round(w + frame * 2))
-      tile.height = Math.max(1, Math.round(h + frame * 2))
+      tile.width = Math.max(1, Math.round(w + bands.outer.left + bands.outer.right))
+      tile.height = Math.max(1, Math.round(h + bands.outer.top + bands.outer.bottom))
       const tctx = tile.getContext('2d')
       if (!tctx) return
       // Artwork files are usually far larger than the space they occupy on the
@@ -2100,34 +2344,61 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       tctx.imageSmoothingEnabled = true
       tctx.imageSmoothingQuality = 'high'
       if (frame > 0) {
-        tctx.fillStyle = FRAME_COLORS[art.frameType!] ?? FRAME_COLORS.black
+        tctx.fillStyle = frameHex(art.frameType)
         tctx.fillRect(0, 0, tile.width, tile.height)
+        paintFrameGrain(tctx, art.frameType!, tile.width, tile.height, frame, pxPerCm)
       }
-      tctx.drawImage(art.img, frame, frame, w, h)
+      const mountDrawn = bands.mount.top || bands.mount.right || bands.mount.bottom || bands.mount.left
+      if (mountDrawn) {
+        tctx.fillStyle = mountHex(art.mountColor)
+        tctx.fillRect(frame, frame, tile.width - frame * 2, tile.height - frame * 2)
+      }
+      tctx.drawImage(art.img, bands.outer.left, bands.outer.top, w, h)
 
       const blur = art.shadowBlur ?? 0
       const shadowOpacity = art.shadowOpacity ?? 0
 
-      // The frame's lip shades the artwork, as the overlay's inset box-shadow
-      // does. A ring around the artwork is filled outside the clip, so only
-      // the shadow it throws inwards lands on the tile.
-      if (frame > 0 && blur > 0 && shadowOpacity > 0) {
-        const lip = frameLipShadow(art.shadowAngle, blur * dispToOrig)
+      // A lip's shadow: a ring filled outside the clip, so only what it throws
+      // inwards lands on the tile. Used twice — once for the frame, once for
+      // the mount — because two edges stand proud of what they cover.
+      const paintLip = (
+        rx: number, ry: number, rw: number, rh: number,
+        lip: { x: number; y: number; blur: number }, opacity: number,
+      ) => {
         const reach = Math.ceil(lip.blur * 1.5 + Math.abs(lip.x) + Math.abs(lip.y)) + 1
         tctx.save()
         tctx.beginPath()
-        tctx.rect(frame, frame, w, h)
+        tctx.rect(rx, ry, rw, rh)
         tctx.clip()
-        tctx.shadowColor = `rgba(0,0,0,${shadowOpacity})`
+        tctx.shadowColor = `rgba(0,0,0,${opacity})`
         tctx.shadowBlur = lip.blur
         tctx.shadowOffsetX = lip.x
         tctx.shadowOffsetY = lip.y
         tctx.fillStyle = '#000'
         tctx.beginPath()
-        tctx.rect(frame - reach, frame - reach, w + reach * 2, h + reach * 2)
-        tctx.rect(frame, frame, w, h)
+        tctx.rect(rx - reach, ry - reach, rw + reach * 2, rh + reach * 2)
+        tctx.rect(rx, ry, rw, rh)
         tctx.fill('evenodd')
         tctx.restore()
+      }
+
+      if (blur > 0 && shadowOpacity > 0) {
+        // The frame shades what sits inside it: the mount, or the artwork when
+        // there is no mount.
+        if (frame > 0) {
+          paintLip(
+            frame, frame, tile.width - frame * 2, tile.height - frame * 2,
+            frameLipShadow(art.shadowAngle, blur * dispToOrig), shadowOpacity,
+          )
+        }
+        // The mount shades the artwork — a sixth as deep and two-thirds as
+        // dark, because card is thin and its bevel catches light.
+        if (mountDrawn) {
+          paintLip(
+            bands.outer.left, bands.outer.top, w, h,
+            mountLipShadow(art.shadowAngle, blur * dispToOrig), mountLipOpacity(shadowOpacity),
+          )
+        }
       }
 
       // Drop shadow, baked into its own layer. CSS paints the shadow behind an
@@ -2349,6 +2620,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     pendingCalibPx,
     loadOption,
     uploadElevation,
+    setBlankWall,
     startCalibration,
     cancelCalibration,
     confirmScale,
@@ -2358,7 +2630,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     changeZoom,
     setZoomFit,
     addArtworks,
+    placeExistingWorks,
     deleteArtwork,
+    removePlacementsOfWork,
+    scheduleThumbnailRegen,
     toggleVisibility,
     updateArtworkDims,
     updateArtworkPrice,
@@ -2367,6 +2642,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkArtist,
     updateArtworkLineItems,
     updateArtworkFrame,
+    updateArtworkMount,
     updateArtworkBrightness,
     updateAllArtworksBrightness,
     updateArtworkFade,

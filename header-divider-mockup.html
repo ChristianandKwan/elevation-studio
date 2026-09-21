@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Client header divider — mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Karla:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --charcoal: #1C1A18;
+    --cream: #F7F4EF;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Karla', sans-serif;
+    background: var(--cream);
+    padding: 40px;
+    color: #333;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  p.lede { font-size: 13px; color: #666; margin-bottom: 24px; max-width: 680px; line-height: 1.5; }
+  .group { margin-bottom: 36px; }
+  .group-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+    color: #888; margin-bottom: 8px; font-weight: 600;
+  }
+  .group-meta { font-size: 12px; color: #999; margin-top: 6px; }
+
+  /* Mock of the client header stack */
+  .mock {
+    width: 100%; max-width: 1100px;
+    background: var(--charcoal);
+    border: 1px solid #ddd;
+  }
+  .client-header {
+    position: relative; display: flex; align-items: center; justify-content: flex-end;
+    padding: 0 40px; height: 64px; background: var(--charcoal);
+  }
+  .client-logo {
+    position: absolute; left: 40px; top: 50%; transform: translateY(-50%);
+    color: #fff; font-family: 'Cormorant Garamond', serif; font-size: 18px; letter-spacing: .2em;
+    opacity: .9;
+  }
+  .client-header-brand {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-size: 22px; font-weight: 400; color: #fff;
+    font-family: 'Cormorant Garamond', serif; letter-spacing: .12em;
+  }
+  .client-project-label {
+    font-size: 11px; color: rgba(255,255,255,.5);
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+  .client-prepared-by { font-size: 10px; color: rgba(255,255,255,.35); }
+
+  .client-view-toggle {
+    display: flex; align-items: center; gap: 2px;
+    background: var(--charcoal); padding: 0 20px; height: 38px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .client-view-tab {
+    padding: 0 14px; height: 30px; font-size: 11.5px; font-weight: 500;
+    background: transparent; border: none; color: rgba(255,255,255,0.45);
+    letter-spacing: .02em; display: inline-flex; align-items: center;
+  }
+  .client-view-tab.active { color: white; border-bottom: 2px solid white; }
+
+  /* Divider variants — applied to the TOP edge of .client-view-toggle */
+  .variant-current .client-view-toggle { border-top: 1px solid rgba(255,255,255,0.08); }
+  .variant-a .client-view-toggle       { border-top: 1px solid rgba(255,255,255,0.18); }
+  .variant-b .client-view-toggle       { border-top: 1px solid rgba(255,255,255,0.28); }
+  .variant-c .client-view-toggle       { border-top: 2px solid rgba(255,255,255,0.18); }
+  .variant-d .client-view-toggle       { border-top: 1.5px solid rgba(255,255,255,0.22); }
+</style>
+</head>
+<body>
+
+<h1>Client header — divider between the two sections</h1>
+<p class="lede">
+  The client views stack a 64px header (logo · brand · project label) above a 38px view-toggle row
+  (Elevations / Budget). Today there's no explicit divider between them — just a faint 8%-white line
+  along the bottom of the toggle row. Below are a few weights for a clearer line.
+  Viewing on a dark background at 100% zoom gives the truest read.
+</p>
+
+<div class="group variant-current">
+  <div class="group-label">Current — no top border, 8% white only at bottom of toggle row</div>
+  <div class="mock">
+    <div class="client-header">
+      <div class="client-logo">C&nbsp;&nbsp;K</div>
+      <div class="client-header-brand">Elevation Studio</div>
+      <div class="client-project-label">
+        Thornbury Residence
+        <span class="client-prepared-by">Prepared by Jane Consultant · 24 Apr 2026</span>
+      </div>
+    </div>
+    <div class="client-view-toggle">
+      <button class="client-view-tab active">Elevations</button>
+      <button class="client-view-tab">Budget</button>
+    </div>
+  </div>
+  <div class="group-meta">border: 1px rgba(255,255,255,0.08)</div>
+</div>
+
+<div class="group variant-a">
+  <div class="group-label">Option A — 1px @ 18% white (subtle bump)</div>
+  <div class="mock">
+    <div class="client-header">
+      <div class="client-logo">C&nbsp;&nbsp;K</div>
+      <div class="client-header-brand">Elevation Studio</div>
+      <div class="client-project-label">
+        Thornbury Residence
+        <span class="client-prepared-by">Prepared by Jane Consultant · 24 Apr 2026</span>
+      </div>
+    </div>
+    <div class="client-view-toggle">
+      <button class="client-view-tab active">Elevations</button>
+      <button class="client-view-tab">Budget</button>
+    </div>
+  </div>
+  <div class="group-meta">border-top: 1px rgba(255,255,255,0.18)</div>
+</div>
+
+<div class="group variant-b">
+  <div class="group-label">Option B — 1px @ 28% white (clearly visible)</div>
+  <div class="mock">
+    <div class="client-header">
+      <div class="client-logo">C&nbsp;&nbsp;K</div>
+      <div class="client-header-brand">Elevation Studio</div>
+      <div class="client-project-label">
+        Thornbury Residence
+        <span class="client-prepared-by">Prepared by Jane Consultant · 24 Apr 2026</span>
+      </div>
+    </div>
+    <div class="client-view-toggle">
+      <button class="client-view-tab active">Elevations</button>
+      <button class="client-view-tab">Budget</button>
+    </div>
+  </div>
+  <div class="group-meta">border-top: 1px rgba(255,255,255,0.28)</div>
+</div>
+
+<div class="group variant-d">
+  <div class="group-label">Option C — 1.5px @ 22% white (my pick — still fine, but readable)</div>
+  <div class="mock">
+    <div class="client-header">
+      <div class="client-logo">C&nbsp;&nbsp;K</div>
+      <div class="client-header-brand">Elevation Studio</div>
+      <div class="client-project-label">
+        Thornbury Residence
+        <span class="client-prepared-by">Prepared by Jane Consultant · 24 Apr 2026</span>
+      </div>
+    </div>
+    <div class="client-view-toggle">
+      <button class="client-view-tab active">Elevations</button>
+      <button class="client-view-tab">Budget</button>
+    </div>
+  </div>
+  <div class="group-meta">border-top: 1.5px rgba(255,255,255,0.22)</div>
+</div>
+
+<div class="group variant-c">
+  <div class="group-label">Option D — 2px @ 18% white (thickest, more architectural)</div>
+  <div class="mock">
+    <div class="client-header">
+      <div class="client-logo">C&nbsp;&nbsp;K</div>
+      <div class="client-header-brand">Elevation Studio</div>
+      <div class="client-project-label">
+        Thornbury Residence
+        <span class="client-prepared-by">Prepared by Jane Consultant · 24 Apr 2026</span>
+      </div>
+    </div>
+    <div class="client-view-toggle">
+      <button class="client-view-tab active">Elevations</button>
+      <button class="client-view-tab">Budget</button>
+    </div>
+  </div>
+  <div class="group-meta">border-top: 2px rgba(255,255,255,0.18)</div>
+</div>
+
+</body>
+</html>

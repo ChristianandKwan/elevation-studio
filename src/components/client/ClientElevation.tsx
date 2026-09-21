@@ -4,8 +4,13 @@ import { useRef, useEffect, useState } from 'react'
 import NextImage from 'next/image'
 import { formatPrice, formatApprovalTimestamp } from '@/lib/utils'
 import { wallQuadToSkewMatrix } from '@/lib/homography'
-import { frameLipShadeElement, SHADOW_PUSH } from '@/lib/frameShadow'
+import {
+  frameLipShadeElement, mountLipShadeElement, mountLipOpacity, SHADOW_PUSH,
+} from '@/lib/frameShadow'
 import { ArcSpinner } from '@/components/ui/Spinner'
+import { frameHex, mountHex, bandsPx, isWoodFrame } from '@/lib/frames'
+import { frameGrainElement } from '@/lib/frameGrain'
+import { wallImageUrl } from '@/lib/wall'
 
 interface ClientArtwork {
   id: string
@@ -20,6 +25,11 @@ interface ClientArtwork {
   artist: string
   frameType?: string | null
   frameWidthMm?: number | null
+  mountColor?: string | null
+  mountTopMm?: number | null
+  mountRightMm?: number | null
+  mountBottomMm?: number | null
+  mountLeftMm?: number | null
   brightness?: number | null
   fade?: number | null
   shadowAngle?: number | null
@@ -34,6 +44,10 @@ interface ClientOption {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
+  /** Set instead of imageUrl when this wall was entered as a measurement. */
+  wall_w_cm?: number | null
+  wall_h_cm?: number | null
+  wall_color?: string | null
   approved: boolean
   approved_at: string | null
   foreground_masks?: unknown
@@ -385,8 +399,18 @@ function ClientCanvas({
   // browser already had, which is what made the eye icon feel slow.
   const decodedRef = useRef(new Map<string, HTMLImageElement>())
 
+  // The wall to draw: the photograph if the consultant uploaded one, or a
+  // generated rectangle of the colour they chose if they entered the wall as
+  // a measurement instead. Everything below works on the picture either way.
+  const wallUrl = wallImageUrl({
+    imageUrl: optData.imageUrl,
+    origW: optData.orig_w,
+    origH: optData.orig_h,
+    wallColor: optData.wall_color,
+  })
+
   useEffect(() => {
-    if (!optData.imageUrl || !canvasRef.current) return
+    if (!wallUrl || !canvasRef.current) return
 
     const build = (img: HTMLImageElement) => {
       // Fit to the visible canvas frame (.client-canvas-area) on both dimensions
@@ -441,15 +465,20 @@ function ClientCanvas({
         aw.style.width = (sc ? art.wCm * sc : 80) + 'px'
         aw.style.height = (sc ? art.hCm * sc : 60) + 'px'
 
-        // Frame border
-        if (art.frameType && art.frameWidthMm && sc) {
-          const framePx = Math.round((art.frameWidthMm / 10) * sc)
-          const frameColor: Record<string, string> = {
-            black: '#1a1a1a', white: '#f0ede8',
-            'pale-wood': '#c4a882', 'mid-wood': '#7d5a35', 'dark-wood': '#3d2814',
+        // Mount and frame — the same two bands the studio draws, read from the
+        // same helper so the client sees what the consultant designed.
+        const bands = sc ? bandsPx(art, sc) : null
+        if (bands) {
+          if (bands.mount.top || bands.mount.right || bands.mount.bottom || bands.mount.left) {
+            aw.style.padding =
+              `${bands.mount.top}px ${bands.mount.right}px ${bands.mount.bottom}px ${bands.mount.left}px`
+            aw.style.background = mountHex(art.mountColor)
+            aw.style.boxSizing = 'content-box'
           }
-          aw.style.border = `${framePx}px solid ${frameColor[art.frameType] ?? '#1a1a1a'}`
-          aw.style.boxSizing = 'content-box'
+          if (bands.frame > 0) {
+            aw.style.border = `${bands.frame}px solid ${frameHex(art.frameType)}`
+            aw.style.boxSizing = 'content-box'
+          }
         }
 
         const ai = document.createElement('img')
@@ -476,10 +505,36 @@ function ClientCanvas({
 
         aw.appendChild(ai)
 
-        // The frame's lip shades the artwork itself, not just the wall.
-        if (art.frameType && art.frameWidthMm && sc &&
-            art.shadowBlur != null && art.shadowBlur > 0 && art.shadowOpacity != null && art.shadowOpacity > 0) {
-          aw.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur, art.shadowOpacity))
+        // Grain, on the wood frames only.
+        if (bands && bands.frame > 0 && isWoodFrame(art.frameType) && sc) {
+          const awW = (sc ? art.wCm * sc : 80)
+          const awH = (sc ? art.hCm * sc : 60)
+          aw.appendChild(frameGrainElement(
+            art.frameType!,
+            awW + bands.mount.left + bands.mount.right + bands.frame * 2,
+            awH + bands.mount.top + bands.mount.bottom + bands.frame * 2,
+            bands.frame,
+            sc,
+            bands.frame,
+            bands.frame,
+          ))
+        }
+
+        // Two lips, as in the studio: the frame's onto the mount (inset:0 —
+        // the mount is this element's padding), the mount's onto the artwork.
+        const lit = art.shadowBlur != null && art.shadowBlur > 0
+          && art.shadowOpacity != null && art.shadowOpacity > 0
+        if (art.frameType && art.frameWidthMm && sc && lit) {
+          aw.appendChild(frameLipShadeElement(art.shadowAngle, art.shadowBlur!, art.shadowOpacity!))
+        }
+        if (bands && lit) {
+          const m = bands.mount
+          if (m.top || m.right || m.bottom || m.left) {
+            aw.appendChild(mountLipShadeElement(
+              art.shadowAngle, art.shadowBlur!, mountLipOpacity(art.shadowOpacity!),
+              `${m.top}px ${m.right}px ${m.bottom}px ${m.left}px`,
+            ))
+          }
         }
 
         const tag = document.createElement('div')
@@ -655,7 +710,7 @@ function ClientCanvas({
         if (fgImg) {
           fgImg.setAttribute('width', String(W))
           fgImg.setAttribute('height', String(H))
-          fgImg.setAttribute('href', optData.imageUrl!)
+          fgImg.setAttribute('href', wallUrl)
         }
         fgSvg.style.display = masks.length > 0 ? '' : 'none'
       }
@@ -664,7 +719,7 @@ function ClientCanvas({
 
     // Already decoded (a visibility toggle, a re-fit, a tab switch back):
     // rebuild the overlays straight away and never show the spinner.
-    const url = optData.imageUrl
+    const url = wallUrl
     const cached = decodedRef.current.get(url)
     if (cached?.complete && cached.naturalWidth > 0) {
       build(cached)
@@ -679,7 +734,7 @@ function ClientCanvas({
       build(img)
     }
     img.src = url
-  }, [optData.id, optData.imageUrl, locked, rerenderKey, refitKey]) // eslint-disable-line
+  }, [optData.id, wallUrl, locked, rerenderKey, refitKey]) // eslint-disable-line
 
   return (
     <div className="client-canvas-inner" ref={canvasRef} style={{ position: 'relative', minHeight: isLoading ? 200 : undefined }}>
@@ -690,7 +745,7 @@ function ClientCanvas({
       >
         <NextImage
           className="client-elev-img"
-          src={optData.imageUrl!}
+          src={wallUrl ?? ''}
           alt="elevation"
           width={optData.orig_w || 1600}
           height={optData.orig_h || 900}

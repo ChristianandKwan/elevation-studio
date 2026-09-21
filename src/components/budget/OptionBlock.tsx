@@ -10,7 +10,8 @@ interface Props {
   option: BudgetOptionData
   vatMode: boolean
   isConsultant: boolean
-  onArtworkChange?: (artworkId: string, patch: BudgetArtworkPatch) => void
+  /** Keyed by work, not placement: the money belongs to the work wherever it hangs. */
+  onArtworkChange?: (workId: string, patch: BudgetArtworkPatch) => void
   onNoteChange?: (optionKey: string, note: string, shownToClient: boolean) => void
   /**
    * `block`: one of up to three side-by-side blocks (the original layout).
@@ -38,7 +39,7 @@ export default function OptionBlock({ option, vatMode, isConsultant, onArtworkCh
             artwork={a}
             vatMode={vatMode}
             isConsultant={isConsultant}
-            onChange={onArtworkChange && (patch => onArtworkChange(a.id, patch))}
+            onChange={onArtworkChange && (patch => onArtworkChange(a.workId, patch))}
           />
         ))
       )}

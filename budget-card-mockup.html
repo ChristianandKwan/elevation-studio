@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget — Room Card Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ── DESIGN TOKENS ───────────────────────────────────────── */
+  :root {
+    --cream: #F7F4EF;
+    --warm-white: #FDFBF9;
+    --charcoal: #1C1A18;
+    --mid: #7A746E;
+    --accent: #8B6F47;
+    --accent-light: rgba(139,111,71,0.12);
+    --border: #E3DED7;
+    --green: #2E6B4F;
+    --green-light: rgba(46,107,79,0.1);
+    --red: #b94040;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Karla', sans-serif;
+    background: var(--cream);
+    color: var(--charcoal);
+  }
+
+  /* ── HEADER ─────────────────────────────────────────────── */
+  .budget-header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; height: 52px;
+    background: var(--charcoal); flex-shrink: 0; gap: 16px;
+  }
+  .budget-header-center {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-family: 'Cormorant Garamond', serif; font-size: 15px; font-weight: 400;
+    letter-spacing: .12em; color: white; pointer-events: none; white-space: nowrap;
+  }
+  .budget-vat-toggle { display: flex; border: 1px solid rgba(255,255,255,0.2); }
+  .budget-vat-btn {
+    padding: 5px 14px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+    background: transparent; border: none; color: rgba(255,255,255,0.45); cursor: pointer; letter-spacing: .02em;
+  }
+  .budget-vat-btn.active { background: rgba(255,255,255,0.15); color: white; }
+  .budget-export-btn {
+    padding: 6px 14px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.8);
+    cursor: pointer; letter-spacing: .02em; white-space: nowrap;
+  }
+  .budget-header-project {
+    font-size: 11px; color: rgba(255,255,255,.5); text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+  .budget-header-project strong { color: white; font-size: 12px; font-weight: 500; }
+
+  /* ── CONTENT ─────────────────────────────────────────────── */
+  .budget-content { max-width: 780px; margin: 0 auto; padding: 40px 24px 64px; width: 100%; }
+
+  .budget-project-header { margin-bottom: 36px; }
+  .budget-project-name { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 400; margin-bottom: 3px; }
+  .budget-project-client { font-size: 13px; color: var(--mid); }
+
+  .budget-section { margin-bottom: 44px; }
+  .budget-section-kicker {
+    font-family: 'Karla', sans-serif; font-size: 11px; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--mid);
+    padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+  }
+
+  /* ── ELEVATION BLOCKS — PROPOSED ───────────────────────── */
+  .budget-elev-block {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    margin-top: 12px;
+  }
+  .budget-elev-block:first-of-type { margin-top: 0; }
+
+  .budget-elev-header {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 14px 20px 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .budget-elev-name {
+    font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600;
+    color: var(--charcoal);
+  }
+  .budget-elev-pick-badge {
+    font-size: 11px; font-weight: 500; color: var(--green);
+    background: var(--green-light); border: 1px solid rgba(46,107,79,.2);
+    padding: 2px 8px; letter-spacing: .02em;
+  }
+  .budget-elev-total {
+    margin-left: auto; font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 400;
+  }
+
+  /* Artwork lines — inside the card, with side padding */
+  .budget-picked-artworks { padding: 0 20px; }
+
+  .budget-artwork-line { padding: 10px 0; border-top: 1px solid var(--border); }
+  .budget-artwork-line:first-child { border-top: none; }
+  .budget-artwork-main-row { display: flex; align-items: flex-start; gap: 10px; }
+  .budget-artwork-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .budget-artwork-title { font-family: 'Cormorant Garamond', serif; font-size: 15px; color: var(--charcoal); }
+  .budget-artwork-artist { font-size: 12px; color: var(--mid); }
+  .budget-artwork-dims { font-size: 12px; color: var(--mid); white-space: nowrap; flex-shrink: 0; }
+  .budget-artwork-price { font-size: 14px; font-weight: 500; text-align: right; min-width: 80px; flex-shrink: 0; }
+  .budget-artwork-framing-row { display: flex; align-items: center; margin-top: 3px; }
+  .budget-artwork-framing-label { flex: 1; font-size: 12px; color: var(--mid); font-style: italic; padding-left: 10px; }
+  .budget-artwork-framing-cost { font-size: 12px; color: var(--mid); min-width: 80px; text-align: right; flex-shrink: 0; }
+
+  /* ── ADDITIONAL COSTS ────────────────────────────────────── */
+  .budget-costs-panel {
+    background: var(--warm-white); border: 1px solid var(--border); padding: 0 20px;
+  }
+  .budget-cost-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 0; border-bottom: 1px solid var(--border); gap: 12px;
+  }
+  .budget-cost-row:last-child { border-bottom: none; }
+  .budget-cost-label { font-size: 13px; color: var(--charcoal); display: flex; align-items: center; gap: 8px; flex: 1; }
+  .budget-cost-value { font-size: 14px; font-weight: 500; }
+  .budget-badge {
+    font-size: 10.5px; font-weight: 500; letter-spacing: .03em; padding: 2px 7px; flex-shrink: 0;
+  }
+  .budget-badge--confirmed {
+    background: rgba(46,107,79,.08); color: var(--green); border: 1px solid rgba(46,107,79,.28);
+  }
+
+  /* ── TOTALS ──────────────────────────────────────────────── */
+  .budget-totals {
+    background: var(--warm-white); border: 1px solid var(--border);
+    padding: 20px 24px; margin-top: 8px;
+  }
+  .budget-section-kicker--totals {
+    font-family: 'Karla', sans-serif; font-size: 11px; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--mid);
+    padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 0;
+  }
+  .budget-totals-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .budget-totals-label { color: var(--mid); display: flex; align-items: center; }
+  .budget-totals-value { font-weight: 500; white-space: nowrap; }
+  .budget-grand-total {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 20px 0 0; border-top: 2px solid var(--charcoal); margin-top: 4px;
+  }
+  .budget-grand-total-label {
+    font-family: 'Karla', sans-serif; font-size: 24px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--charcoal);
+  }
+  .budget-grand-total-value {
+    font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 500; color: var(--charcoal);
+  }
+
+  /* ── COMPARISON TOGGLE ───────────────────────────────────── */
+  .toggle-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; background: var(--charcoal); padding: 12px 24px;
+    font-size: 11.5px; letter-spacing: .04em;
+  }
+  .toggle-bar span { color: rgba(255,255,255,0.4); margin: 0 16px; }
+  .toggle-btn {
+    padding: 6px 20px; font-family: 'Karla'; font-size: 11.5px; font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.25); background: transparent; color: rgba(255,255,255,0.55);
+    cursor: pointer; letter-spacing: .04em; transition: all .15s;
+  }
+  .toggle-btn.active { background: rgba(255,255,255,0.15); color: white; border-color: rgba(255,255,255,0.5); }
+
+  /* ── SIDE-BY-SIDE COMPARISON ─────────────────────────────── */
+  .comparison-wrapper {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  }
+  .comparison-col { padding: 32px 0 64px; }
+  .comparison-col--current { background: var(--cream); border-right: 1px solid var(--border); }
+  .comparison-col--proposed { background: var(--cream); }
+  /* Each column's content stays at the same 780px max-width the real app uses */
+  .comparison-col-inner { max-width: 780px; margin: 0 auto; padding: 0 24px; }
+  .comparison-label {
+    font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--mid); margin-bottom: 28px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── CURRENT DESIGN (for comparison) ─────────────────────── */
+  .budget-elev-block--current {
+    margin-top: 24px;
+  }
+  .budget-elev-block--current:first-of-type { margin-top: 0; }
+  .budget-elev-header--current {
+    display: flex; align-items: baseline; gap: 10px;
+    padding-bottom: 11px; border-bottom: 1px solid var(--border);
+  }
+  .budget-picked-artworks--current { }
+
+  /* ── PROPOSED: multiple elevations demo ──────────────────── */
+  .budget-elev-block--proposed {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    margin-top: 12px;
+  }
+  .budget-elev-block--proposed:first-of-type { margin-top: 0; }
+  .budget-elev-header--proposed {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 14px 20px 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .budget-picked-artworks--proposed { padding: 0 20px; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────── -->
+<div class="budget-header">
+  <div class="budget-vat-toggle">
+    <button class="budget-vat-btn">Ex VAT</button>
+    <button class="budget-vat-btn active">Inc VAT</button>
+  </div>
+  <div class="budget-header-center">Elevation Studio</div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="budget-header-project">
+      <strong>Harrington Residence</strong>
+      <span>Prepared by info · 19 Apr 2026</span>
+    </div>
+    <button class="budget-export-btn">Export PDF</button>
+  </div>
+</div>
+
+<!-- ── COMPARISON TOGGLE BAR ──────────────────────────────── -->
+<div class="toggle-bar">
+  <button class="toggle-btn active" onclick="show('both')">Side by side</button>
+  <button class="toggle-btn" onclick="show('current')">Current only</button>
+  <button class="toggle-btn" onclick="show('proposed')">Proposed only</button>
+</div>
+
+<!-- ── SIDE-BY-SIDE ───────────────────────────────────────── -->
+<div class="comparison-wrapper" id="comparison-wrapper">
+
+  <!-- CURRENT -->
+  <div class="comparison-col comparison-col--current" id="col-current">
+    <div class="comparison-col-inner">
+    <div class="comparison-label">Current design</div>
+
+    <div class="budget-project-header">
+      <h1 class="budget-project-name">Harrington Residence</h1>
+      <p class="budget-project-client">Mr and Mrs Harrington</p>
+    </div>
+
+    <!-- Elevations section -->
+    <div class="budget-section">
+      <div class="budget-section-kicker">Elevations</div>
+
+      <!-- Elevation 1 — picked (current: no card) -->
+      <div class="budget-elev-block--current">
+        <div class="budget-elev-header--current">
+          <span class="budget-elev-name">Drawing Room</span>
+          <span class="budget-elev-pick-badge">✓ Option A</span>
+          <span class="budget-elev-total">£6,600</span>
+        </div>
+        <div class="budget-picked-artworks--current">
+          <div class="budget-artwork-line">
+            <div class="budget-artwork-main-row">
+              <div class="budget-artwork-identity">
+                <span class="budget-artwork-title">Nathan2</span>
+                <span class="budget-artwork-artist">Boris Yeltsin</span>
+              </div>
+              <span class="budget-artwork-dims">40 × 60 cm</span>
+              <span class="budget-artwork-price">£3,600</span>
+            </div>
+            <div class="budget-artwork-framing-row">
+              <span class="budget-artwork-framing-label">+ Framing</span>
+              <span class="budget-artwork-framing-cost">£300</span>
+            </div>
+          </div>
+          <div class="budget-artwork-line">
+            <div class="budget-artwork-main-row">
+              <div class="budget-artwork-identity">
+                <span class="budget-artwork-title">Nathan3</span>
+                <span class="budget-artwork-artist">Michael Gorbachev</span>
+              </div>
+              <span class="budget-artwork-dims">40 × 60 cm</span>
+              <span class="budget-artwork-price">£2,400</span>
+            </div>
+            <div class="budget-artwork-framing-row">
+              <span class="budget-artwork-framing-label">+ Framing</span>
+              <span class="budget-artwork-framing-cost">£300</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Elevation 2 — picked (current: no card) -->
+      <div class="budget-elev-block--current" style="margin-top:24px;">
+        <div class="budget-elev-header--current">
+          <span class="budget-elev-name">Master Bedroom</span>
+          <span class="budget-elev-pick-badge">✓ Option A</span>
+          <span class="budget-elev-total">£4,200</span>
+        </div>
+        <div class="budget-picked-artworks--current">
+          <div class="budget-artwork-line">
+            <div class="budget-artwork-main-row">
+              <div class="budget-artwork-identity">
+                <span class="budget-artwork-title">Untitled No. 7</span>
+                <span class="budget-artwork-artist">Lucian Freud</span>
+              </div>
+              <span class="budget-artwork-dims">50 × 70 cm</span>
+              <span class="budget-artwork-price">£4,200</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Additional Costs -->
+    <div class="budget-section">
+      <div class="budget-section-kicker">Additional Costs</div>
+      <div class="budget-costs-panel">
+        <div class="budget-cost-row">
+          <span class="budget-cost-label">
+            Installation
+            <span class="budget-badge budget-badge--confirmed">Confirmed</span>
+          </span>
+          <span class="budget-cost-value">£450</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div>
+      <div class="budget-section-kicker--totals" style="margin-bottom:0;">Summary</div>
+      <div class="budget-totals" style="margin-top:0;border-top:none;">
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">Artworks</span>
+          <span class="budget-totals-value">£10,200</span>
+        </div>
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">Framing</span>
+          <span class="budget-totals-value">£600</span>
+        </div>
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">Installation</span>
+          <span class="budget-totals-value">£450</span>
+        </div>
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">VAT (20%)</span>
+          <span class="budget-totals-value">£2,250</span>
+        </div>
+        <div class="budget-grand-total">
+          <span class="budget-grand-total-label">Total inc. VAT</span>
+          <span class="budget-grand-total-value">£13,500</span>
+        </div>
+      </div>
+    </div>
+    </div><!-- /comparison-col-inner -->
+  </div>
+
+  <!-- PROPOSED -->
+  <div class="comparison-col comparison-col--proposed" id="col-proposed">
+    <div class="comparison-col-inner">
+    <div class="comparison-label">Proposed — white card per room</div>
+
+    <div class="budget-project-header">
+      <h1 class="budget-project-name">Harrington Residence</h1>
+      <p class="budget-project-client">Mr and Mrs Harrington</p>
+    </div>
+
+    <!-- Elevations section -->
+    <div class="budget-section">
+      <div class="budget-section-kicker">Elevations</div>
+
+      <!-- Elevation 1 — card -->
+      <div class="budget-elev-block--proposed">
+        <div class="budget-elev-header--proposed">
+          <span class="budget-elev-name">Drawing Room</span>
+          <span class="budget-elev-pick-badge">✓ Option A</span>
+          <span class="budget-elev-total">£6,600</span>
+        </div>
+        <div class="budget-picked-artworks--proposed">
+          <div class="budget-artwork-line">
+            <div class="budget-artwork-main-row">
+              <div class="budget-artwork-identity">
+                <span class="budget-artwork-title">Nathan2</span>
+                <span class="budget-artwork-artist">Boris Yeltsin</span>
+              </div>
+              <span class="budget-artwork-dims">40 × 60 cm</span>
+              <span class="budget-artwork-price">£3,600</span>
+            </div>
+            <div class="budget-artwork-framing-row">
+              <span class="budget-artwork-framing-label">+ Framing</span>
+              <span class="budget-artwork-framing-cost">£300</span>
+            </div>
+          </div>
+          <div class="budget-artwork-line">
+            <div class="budget-artwork-main-row">
+              <div class="budget-artwork-identity">
+                <span class="budget-artwork-title">Nathan3</span>
+                <span class="budget-artwork-artist">Michael Gorbachev</span>
+              </div>
+              <span class="budget-artwork-dims">40 × 60 cm</span>
+              <span class="budget-artwork-price">£2,400</span>
+            </div>
+            <div class="budget-artwork-framing-row">
+              <span class="budget-artwork-framing-label">+ Framing</span>
+              <span class="budget-artwork-framing-cost">£300</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Elevation 2 — card -->
+      <div class="budget-elev-block--proposed">
+        <div class="budget-elev-header--proposed">
+          <span class="budget-elev-name">Master Bedroom</span>
+          <span class="budget-elev-pick-badge">✓ Option A</span>
+          <span class="budget-elev-total">£4,200</span>
+        </div>
+        <div class="budget-picked-artworks--proposed">
+          <div class="budget-artwork-line">
+            <div class="budget-artwork-main-row">
+              <div class="budget-artwork-identity">
+                <span class="budget-artwork-title">Untitled No. 7</span>
+                <span class="budget-artwork-artist">Lucian Freud</span>
+              </div>
+              <span class="budget-artwork-dims">50 × 70 cm</span>
+              <span class="budget-artwork-price">£4,200</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Additional Costs (unchanged) -->
+    <div class="budget-section">
+      <div class="budget-section-kicker">Additional Costs</div>
+      <div class="budget-costs-panel">
+        <div class="budget-cost-row">
+          <span class="budget-cost-label">
+            Installation
+            <span class="budget-badge budget-badge--confirmed">Confirmed</span>
+          </span>
+          <span class="budget-cost-value">£450</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary (unchanged) -->
+    <div>
+      <div class="budget-section-kicker--totals" style="margin-bottom:0;">Summary</div>
+      <div class="budget-totals" style="margin-top:0;border-top:none;">
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">Artworks</span>
+          <span class="budget-totals-value">£10,200</span>
+        </div>
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">Framing</span>
+          <span class="budget-totals-value">£600</span>
+        </div>
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">Installation</span>
+          <span class="budget-totals-value">£450</span>
+        </div>
+        <div class="budget-totals-row">
+          <span class="budget-totals-label">VAT (20%)</span>
+          <span class="budget-totals-value">£2,250</span>
+        </div>
+        <div class="budget-grand-total">
+          <span class="budget-grand-total-label">Total inc. VAT</span>
+          <span class="budget-grand-total-value">£13,500</span>
+        </div>
+      </div>
+    </div>
+    </div><!-- /comparison-col-inner -->
+  </div>
+
+</div><!-- /comparison-wrapper -->
+
+<script>
+  function show(mode) {
+    const current = document.getElementById('col-current');
+    const proposed = document.getElementById('col-proposed');
+    const wrapper = document.getElementById('comparison-wrapper');
+    const btns = document.querySelectorAll('.toggle-btn');
+    btns.forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+
+    if (mode === 'both') {
+      wrapper.style.gridTemplateColumns = '1fr 1fr';
+      current.style.display = 'block';
+      proposed.style.display = 'block';
+    } else if (mode === 'current') {
+      wrapper.style.gridTemplateColumns = '1fr';
+      current.style.display = 'block';
+      proposed.style.display = 'none';
+    } else {
+      wrapper.style.gridTemplateColumns = '1fr';
+      current.style.display = 'none';
+      proposed.style.display = 'block';
+    }
+  }
+</script>
+</body>
+</html>

@@ -4,11 +4,20 @@ import ClientPortal from '@/components/client/ClientPortal'
 import ClientLinkExpired from '@/components/client/ClientLinkExpired'
 import type { ProjectBudget } from '@/types'
 import { labelOptions } from '@/lib/options'
-import { readLineItemFields, readOptionNoteFields } from '@/lib/lineItems'
+import { readOptionNoteFields } from '@/lib/lineItems'
+import { PLACEMENT_WITH_WORK_SELECT } from '@/lib/works'
+import { placementsToArtworks, placementImagePath } from '@/lib/workRows'
 
 interface Props {
   params: Promise<{ token: string }>
 }
+
+/**
+ * The placements on an option, each with its work joined in. Defined once
+ * because two queries below select it — the second is a fallback, and the
+ * two used to drift.
+ */
+const ARTWORKS_FRAGMENT = `artworks(${PLACEMENT_WITH_WORK_SELECT})`
 
 export default async function ClientPortalPage({ params }: Props) {
   const { token } = await params
@@ -58,30 +67,24 @@ export default async function ClientPortalPage({ params }: Props) {
     .select(`
       id, name, display_order, client_picked_option,
       elevation_options(
-        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
         skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
-        artworks(
-          id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, display_order, frame_type, frame_width_mm, brightness, fade, shadow_angle, shadow_blur, shadow_opacity,
-          note, note_shown_to_client, vat_applies, discount_status, discount_percent, sub_line_items
-        )
+        ${ARTWORKS_FRAGMENT}
       )
     `)
     .eq('project_id', projectId)
     .eq('visible_to_client', true)
     .order('display_order', { ascending: true })
 
-  // If query failed (e.g. brightness / skew / shadow columns not yet migrated), fall back without them
+  // If query failed (e.g. skew columns not yet migrated), fall back without them
   if (elevError || !elevations) {
     const { data: fallback } = await supabase
       .from('elevations')
       .select(`
         id, name, display_order, client_picked_option,
         elevation_options(
-          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
-          artworks(
-            id, name, image_path, w_cm, h_cm, x_fraction, y_fraction, visible, price, artist, display_order, frame_type, frame_width_mm,
-            note, note_shown_to_client, vat_applies, discount_status, discount_percent, sub_line_items
-          )
+          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+          ${ARTWORKS_FRAGMENT}
         )
       `)
       .eq('project_id', projectId)
@@ -93,21 +96,29 @@ export default async function ClientPortalPage({ params }: Props) {
   // Collect all image paths up-front, deduplicated across elevations/options
   const allOptions = (elevations ?? []).flatMap(elev => elev.elevation_options ?? [])
   const elevPaths = [...new Set(allOptions.map((o: any) => o.image_path).filter(Boolean))] as string[]
-  const artPaths = [...new Set(allOptions.flatMap((o: any) => (o.artworks ?? []).map((a: any) => a.image_path)).filter(Boolean))] as string[]
+  const artPaths = [...new Set(
+    allOptions
+      .flatMap(o => ((o as { artworks?: Array<Record<string, unknown>> }).artworks ?? []).map(a => placementImagePath(a)))
+      .filter(Boolean),
+  )] as string[]
 
   // Two batched createSignedUrls calls in parallel — service client, 72-hour expiry
   const [{ data: elevSigned }, { data: artSigned }] = await Promise.all([
     supabase.storage.from('elevation-images').createSignedUrls(elevPaths, 259200),
-    supabase.storage.from('artwork-images').createSignedUrls(artPaths, 259200),
+    artPaths.length
+      ? supabase.storage.from('artwork-images').createSignedUrls(artPaths, 259200)
+      : Promise.resolve({ data: [] as Array<{ path: string | null; signedUrl: string }> }),
   ])
   const elevMap = new Map(elevSigned?.map(e => [e.path, e.signedUrl]) ?? [])
   const artMap = new Map(artSigned?.map(e => [e.path, e.signedUrl]) ?? [])
+  const artUrlFor = (path: string | null) => (path ? artMap.get(path) ?? null : null)
 
   // Rehydrate the per-option / per-artwork structure using the maps
   const elevationsWithUrls = (elevations ?? []).map(elev => {
     const options = (elev.elevation_options ?? []).map((opt: {
       id: string; option: string; sort_order: number; created_at: string; name: string | null; image_path: string | null;
       orig_w: number; orig_h: number; scale_px_per_cm: number | null;
+      wall_w_cm: number | null; wall_h_cm: number | null; wall_color: string | null;
       approved: boolean; approved_at: string | null;
       foreground_masks?: any[] | null; client_notes?: string | null;
       skew_tl_x?: number | null; skew_tl_y?: number | null;
@@ -115,34 +126,10 @@ export default async function ClientPortalPage({ params }: Props) {
       skew_br_x?: number | null; skew_br_y?: number | null;
       skew_bl_x?: number | null; skew_bl_y?: number | null;
       skew_active?: boolean;
-      artworks: Array<{
-        id: string; name: string; image_path: string;
-        w_cm: number; h_cm: number; x_fraction: number; y_fraction: number;
-        visible: boolean; price: number; artist: string; display_order: number;
-      }>;
+      artworks: Array<Record<string, unknown>>;
     }) => {
       const imageUrl = opt.image_path ? (elevMap.get(opt.image_path) ?? null) : null
-
-      const artworks = (opt.artworks ?? [])
-        .sort((a, b) => a.display_order - b.display_order)
-        .map(art => ({
-          ...art,
-          imageUrl: artMap.get(art.image_path) ?? null,
-          xF: art.x_fraction,
-          yF: art.y_fraction,
-          wCm: art.w_cm,
-          hCm: art.h_cm,
-          artist: (art as any).artist ?? '',
-          frameType: (art as any).frame_type ?? null,
-          frameWidthMm: (art as any).frame_width_mm ?? null,
-          brightness: (art as any).brightness ?? 1,
-          fade: (art as any).fade ?? null,
-          shadowAngle: (art as any).shadow_angle ?? null,
-          shadowBlur: (art as any).shadow_blur ?? null,
-          shadowOpacity: (art as any).shadow_opacity ?? null,
-          ...readLineItemFields(art as unknown as Record<string, unknown>),
-        }))
-
+      const artworks = placementsToArtworks(opt.artworks, artUrlFor)
       return { ...opt, imageUrl, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
     })
     // Sorted and lettered by position, in the same one place the studio uses (src/lib/options.ts).

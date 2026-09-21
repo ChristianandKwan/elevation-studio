@@ -15,11 +15,23 @@ import { ArcSpinner, DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import FeedbackButton from '@/components/feedback/FeedbackButton'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
-import type { Artwork, ActivityLog } from '@/types'
+import type { Artwork, ActivityLog, Work } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
-import { toArtworkColumns } from '@/lib/lineItems'
-import type { BudgetArtworkPatch } from '@/components/budget/budgetCalc'
+import { toWorkColumns, placementsOf } from '@/lib/works'
+import type { WorkPatch, IndexElevation } from '@/lib/works'
+import { uploadWork, type WorkMeta } from '@/lib/workUpload'
+import IndexScreen from '@/components/index/IndexScreen'
+import NotesScreen from '@/components/notes/NotesScreen'
+import {
+  noteRow, notesOn, rowToNote,
+  type Note, type NoteAnchor, type NoteRow,
+} from '@/lib/notes'
+import {
+  artistKey, canRenameTo, findArtistByName, sortArtists, tidyArtistName,
+  type Artist,
+} from '@/lib/artists'
+import type { NotePatch } from '@/components/notes/NotePanel'
 
 interface DbElevation {
   id: string
@@ -38,9 +50,15 @@ interface DbElevation {
     name?: string | null
     imageUrl: string | null
     imagePath: string | null
+    /** The composited wall this option already caches for the dashboard. */
+    thumbnailUrl?: string | null
     orig_w: number
     orig_h: number
     scale_px_per_cm: number | null
+    /** Set instead of imagePath when this wall was entered as a measurement. */
+    wall_w_cm?: number | null
+    wall_h_cm?: number | null
+    wall_color?: string | null
     approved: boolean
     approved_at: string | null
     foreground_masks: unknown
@@ -67,11 +85,26 @@ interface Props {
   /** True when this project's most recent client link has passed its expiry. */
   clientLinkExpired: boolean
   activityLogs: ActivityLog[]
+  /** Every work in the project, placed or not. The index lists these. */
+  initialWorks: Work[]
+  /** Every note in the project, whatever it is anchored to. */
+  initialNotes: Note[]
+  /** Every artist the practice knows — the picker offers these. */
+  initialArtists: Artist[]
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
   'skew_tl_x' | 'skew_tl_y' | 'skew_tr_x' | 'skew_tr_y' |
   'skew_br_x' | 'skew_br_y' | 'skew_bl_x' | 'skew_bl_y'>
+
+/**
+ * Whether this option has a wall to hang anything on yet — a photograph the
+ * consultant uploaded, or a wall they typed the size of. The two are
+ * alternatives, never both.
+ */
+function optHasWall(o: { imagePath: string | null; wall_color?: string | null }): boolean {
+  return !!o.imagePath || !!o.wall_color
+}
 
 function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCorners | null {
   const { skew_tl_x: tlx, skew_tl_y: tly, skew_tr_x: trx, skew_tr_y: try_,
@@ -81,7 +114,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -98,7 +131,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [projectStatus, setProjectStatus] = useState(project.status)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
   const [budget, setBudget] = useState<number | null>(project.budget)
-  const [view, setView] = useState<'studio' | 'budget'>('studio')
+  const [view, setView] = useState<'studio' | 'index' | 'budget' | 'notes'>('studio')
+  const [notes, setNotes] = useState<Note[]>(initialNotes)
+  const [artists, setArtists] = useState<Artist[]>(initialArtists)
+  // Every work in the project, placed or not. The index reads this; the
+  // studio and budget read the copies folded into `elevations`.
+  const [works, setWorks] = useState<Work[]>(initialWorks)
+  const [showIndexAddModal, setShowIndexAddModal] = useState(false)
+  const [pendingDeleteWorkId, setPendingDeleteWorkId] = useState<string | null>(null)
   const [isPreviewingClientView, setIsPreviewingClientView] = useState(false)
   const [returningToDashboard, setReturningToDashboard] = useState(false)
   const [showIntroLoader, setShowIntroLoader] = useState(true)
@@ -134,7 +174,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           ...e,
           elevation_options: e.elevation_options.map(o => {
             if (o.option !== activeOption) return o
-            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH }
+            // A photograph replaces a plain wall outright, so the wall's own
+            // fields go with it — see the same clearing in uploadElevation.
+            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH, wall_w_cm: null, wall_h_cm: null, wall_color: null }
           }),
         }
       }))
@@ -151,7 +193,28 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         }
       }))
     },
-    onArtworksAdded: (newArtworks) => {
+    onBlankWallSet: ({ origW, origH, scalePxPerCm, wallWCm, wallHCm, wallColor }) => {
+      setElevations(prev => prev.map(e => {
+        if (e.id !== activeElevId) return e
+        return {
+          ...e,
+          elevation_options: e.elevation_options.map(o => {
+            if (o.option !== activeOption) return o
+            // imagePath and imageUrl are cleared deliberately: a wall is one
+            // thing or the other, and leaving a stale photograph behind would
+            // have the studio drawing colour while the client portal still
+            // drew the old picture.
+            return {
+              ...o, imagePath: null, imageUrl: null,
+              orig_w: origW, orig_h: origH, scale_px_per_cm: scalePxPerCm,
+              wall_w_cm: wallWCm, wall_h_cm: wallHCm, wall_color: wallColor,
+              foreground_masks: null,
+            }
+          }),
+        }
+      }))
+    },
+    onArtworksAdded: (newArtworks, newWorks) => {
       setElevations(prev => prev.map(e => {
         if (e.id !== activeElevId) return e
         return {
@@ -162,6 +225,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           }),
         }
       }))
+      if (newWorks.length > 0) setWorks(prev => [...prev, ...newWorks])
     },
     onArtworkDeleted: (id) => {
       setElevations(prev => prev.map(e => {
@@ -231,6 +295,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       origW: activeOptData.orig_w,
       origH: activeOptData.orig_h,
       scalePxPerCm: activeOptData.scale_px_per_cm,
+      wallWCm: activeOptData.wall_w_cm ?? null,
+      wallHCm: activeOptData.wall_h_cm ?? null,
+      wallColor: activeOptData.wall_color ?? null,
       artworks: activeOptData.artworks ?? [],
       foregroundMasks: (activeOptData.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
       skewCorners,
@@ -303,12 +370,23 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const currentArts = studio.state.artworks
     const currentMasks = studio.state.masks
     if (!activeElevId || !activeOption) return
-    setElevations(prev => prev.map(e => {
-      if (e.id !== activeElevId) return e
-      return {
-        ...e,
-        elevation_options: e.elevation_options.map(o => {
-          if (o.option !== activeOption) return o
+    // Name, artist, size and the money belong to the work, not to this
+    // placement of it — so every other placement of the same work, on any
+    // option or elevation, and the index's copy move with it.
+    const byWork = new Map(currentArts.map(a => [a.workId, a]))
+    const workFields = (cur: Artwork) => ({
+      name: cur.name, artist: cur.artist,
+      wCm: cur.wCm, hCm: cur.hCm,
+      price: cur.price,
+      note: cur.note, noteShownToClient: cur.noteShownToClient,
+      vatApplies: cur.vatApplies,
+      discountStatus: cur.discountStatus, discountPercent: cur.discountPercent,
+      subLineItems: cur.subLineItems,
+    })
+    setElevations(prev => prev.map(e => ({
+      ...e,
+      elevation_options: e.elevation_options.map(o => {
+        if (e.id === activeElevId && o.option === activeOption) {
           return {
             ...o,
             foreground_masks: currentMasks.length > 0 ? currentMasks : null,
@@ -317,87 +395,296 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               if (!cur) return a
               return {
                 ...a,
+                ...workFields(cur),
                 xF: cur.xF, yF: cur.yF,
-                name: cur.name,
-                wCm: cur.wCm, hCm: cur.hCm,
-                price: cur.price, artist: cur.artist,
                 frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
                 brightness: cur.brightness,
                 fade: cur.fade,
                 shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
                 visible: cur.visible,
-                note: cur.note,
-                noteShownToClient: cur.noteShownToClient,
-                vatApplies: cur.vatApplies,
-                discountStatus: cur.discountStatus,
-                discountPercent: cur.discountPercent,
-                subLineItems: cur.subLineItems,
               }
             }),
           }
-        }),
-      }
+        }
+        return {
+          ...o,
+          artworks: o.artworks.map(a => {
+            const cur = byWork.get(a.workId)
+            return cur ? { ...a, ...workFields(cur) } : a
+          }),
+        }
+      }),
+    })))
+    setWorks(prev => prev.map(w => {
+      const cur = byWork.get(w.id)
+      return cur ? { ...w, ...workFields(cur) } : w
     }))
   }, [studio.state.artworks, studio.state.masks, activeElevId, activeOption])
 
-  // ─── EDITING THE MONEY FROM THE BUDGET ────────────────────────────
-  // The budget owns price, VAT, discounts, sub items and notes. Writes go
-  // straight to the row by id, because the budget spans every elevation while
-  // the studio hook only knows the option currently open.
+  // ─── EDITING A WORK FROM THE BUDGET OR THE INDEX ─────────────────
+  // The money, the notes and the sourcing detail belong to the work, so a
+  // change is written to `works` by work id and shown on every placement of
+  // it. Writes go straight to the row because the budget and the index span
+  // every elevation while the studio hook only knows the option open.
   //
   // Debounced: the note fields fire on every keystroke, and one request per
   // character would be both wasteful and out of order.
 
   const WRITE_DELAY_MS = 600
-  const artworkPending = useRef(new Map<string, BudgetArtworkPatch>())
-  const artworkTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const workPending = useRef(new Map<string, WorkPatch>())
+  const workTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const notePending = useRef(new Map<string, { note: string; shownToClient: boolean }>())
   const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
-  const flushArtworkWrite = useCallback(async (artworkId: string) => {
-    const patch = artworkPending.current.get(artworkId)
-    artworkPending.current.delete(artworkId)
-    artworkTimers.current.delete(artworkId)
+  const flushWorkWrite = useCallback(async (workId: string) => {
+    const patch = workPending.current.get(workId)
+    workPending.current.delete(workId)
+    workTimers.current.delete(workId)
     if (!patch) return
 
     const supabase = createClient()
     const { data, error } = await supabase
-      .from('artworks')
-      .update(toArtworkColumns(patch))
-      .eq('id', artworkId)
+      .from('works')
+      .update(toWorkColumns(patch))
+      .eq('id', workId)
       .select('id')
 
     // `select` matters: without it an update that matches nothing, or that
     // row-level security filters out, comes back with no error at all.
     if (error) onStatus('Not saved: ' + error.message)
-    else if (!data || data.length === 0) onStatus('Not saved: this artwork could not be found')
+    else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
   }, [onStatus])
 
-  const handleArtworkChange = useCallback((artworkId: string, patch: BudgetArtworkPatch) => {
-    // Optimistic: the budget reads `elevations`, so it has to move now.
+  // ─── NOTES ───────────────────────────────────────────────────────
+  //
+  // All five anchors go through these three, so there is one place that
+  // knows how a note is written and one place that can get it wrong.
+
+  const NOTE_SELECT = `
+    id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
+    body, share, display_order, updated_at, note_works(work_id)
+  `
+
+  const insertNote = useCallback(async (
+    anchor: NoteAnchor, id: string | null, workIds: string[] = [],
+  ) => {
+    const supabase = createClient()
+    const payload = noteRow({
+      projectId: project.id,
+      anchor,
+      elevationId: anchor === 'elevation' ? id : null,
+      optionId:    anchor === 'option'    ? id : null,
+      workId:      anchor === 'work'      ? id : null,
+      artistId:    anchor === 'artist'    ? id : null,
+      body: '',
+      share: 'proposal',
+      displayOrder: notes.filter(n => n.anchor === anchor).length,
+    })
+    const { data, error } = await supabase.from('notes').insert(payload).select(NOTE_SELECT).single()
+    if (error || !data) { onStatus('Could not add the note — please try again'); return }
+
+    // The set of works a note covers is written with it rather than after,
+    // so a note picked out of several works is never briefly about none.
+    if (workIds.length > 0) {
+      const { error: setErr } = await supabase.from('note_works')
+        .insert(workIds.map(work_id => ({ note_id: data.id, work_id })))
+      if (setErr) onStatus('Note added, but not which works it is about')
+    }
+
+    const note = rowToNote(data as unknown as NoteRow)
+    setNotes(prev => [...prev, { ...note, workIds }])
+  }, [project.id, notes]) // eslint-disable-line
+
+  const addNote = useCallback((anchor: NoteAnchor, id: string | null) => {
+    void insertNote(anchor, id)
+  }, [insertNote])
+
+  /**
+   * A note about several works, made by picking them first.
+   *
+   * Works with no artist have no artist to hang it on — artist_key may not be
+   * empty — so it anchors to the project instead and is found through its
+   * work set. The Notes screen leaves those out of "The project" for the same
+   * reason it leaves work-set notes out of an artist's own section: they are
+   * read on the works they cover.
+   */
+  const addWorkSetNote = useCallback((artistId: string, workIds: string[]) => {
+    if (artistId) void insertNote('artist', artistId, workIds)
+    else void insertNote('project', null, workIds)
+  }, [insertNote])
+
+  const changeNote = useCallback(async (noteId: string, patch: NotePatch) => {
+    const before = notes.find(n => n.id === noteId)
+    if (!before) return
+    // Optimistic: a note is read back on more than one screen, and a textarea
+    // that snaps back while the write is in flight reads as a lost edit.
+    setNotes(prev => prev.map(n => (n.id === noteId ? { ...n, ...patch } : n)))
+
+    const supabase = createClient()
+    const { workIds, ...fields } = patch
+
+    if (Object.keys(fields).length > 0) {
+      const { error } = await supabase.from('notes')
+        .update({ ...fields, updated_at: new Date().toISOString() })
+        .eq('id', noteId)
+      if (error) {
+        setNotes(prev => prev.map(n => (n.id === noteId ? before : n)))
+        onStatus('Could not save the note — please try again')
+        return
+      }
+    }
+
+    // The narrowing set is a join table, so it is replaced rather than
+    // patched. Deleting first means a work removed from the set actually
+    // leaves it; an upsert alone would only ever add.
+    if (workIds) {
+      await supabase.from('note_works').delete().eq('note_id', noteId)
+      if (workIds.length > 0) {
+        const { error } = await supabase.from('note_works')
+          .insert(workIds.map(work_id => ({ note_id: noteId, work_id })))
+        if (error) {
+          setNotes(prev => prev.map(n => (n.id === noteId ? before : n)))
+          onStatus('Could not save which works that note is about')
+        }
+      }
+    }
+  }, [notes]) // eslint-disable-line
+
+  const deleteNote = useCallback(async (noteId: string) => {
+    const before = notes
+    setNotes(prev => prev.filter(n => n.id !== noteId))
+    const supabase = createClient()
+    const { error } = await supabase.from('notes').delete().eq('id', noteId)
+    if (error) { setNotes(before); onStatus('Could not remove the note — please try again') }
+  }, [notes]) // eslint-disable-line
+
+  // ─── ARTISTS ─────────────────────────────────────────────────────
+
+  /** The standing note about an artist, carried into every project. */
+  const changeArtistNote = useCallback(async (artistId: string, note: string) => {
+    const before = artists
+    setArtists(prev => prev.map(a => (a.id === artistId ? { ...a, note } : a)))
+    const supabase = createClient()
+    const { error } = await supabase.from('artist_profiles')
+      .update({ note, updated_at: new Date().toISOString() })
+      .eq('id', artistId)
+    if (error) { setArtists(before); onStatus('Could not save the artist note — please try again') }
+  }, [artists]) // eslint-disable-line
+
+  /**
+   * Give an artist a different name.
+   *
+   * One row changes, and their notes follow without being touched — they
+   * point at the row, not at what it is called. Every work showing the old
+   * spelling is brought into line in the same go, because `works.artist` is
+   * a copy kept for display and a copy that disagrees is worse than none.
+   */
+  const renameArtist = useCallback(async (artistId: string, rawName: string) => {
+    const name = tidyArtistName(rawName)
+    const check = canRenameTo(artists, artistId, name)
+    if (!check.ok) { onStatus(check.reason); return }
+
+    const beforeArtists = artists
+    const beforeWorks = works
+    setArtists(prev => sortArtists(prev.map(a => (
+      a.id === artistId ? { ...a, name, nameKey: artistKey(name) } : a
+    ))))
+    setWorks(prev => prev.map(w => (w.artistId === artistId ? { ...w, artist: name } : w)))
+
+    const supabase = createClient()
+    const { error } = await supabase.from('artist_profiles')
+      .update({ name, name_key: artistKey(name), updated_at: new Date().toISOString() })
+      .eq('id', artistId)
+    if (error) {
+      setArtists(beforeArtists); setWorks(beforeWorks)
+      onStatus('Could not rename that artist — please try again')
+      return
+    }
+    // Every work of theirs, in one statement rather than one per work.
+    const { error: wErr } = await supabase.from('works')
+      .update({ artist: name })
+      .eq('artist_id', artistId)
+    if (wErr) {
+      onStatus('Artist renamed, but some works still show the old spelling — reload to retry')
+      return
+    }
+    onStatus(`Renamed to ${name}`)
+  }, [artists, works]) // eslint-disable-line
+
+  /**
+   * Put a work with an artist, creating the artist if this is the first time
+   * the practice has seen them.
+   *
+   * Passing an empty name unattributes the work. Anything already known is
+   * reused whatever the capitals — which is the whole reason this does not
+   * simply write the text onto the work.
+   */
+  const setWorkArtist = useCallback(async (workId: string, rawName: string) => {
+    const name = tidyArtistName(rawName)
+    const supabase = createClient()
+
+    if (!name) {
+      setWorks(prev => prev.map(w => (w.id === workId ? { ...w, artist: '', artistId: null } : w)))
+      await supabase.from('works').update({ artist: '', artist_id: null }).eq('id', workId)
+      return
+    }
+
+    let artist = findArtistByName(artists, name)
+    if (!artist) {
+      const { data, error } = await supabase.from('artist_profiles')
+        .insert({ name, name_key: artistKey(name) })
+        .select('id, name, name_key, note')
+        .single()
+      if (error || !data) { onStatus('Could not add that artist — please try again'); return }
+      artist = { id: data.id, name: data.name, nameKey: data.name_key, note: data.note ?? '' }
+      setArtists(prev => sortArtists([...prev, artist!]))
+    }
+
+    const before = works
+    setWorks(prev => prev.map(w => (
+      w.id === workId ? { ...w, artist: artist!.name, artistId: artist!.id } : w
+    )))
+    const { error } = await supabase.from('works')
+      .update({ artist: artist.name, artist_id: artist.id })
+      .eq('id', workId)
+    if (error) { setWorks(before); onStatus('Could not save the artist — please try again') }
+  }, [artists, works]) // eslint-disable-line
+
+  const handleWorkChange = useCallback((workId: string, patch: WorkPatch) => {
+    // Optimistic: the budget and the index read these, so they have to move now.
+    setWorks(prev => prev.map(w => (w.id === workId ? { ...w, ...patch } : w)))
     setElevations(prev => prev.map(e => ({
       ...e,
       elevation_options: e.elevation_options.map(o => ({
         ...o,
-        artworks: o.artworks.map(a => (a.id === artworkId ? { ...a, ...patch } : a)),
+        artworks: o.artworks.map(a => (a.workId === workId ? { ...a, ...patch } : a)),
       })),
     })))
 
-    // If this work is in the option the studio has open, its copy has to agree,
+    // If this work is on the option the studio has open, its copy has to agree,
     // or the next autosave from a drag would write the old figures back.
-    if (studio.state.artworks.some(a => a.id === artworkId)) {
-      studio.patchArtworkLocal(artworkId, patch)
+    studio.state.artworks
+      .filter(a => a.workId === workId)
+      .forEach(a => studio.patchArtworkLocal(a.id, patch))
+
+    // Size is the one work-level field the wall actually draws, so a resize
+    // from the index or the budget makes every dashboard picture holding this
+    // work out of date. Nothing else here changes what the wall looks like.
+    if (patch.wCm !== undefined || patch.hCm !== undefined) {
+      elevations.forEach(e => e.elevation_options.forEach(o => {
+        if (o.artworks.some(a => a.workId === workId)) studio.scheduleThumbnailRegen(o.id)
+      }))
     }
 
-    const merged = { ...artworkPending.current.get(artworkId), ...patch }
-    artworkPending.current.set(artworkId, merged)
-    const existing = artworkTimers.current.get(artworkId)
+    const merged = { ...workPending.current.get(workId), ...patch }
+    workPending.current.set(workId, merged)
+    const existing = workTimers.current.get(workId)
     if (existing) clearTimeout(existing)
-    artworkTimers.current.set(
-      artworkId,
-      setTimeout(() => { void flushArtworkWrite(artworkId) }, WRITE_DELAY_MS),
+    workTimers.current.set(
+      workId,
+      setTimeout(() => { void flushWorkWrite(workId) }, WRITE_DELAY_MS),
     )
-  }, [studio, flushArtworkWrite])
+  }, [studio, flushWorkWrite, elevations])
 
   const flushNoteWrite = useCallback(async (optionRowId: string) => {
     const pending = notePending.current.get(optionRowId)
@@ -453,31 +740,37 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   // Leaving the page with a write still queued would lose it.
   useEffect(() => {
-    const artTimers = artworkTimers.current
+    const wTimers = workTimers.current
     const nTimers = noteTimers.current
     return () => {
-      artTimers.forEach(t => clearTimeout(t))
+      wTimers.forEach(t => clearTimeout(t))
       nTimers.forEach(t => clearTimeout(t))
-      artworkPending.current.forEach((_, id) => { void flushArtworkWrite(id) })
+      workPending.current.forEach((_, id) => { void flushWorkWrite(id) })
       notePending.current.forEach((_, id) => { void flushNoteWrite(id) })
     }
-  }, [flushArtworkWrite, flushNoteWrite])
+  }, [flushWorkWrite, flushNoteWrite])
 
   async function handleSwitch(elevId: string, opt: string) {
     // Before switching: bring the studio's live edits into `elevations`.
     syncStudioIntoElevations()
 
-    // If target option has no image but another option does, copy from the first with an image
+    // If the target option has no wall but another option does, copy from the
+    // first that has one. Options are alternatives for the same wall, so the
+    // wall itself is shared — which is as true of a plain wall as it is of a
+    // photograph, so both kinds are carried across here.
     const elev = elevations.find(e => e.id === elevId)
     const targetOpt = elev?.elevation_options.find(o => o.option === opt)
-    const sourceOpt = elev?.elevation_options.find(o => o.option !== opt && o.imagePath)
-    if (targetOpt && !targetOpt.imagePath && sourceOpt) {
+    const sourceOpt = elev?.elevation_options.find(o => o.option !== opt && optHasWall(o))
+    if (targetOpt && !optHasWall(targetOpt) && sourceOpt) {
       const supabase = createClient()
       await supabase.from('elevation_options').update({
         image_path: sourceOpt.imagePath,
         orig_w: sourceOpt.orig_w,
         orig_h: sourceOpt.orig_h,
         scale_px_per_cm: sourceOpt.scale_px_per_cm,
+        wall_w_cm: sourceOpt.wall_w_cm ?? null,
+        wall_h_cm: sourceOpt.wall_h_cm ?? null,
+        wall_color: sourceOpt.wall_color ?? null,
       }).eq('id', targetOpt.id)
       setElevations(prev => prev.map(e => {
         if (e.id !== elevId) return e
@@ -485,7 +778,15 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           ...e,
           elevation_options: e.elevation_options.map(o => {
             if (o.option !== opt) return o
-            return { ...o, imagePath: sourceOpt.imagePath, imageUrl: sourceOpt.imageUrl, orig_w: sourceOpt.orig_w, orig_h: sourceOpt.orig_h, scale_px_per_cm: sourceOpt.scale_px_per_cm }
+            return {
+              ...o,
+              imagePath: sourceOpt.imagePath, imageUrl: sourceOpt.imageUrl,
+              orig_w: sourceOpt.orig_w, orig_h: sourceOpt.orig_h,
+              scale_px_per_cm: sourceOpt.scale_px_per_cm,
+              wall_w_cm: sourceOpt.wall_w_cm ?? null,
+              wall_h_cm: sourceOpt.wall_h_cm ?? null,
+              wall_color: sourceOpt.wall_color ?? null,
+            }
           }),
         }
       }))
@@ -496,6 +797,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         origW: sourceOpt.orig_w,
         origH: sourceOpt.orig_h,
         scalePxPerCm: sourceOpt.scale_px_per_cm,
+        wallWCm: sourceOpt.wall_w_cm ?? null,
+        wallHCm: sourceOpt.wall_h_cm ?? null,
+        wallColor: sourceOpt.wall_color ?? null,
         artworks: targetOpt.artworks ?? [],
         foregroundMasks: (targetOpt.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
         skewCorners: buildSkewCorners(targetOpt),
@@ -529,18 +833,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         .eq('elevation_id', elevId)
 
       if (opts) {
-        // Fetch artwork image paths for all options
-        const optIds = opts.map(o => o.id)
-        const { data: arts } = await supabase
-          .from('artworks')
-          .select('image_path')
-          .in('option_id', optIds)
-
-        // Delete artwork images from storage
-        const artPaths = (arts ?? []).map((a: { image_path: string | null }) => a.image_path).filter(Boolean) as string[]
-        if (artPaths.length) {
-          await supabase.storage.from('artwork-images').remove(artPaths)
-        }
+        // Artwork images belong to works, which outlive the wall — only the
+        // wall photos go. The placements cascade with the option rows.
 
         // Delete elevation images from storage
         const elevPaths = opts.map(o => o.image_path).filter(Boolean) as string[]
@@ -602,7 +896,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null, visibleToClient: true,
       elevation_options: [
-        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
+        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, wall_w_cm: null, wall_h_cm: null, wall_color: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
@@ -619,13 +913,18 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (!nextKey) { onStatus('An elevation can have at most 26 options'); return }
     const sortOrder = nextSortOrder(elev.elevation_options)
     const newLabel = optionLabel(elev.elevation_options.length)
-    // Inherit image + foreground from the currently active option (same room = same base photo)
+    // Inherit the wall + foreground from the currently active option (same room
+    // = same wall). A plain wall is inherited on the same terms as a photograph:
+    // the options are alternative hangs of one wall either way.
     const srcOpt = elev.elevation_options.find(o => o.option === activeOption) ?? elev.elevation_options[0] ?? null
     const inheritedImagePath = srcOpt?.imagePath ?? null
     const inheritedMasks = (srcOpt?.foreground_masks as any[] | null) ?? null
     const inheritedOrigW = srcOpt?.orig_w ?? 0
     const inheritedOrigH = srcOpt?.orig_h ?? 0
     const inheritedScale = srcOpt?.scale_px_per_cm ?? null
+    const inheritedWallW = srcOpt?.wall_w_cm ?? null
+    const inheritedWallH = srcOpt?.wall_h_cm ?? null
+    const inheritedWallColor = srcOpt?.wall_color ?? null
     const supabase = createClient()
     const insertPayload: Record<string, unknown> = { elevation_id: elevId, option: nextKey, sort_order: sortOrder }
     if (inheritedImagePath) {
@@ -633,6 +932,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       insertPayload.orig_w = inheritedOrigW
       insertPayload.orig_h = inheritedOrigH
       insertPayload.scale_px_per_cm = inheritedScale
+    } else if (inheritedWallColor) {
+      insertPayload.orig_w = inheritedOrigW
+      insertPayload.orig_h = inheritedOrigH
+      insertPayload.scale_px_per_cm = inheritedScale
+      insertPayload.wall_w_cm = inheritedWallW
+      insertPayload.wall_h_cm = inheritedWallH
+      insertPayload.wall_color = inheritedWallColor
     }
     if (inheritedMasks && inheritedMasks.length > 0) {
       insertPayload.foreground_masks = inheritedMasks
@@ -652,6 +958,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           imagePath: inheritedImagePath,
           orig_w: inheritedOrigW, orig_h: inheritedOrigH,
           scale_px_per_cm: inheritedScale,
+          wall_w_cm: inheritedWallW, wall_h_cm: inheritedWallH, wall_color: inheritedWallColor,
           approved: false, approved_at: null,
           foreground_masks: inheritedMasks,
           clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [],
@@ -669,9 +976,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (!opt || !elev) return
     const removedTitle = optionTitleFor(elev.elevation_options, optKey)
     const supabase = createClient()
-    // Delete artwork images
-    const artPaths = opt.artworks.map(a => (a as any).imagePath).filter(Boolean) as string[]
-    if (artPaths.length) await supabase.storage.from('artwork-images').remove(artPaths)
+    // Artwork images belong to works and stay; the placements cascade with the row.
     // Delete the elevation image — but ONLY if no other option still points at
     // it. Options of the same elevation deliberately share one wall photo:
     // handleSwitch copies image_path into an empty option so both show the same
@@ -881,20 +1186,83 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     onStatus('Approval removed — client can make changes again')
   }
 
+  // ─── THE INDEX: ADDING AND DELETING WORKS ─────────────────────────
+
+  /** Best-effort, like the portal's logActivity: a failed log never fails the action. */
+  async function logActivity(type: string, text: string) {
+    const supabase = createClient()
+    const { error } = await supabase.from('activity_logs').insert({ project_id: project.id, type, text })
+    if (error) console.warn('activity log failed:', error.message)
+  }
+
+  /** Upload works into the project without hanging them anywhere. */
+  async function addWorksToIndex(files: File[], metas: WorkMeta[]) {
+    const results = await Promise.all(files.map((f, i) => uploadWork(project.id, f, metas[i] ?? metas[0], onStatus)))
+    const added = results.filter((w): w is Work => w !== null)
+    if (added.length === 0) return
+    setWorks(prev => [...prev, ...added])
+    setShowIndexAddModal(false)
+    onStatus(added.length === 1 ? `${added[0].name} added to the project` : `${added.length} works added to the project`)
+    void logActivity('work_added', `${PRACTICE_NAME} added ${added.map(w => w.name).join(', ')} to the project`)
+  }
+
+  /**
+   * Delete a work outright. Its placements go with it (the database
+   * cascades), so every wall it hung on is re-rendered, and its file goes.
+   */
+  async function deleteWork(workId: string) {
+    const work = works.find(w => w.id === workId)
+    if (!work) return
+    const supabase = createClient()
+    const { error } = await supabase.from('works').delete().eq('id', workId)
+    if (error) { onStatus('Could not delete this work: ' + error.message); return }
+    if (work.imagePath) await supabase.storage.from('artwork-images').remove([work.imagePath])
+
+    const affectedOptionIds = elevations.flatMap(e =>
+      e.elevation_options.filter(o => o.artworks.some(a => a.workId === workId)).map(o => o.id))
+    setElevations(prev => prev.map(e => ({
+      ...e,
+      elevation_options: e.elevation_options.map(o => ({ ...o, artworks: o.artworks.filter(a => a.workId !== workId) })),
+    })))
+    setWorks(prev => prev.filter(w => w.id !== workId))
+    studio.removePlacementsOfWork(workId)
+    affectedOptionIds.forEach(id => studio.scheduleThumbnailRegen(id))
+    onStatus(`${work.name} deleted`)
+    void logActivity('work_deleted', `${PRACTICE_NAME} deleted ${work.name} from the project`)
+  }
+
+  // What the index needs to say where each work hangs.
+  const indexElevations: IndexElevation[] = elevations.map(e => ({
+    id: e.id,
+    name: e.name,
+    options: labelOptions(e.elevation_options).map(o => ({ label: o.label, workIds: o.artworks.map(a => a.workId) })),
+  }))
+
   const { state } = studio
 
   // Widest right-hand button group: studio view with an approved option, which
   // adds the "✓ Approved" chip and the Unapprove button. See studio.css.
+  // Which set of buttons is on the right, which is what decides where the
+  // wordmark has to give way. See the table in studio.css.
+  const headerHasStudioActions = view === 'studio'
   const headerHasWideActions = view === 'studio' && !!activeOptData?.approved
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
+        // The studio has the sidebar down its left, so the wall's centre is
+        // half a sidebar right of the window's. The index and budget are
+        // full-width, and take the default of no shift.
+        '--status-bar-shift': view === 'studio' ? 'calc(var(--sidebar-w) / 2)' : '0px',
+      } as React.CSSProperties}
+    >
       {(returningToDashboard || showIntroLoader) && <DrawLoader variant="cream" />}
       {/* Header. The extra class tells the stylesheet that the right-hand group
           is in its widest form (the approved state adds a chip and an Unapprove
           button), so the centred "Elevation Studio" title can hide before it
           collides rather than overlapping the buttons. */}
-      <div className={`studio-header${headerHasWideActions ? ' studio-header--wide-actions' : ''}`}>
+      <div className={`studio-header${headerHasStudioActions ? ' studio-header--studio-actions' : ''}${headerHasWideActions ? ' studio-header--wide-actions' : ''}`}>
         <div className="studio-header-left">
           <button
             className="studio-back"
@@ -942,6 +1310,18 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               Studio
             </button>
             <button
+              className={`budget-view-tab${view === 'index' ? ' active' : ''}`}
+              onClick={() => { syncStudioIntoElevations(); setView('index'); setIsPreviewingClientView(false) }}
+            >
+              Index
+            </button>
+            <button
+              className={`budget-view-tab${view === 'notes' ? ' active' : ''}`}
+              onClick={() => { syncStudioIntoElevations(); setView('notes'); setIsPreviewingClientView(false) }}
+            >
+              Notes
+            </button>
+            <button
               className={`budget-view-tab${view === 'budget' ? ' active' : ''}`}
               onClick={() => { syncStudioIntoElevations(); setView('budget') }}
             >
@@ -959,11 +1339,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   </button>
                 </>
               )}
-              <button className="btn btn-sm btn-ghost" onClick={() => studio.setShowShareModal(true)}>
-                Share with client
+              {/* Short labels: the header is the most crowded row in the app
+                  and these two were the widest things in it. The full meaning
+                  moves to the tooltip rather than being lost. */}
+              <button className="btn btn-sm btn-ghost" title="Share this project with the client" onClick={() => studio.setShowShareModal(true)}>
+                Share
               </button>
-              <button className="btn btn-sm" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
-                Export PNG
+              <button className="btn btn-sm" title="Export this wall as a PNG image" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
+                Export
               </button>
             </>
           )}
@@ -1046,6 +1429,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             onUnapprove={handleConsultantUnapprove}
             budget={budget}
             onBudgetChange={updateBudget}
+            optionNotes={notesOn(notes, 'option', optionId)}
+            onAddNote={() => addNote('option', optionId)}
+            onChangeNote={changeNote}
+            onDeleteNote={deleteNote}
           />
           <StudioCanvas
             studio={studio}
@@ -1055,6 +1442,19 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           />
         </div>
       </div>
+
+      {/* Notes view — mounted only when active */}
+      {view === 'notes' && (
+        <NotesScreen
+          projectName={project.name}
+          clientName={project.client_name}
+          notes={notes}
+          elevations={elevations}
+          onAdd={addNote}
+          onChange={changeNote}
+          onDelete={deleteNote}
+        />
+      )}
 
       {/* Budget view — mounted only when active */}
       {view === 'budget' && (
@@ -1076,6 +1476,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               consultantNoteShownToClient: o.consultantNoteShownToClient ?? true,
               artworks: o.artworks.map(a => ({
                 id: a.id,
+                workId: a.workId,
                 name: a.name,
                 artist: a.artist ?? '',
                 wCm: a.wCm,
@@ -1096,8 +1497,30 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onPreviewToggle={() => setIsPreviewingClientView(v => !v)}
           clientBudget={budget}
           onClientBudgetChange={updateBudget}
-          onArtworkChange={handleArtworkChange}
+          onArtworkChange={handleWorkChange}
           onOptionNoteChange={handleOptionNoteChange}
+        />
+      )}
+
+      {/* Index view — every work in the project, placed or not. Mounted only when active. */}
+      {view === 'index' && (
+        <IndexScreen
+          projectName={project.name}
+          clientName={project.client_name}
+          works={works}
+          elevations={indexElevations}
+          onWorkChange={handleWorkChange}
+          onAddWork={() => setShowIndexAddModal(true)}
+          onDeleteWork={id => setPendingDeleteWorkId(id)}
+          notes={notes}
+          onAddNote={addNote}
+          onAddWorkSetNote={addWorkSetNote}
+          onChangeNote={changeNote}
+          onDeleteNote={deleteNote}
+          artists={artists}
+          onSetWorkArtist={setWorkArtist}
+          onRenameArtist={renameArtist}
+          onArtistNoteChange={changeArtistNote}
         />
       )}
 
@@ -1115,8 +1538,45 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onConfirm={studio.addArtworks}
           onCancel={() => studio.setShowArtModal(false)}
           wallPxPerCm={state.scale?.origPxPerCm ?? null}
+          availableWorks={works.filter(w => !(activeOptData?.artworks ?? []).some(a => a.workId === w.id))}
+          onPlaceExisting={studio.placeExistingWorks}
         />
       )}
+
+      {showIndexAddModal && (
+        <AddArtworkModal
+          mode="index"
+          onConfirm={addWorksToIndex}
+          onCancel={() => setShowIndexAddModal(false)}
+        />
+      )}
+
+      {/* Deleting a work from the project — from the index */}
+      {pendingDeleteWorkId && (() => {
+        const w = works.find(x => x.id === pendingDeleteWorkId)
+        const placed = w ? placementsOf(w.id, indexElevations) : []
+        return (
+          <div className="modal-bg open" onClick={() => setPendingDeleteWorkId(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Delete {w?.name ?? 'this work'} from the project?</div>
+              <div className="modal-sub" style={{ color: 'var(--red)' }}>
+                {placed.length > 0
+                  ? `It comes off ${placed.map(p => p.elevationName).join(' and ')} as well. This cannot be undone.`
+                  : 'Its image goes with it. This cannot be undone.'}
+              </div>
+              <div className="modal-footer">
+                <button className="btn" onClick={() => setPendingDeleteWorkId(null)}>Cancel</button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => { const id = pendingDeleteWorkId; setPendingDeleteWorkId(null); void deleteWork(id) }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {studio.showShareModal && (
         <ShareModal
@@ -1134,10 +1594,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         <div className="modal-bg open" onClick={() => setPendingDeleteIds(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-title">
-              Remove {pendingDeleteIds.size} artwork{pendingDeleteIds.size !== 1 ? 's' : ''}?
+              Take {pendingDeleteIds.size} artwork{pendingDeleteIds.size !== 1 ? 's' : ''} off this wall?
             </div>
-            <div className="modal-sub" style={{ color: 'var(--red)' }}>
-              This cannot be undone.
+            <div className="modal-sub">
+              {pendingDeleteIds.size !== 1 ? 'They stay' : 'It stays'} in the project — find
+              {pendingDeleteIds.size !== 1 ? ' them' : ' it'} in the Index to hang again or delete for good.
             </div>
             <div className="modal-footer">
               <button className="btn" onClick={() => setPendingDeleteIds(null)}>Cancel</button>

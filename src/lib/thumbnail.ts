@@ -18,17 +18,13 @@
 // components, route handlers, and server actions may import from here.
 import sharp from 'sharp'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { frameLipShadow, SHADOW_PUSH } from '@/lib/frameShadow'
+import {
+  lipShadow, FRAME_LIP_SPREAD, MOUNT_LIP_SPREAD, mountLipOpacity, SHADOW_PUSH,
+} from '@/lib/frameShadow'
+import { frameRgb, mountRgb, frameGrainSvg } from '@/lib/frames'
+import { wallRgb } from '@/lib/wall'
 
 const THUMB_W = 600 // max thumbnail width in pixels
-
-const FRAME_COLORS: Record<string, { r: number; g: number; b: number }> = {
-  black:       { r: 26,  g: 26,  b: 26  },
-  white:       { r: 240, g: 237, b: 232 },
-  'pale-wood': { r: 196, g: 168, b: 130 },
-  'mid-wood':  { r: 125, g: 90,  b: 53  },
-  'dark-wood': { r: 61,  g: 40,  b: 20  },
-}
 
 export interface ArtworkEntry {
   url: string
@@ -40,6 +36,11 @@ export interface ArtworkEntry {
   fade?: number | null
   frameType?: string | null
   frameWidthMm?: number | null
+  mountColor?: string | null
+  mountTopMm?: number | null
+  mountRightMm?: number | null
+  mountBottomMm?: number | null
+  mountLeftMm?: number | null
   shadowAngle?: number | null
   shadowBlur?: number | null
   shadowOpacity?: number | null
@@ -64,9 +65,10 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
  * `blur` is in thumbnail pixels.
  */
 async function frameLipShade(
-  w: number, h: number, angle: number | null | undefined, blur: number, opacity: number
+  w: number, h: number, angle: number | null | undefined, blur: number, opacity: number,
+  spread: number = FRAME_LIP_SPREAD,
 ): Promise<Buffer> {
-  const lip = frameLipShadow(angle, blur)
+  const lip = lipShadow(angle, blur, spread)
   // lip.blur is twice the standard deviation; 0.55 matches the wall shadow's sigma above.
   const sigma = Math.max(0.3, (lip.blur / 2) * 0.55)
   const ox = Math.round(lip.x)
@@ -91,11 +93,18 @@ async function frameLipShade(
 }
 
 /**
- * Pure compositing: takes signed URLs + artwork metadata and returns
- * a PNG `Buffer`. Returns `null` on failure (caller falls back).
+ * Where the wall itself comes from: a signed URL for a photograph, or a hex
+ * colour for a wall that was entered as a measurement and has no file.
+ */
+export type ElevSource = string | { color: string }
+
+/**
+ * Pure compositing: takes a wall source + signed artwork URLs + artwork
+ * metadata and returns a PNG `Buffer`. Returns `null` on failure (caller
+ * falls back).
  */
 export async function buildThumbnailBuffer(
-  elevUrl: string,
+  elev: ElevSource,
   artworks: ArtworkEntry[],
   origW: number,
   origH: number,
@@ -103,14 +112,25 @@ export async function buildThumbnailBuffer(
   foregroundMasks: MaskPolygon[] | null = null
 ): Promise<Buffer | null> {
   try {
-    const elevBuf = await fetchBuffer(elevUrl)
-    if (!elevBuf) return null
-
     const scale = THUMB_W / origW
     const thumbH = Math.round(origH * scale)
+
+    // A plain wall is created at thumbnail size rather than created large and
+    // resized — there is nothing in a flat colour that resampling could
+    // preserve, and a six-thousand-pixel rectangle to throw away is work for
+    // nothing on a path that already takes several seconds.
+    const elevBuf = typeof elev === 'string'
+      ? await fetchBuffer(elev)
+      : await sharp({
+          create: {
+            width: THUMB_W, height: thumbH, channels: 4,
+            background: { ...wallRgb(elev.color), alpha: 1 },
+          },
+        }).png().toBuffer()
+    if (!elevBuf) return null
     const hasMasks = (foregroundMasks ?? []).some(p => p && p.length >= 3)
 
-    // No scale or no artworks — plain elevation thumbnail (no foreground to apply)
+    // No scale or no artworks — bare wall thumbnail (no foreground to apply)
     if (!scalePxPerCm || artworks.length === 0) {
       return await sharp(elevBuf).resize(THUMB_W, thumbH, { fit: 'fill' }).png().toBuffer()
     }
@@ -138,6 +158,27 @@ export async function buildThumbnailBuffer(
         const framePxThumb = frameType && frameWidthMm && scalePxPerCm
           ? Math.max(1, Math.round((frameWidthMm / 10) * scalePxPerCm * scale))
           : 0
+
+        // The mount, in the same thumbnail pixels. A side is only drawn when
+        // a colour was chosen, matching mountOf on the wall.
+        const mmToPx = (mm: number | null | undefined) =>
+          art.mountColor && mm && scalePxPerCm
+            ? Math.max(0, Math.round((mm / 10) * scalePxPerCm * scale))
+            : 0
+        const mountPx = {
+          top:    mmToPx(art.mountTopMm),
+          right:  mmToPx(art.mountRightMm),
+          bottom: mmToPx(art.mountBottomMm),
+          left:   mmToPx(art.mountLeftMm),
+        }
+        const hasMount = mountPx.top + mountPx.right + mountPx.bottom + mountPx.left > 0
+        // Everything outside the artwork, per side.
+        const outerPx = {
+          top:    mountPx.top    + framePxThumb,
+          right:  mountPx.right  + framePxThumb,
+          bottom: mountPx.bottom + framePxThumb,
+          left:   mountPx.left   + framePxThumb,
+        }
 
         // ── 1. Drop shadow ───────────────────────────────────────────
         // Cast by the artwork and its frame together, as on the canvas.
@@ -167,7 +208,7 @@ export async function buildThumbnailBuffer(
               raw: { width: info.width, height: info.height, channels: 4 },
             })
               .extend({
-                top: framePxThumb, bottom: framePxThumb, left: framePxThumb, right: framePxThumb,
+                top: outerPx.top, bottom: outerPx.bottom, left: outerPx.left, right: outerPx.right,
                 background: { r: 0, g: 0, b: 0, alpha: shadowOpacity },
               })
               .png()
@@ -188,8 +229,8 @@ export async function buildThumbnailBuffer(
 
             // sharp can't place an overlay past the image's top-left corner,
             // so trim whatever of the shadow would fall off that edge.
-            const sLeft = left - framePxThumb - margin + oX
-            const sTop  = top  - framePxThumb - margin + oY
+            const sLeft = left - margin + oX
+            const sTop  = top  - margin + oY
             const meta = await sharp(shadowBuf).metadata()
             const cutX = Math.max(0, -sLeft)
             const cutY = Math.max(0, -sTop)
@@ -211,22 +252,50 @@ export async function buildThumbnailBuffer(
         // ── 2. Artwork (+ brightness, frame) ─────────────────────────
         let pipeline = sharp(artBuf).resize(artThumbW, artThumbH, { fit: 'fill' })
 
-        const brightness = art.brightness ?? 1
-        if (brightness !== 1) pipeline = pipeline.modulate({ brightness })
-
-        // The frame's lip shades the artwork itself, not just the wall.
-        if (framePxThumb > 0 && hasShadow) {
+        // The mount's own lip, onto the artwork. Card is 2–3mm thick against a
+        // frame's 10–20mm, so this is a sixth of the frame's shadow — enough
+        // to say the picture sits behind an opening, no more.
+        if (hasMount && hasShadow) {
           try {
-            const shade = await frameLipShade(artThumbW, artThumbH, art.shadowAngle, shadowBlur * scale, shadowOpacity)
+            const shade = await frameLipShade(
+              artThumbW, artThumbH, art.shadowAngle, shadowBlur * scale,
+              mountLipOpacity(shadowOpacity), MOUNT_LIP_SPREAD,
+            )
             pipeline = sharp(await pipeline.png().toBuffer()).composite([{ input: shade, blend: 'over' }])
           } catch { /* skip lip shadow */ }
         }
 
-        let frameOffset = 0
+        // The mount goes on first — it sits between the artwork and the frame.
+        // Materialised each time so the extend can't be planned ahead of the
+        // lip shadow's composite.
+        if (hasMount) {
+          const mc = mountRgb(art.mountColor)
+          pipeline = sharp(await pipeline.png().toBuffer()).extend({
+            top:    mountPx.top,
+            bottom: mountPx.bottom,
+            left:   mountPx.left,
+            right:  mountPx.right,
+            background: { r: mc.r, g: mc.g, b: mc.b, alpha: 1 },
+          })
+          artThumbW += mountPx.left + mountPx.right
+          artThumbH += mountPx.top + mountPx.bottom
+        }
+
+        // The frame's lip shades whatever sits immediately inside it — the
+        // mount when there is one, the artwork when there is not. This has to
+        // come after the mount is on, or the shadow lands on the picture and
+        // the card around it stays flat.
+        if (framePxThumb > 0 && hasShadow) {
+          try {
+            const shade = await frameLipShade(
+              artThumbW, artThumbH, art.shadowAngle, shadowBlur * scale, shadowOpacity,
+            )
+            pipeline = sharp(await pipeline.png().toBuffer()).composite([{ input: shade, blend: 'over' }])
+          } catch { /* skip lip shadow */ }
+        }
+
         if (framePxThumb > 0) {
-          const fc = FRAME_COLORS[frameType!] ?? FRAME_COLORS.black
-          // Materialised first so the extend can't be planned ahead of the
-          // lip shadow's composite.
+          const fc = frameRgb(frameType)
           pipeline = sharp(await pipeline.png().toBuffer()).extend({
             top:    framePxThumb,
             bottom: framePxThumb,
@@ -234,9 +303,29 @@ export async function buildThumbnailBuffer(
             right:  framePxThumb,
             background: { r: fc.r, g: fc.g, b: fc.b, alpha: 1 },
           })
-          frameOffset  = framePxThumb
-          artThumbW   += framePxThumb * 2
-          artThumbH   += framePxThumb * 2
+          artThumbW += framePxThumb * 2
+          artThumbH += framePxThumb * 2
+
+          // Grain over the frame, on the wood types only.
+          const grain = frameGrainSvg(
+            frameType, artThumbW, artThumbH, framePxThumb, (scalePxPerCm ?? 0) * scale,
+          )
+          if (grain) {
+            try {
+              pipeline = sharp(await pipeline.png().toBuffer())
+                .composite([{ input: Buffer.from(grain), blend: 'over' }])
+            } catch { /* a frame without grain is better than no artwork */ }
+          }
+        }
+
+        // Brightness last, over the artwork *and* its mount and frame.
+        // On the wall this is a CSS filter on the whole overlay, and the PNG
+        // export composes the tile before applying it — so dimming only the
+        // picture, as this used to, left the mount and frame at full strength.
+        // An ivory mount came back to the dashboard looking bright white.
+        const brightness = art.brightness ?? 1
+        if (brightness !== 1) {
+          pipeline = sharp(await pipeline.png().toBuffer()).modulate({ brightness })
         }
 
         // Fade: multiply alpha so the elevation behind shows through
@@ -262,10 +351,15 @@ export async function buildThumbnailBuffer(
           artFinal = await pipeline.png().toBuffer()
         }
 
+        // The overlay on the wall is content-box with its bands outside, so
+        // the artwork's recorded position is the *outer* corner of the mount
+        // and frame, not the corner of the artwork. This used to subtract the
+        // frame instead, centring it — invisible at a 20mm frame, but a 50mm
+        // mount would have put the dashboard 7cm of wall out from the studio.
         compositeInputs.push({
           input: artFinal,
-          left: Math.max(0, left - frameOffset),
-          top:  Math.max(0, top  - frameOffset),
+          left: Math.max(0, left),
+          top:  Math.max(0, top),
           blend: 'over',
         })
       } catch (err) {
@@ -319,21 +413,27 @@ interface OptionRowForThumbnail {
   orig_w: number
   orig_h: number
   scale_px_per_cm: number | null
+  /** Set instead of image_path when this wall was entered as a measurement. */
+  wall_color: string | null
   foreground_masks: unknown
   artworks: Array<{
-    image_path: string
     x_fraction: number
     y_fraction: number
-    w_cm: number
-    h_cm: number
     visible: boolean
     brightness: number | null
     fade: number | null
     frame_type: string | null
     frame_width_mm: number | null
+    mount_color: string | null
+    mount_top_mm: number | null
+    mount_right_mm: number | null
+    mount_bottom_mm: number | null
+    mount_left_mm: number | null
     shadow_angle: number | null
     shadow_blur: number | null
     shadow_opacity: number | null
+    /** The work this placement shows. Not null since 028; defended anyway. */
+    work: { image_path: string | null; w_cm: number; h_cm: number } | null
   }>
 }
 
@@ -344,11 +444,13 @@ async function fetchOptionForThumbnail(
   const { data } = await supabase
     .from('elevation_options')
     .select(`
-      id, image_path, orig_w, orig_h, scale_px_per_cm, foreground_masks,
+      id, image_path, orig_w, orig_h, scale_px_per_cm, wall_color, foreground_masks,
       artworks(
-        image_path, x_fraction, y_fraction, w_cm, h_cm, visible,
+        x_fraction, y_fraction, visible,
         brightness, fade, frame_type, frame_width_mm,
-        shadow_angle, shadow_blur, shadow_opacity
+        mount_color, mount_top_mm, mount_right_mm, mount_bottom_mm, mount_left_mm,
+        shadow_angle, shadow_blur, shadow_opacity,
+        work:works(image_path, w_cm, h_cm)
       )
     `)
     .eq('id', optionId)
@@ -365,8 +467,8 @@ async function fetchOptionForThumbnail(
  * `elevation_options` update both succeed regardless of RLS context.
  *
  * Returns `true` if a thumbnail was produced and persisted,
- * `false` if the option has no elevation image yet (no-op) or
- * compositing failed.
+ * `false` if the option has neither a photograph nor a plain wall yet
+ * (no-op) or compositing failed.
  */
 export async function regenerateOptionThumbnail(
   supabase: SupabaseClient,
@@ -374,31 +476,52 @@ export async function regenerateOptionThumbnail(
 ): Promise<boolean> {
   const row = await fetchOptionForThumbnail(supabase, optionId)
   if (!row) return false
-  if (!row.image_path || !row.orig_w || !row.orig_h) return false
+  if (!row.orig_w || !row.orig_h) return false
 
-  // Sign the elevation image
-  const { data: elevSigned } = await supabase.storage
-    .from('elevation-images')
-    .createSignedUrl(row.image_path, 3600)
-  if (!elevSigned?.signedUrl) return false
+  // Where the wall comes from. A photograph is signed; a wall entered as a
+  // measurement has no file, so its colour is passed straight through and
+  // nothing is fetched.
+  let elevSource: ElevSource
+  if (row.image_path) {
+    const { data: elevSigned } = await supabase.storage
+      .from('elevation-images')
+      .createSignedUrl(row.image_path, 3600)
+    if (!elevSigned?.signedUrl) return false
+    elevSource = elevSigned.signedUrl
+  } else if (row.wall_color) {
+    elevSource = { color: row.wall_color }
+  } else {
+    // Neither a photograph nor a wall: the option has not been set up yet.
+    return false
+  }
 
-  // Sign visible artworks in parallel
-  const visible = (row.artworks ?? []).filter(a => a.visible)
+  // Sign each visible artwork's image once — one work may hang on the wall
+  // more than once, and every placement of it shares the file.
+  const visible = (row.artworks ?? []).filter(a => a.visible && a.work?.image_path)
+  const paths = [...new Set(visible.map(a => a.work!.image_path as string))]
+  const urls = new Map<string, string>()
+  await Promise.all(paths.map(async path => {
+    const { data } = await supabase.storage.from('artwork-images').createSignedUrl(path, 3600)
+    if (data?.signedUrl) urls.set(path, data.signedUrl)
+  }))
   const signed = await Promise.all(
     visible.map(async (a): Promise<ArtworkEntry | null> => {
-      const { data } = await supabase.storage
-        .from('artwork-images')
-        .createSignedUrl(a.image_path, 3600)
-      if (!data?.signedUrl) return null
+      const url = urls.get(a.work!.image_path as string)
+      if (!url) return null
       return {
-        url:           data.signedUrl,
+        url,
         xF:            a.x_fraction,
         yF:            a.y_fraction,
-        wCm:           a.w_cm,
-        hCm:           a.h_cm,
+        wCm:           a.work!.w_cm,
+        hCm:           a.work!.h_cm,
         brightness:    a.brightness ?? 1,
         fade:          a.fade ?? null,
         frameType:     a.frame_type,
+        mountColor:    a.mount_color,
+        mountTopMm:    a.mount_top_mm,
+        mountRightMm:  a.mount_right_mm,
+        mountBottomMm: a.mount_bottom_mm,
+        mountLeftMm:   a.mount_left_mm,
         frameWidthMm:  a.frame_width_mm,
         shadowAngle:   a.shadow_angle,
         shadowBlur:    a.shadow_blur,
@@ -409,7 +532,7 @@ export async function regenerateOptionThumbnail(
   const artworkEntries: ArtworkEntry[] = signed.filter((a): a is ArtworkEntry => a !== null)
 
   const buf = await buildThumbnailBuffer(
-    elevSigned.signedUrl,
+    elevSource,
     artworkEntries,
     row.orig_w,
     row.orig_h,
