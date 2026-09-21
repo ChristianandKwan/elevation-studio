@@ -48,7 +48,7 @@ function art(partial: Partial<Artwork> = {}): Artwork {
 let seq = 0
 function work(partial: Partial<Work> = {}): Work {
   return {
-    id: `w${seq++}`, projectId: 'proj', artist: '', name: 'Untitled', imagePath: null, imageUrl: null,
+    id: `w${seq++}`, projectId: 'proj', artist: '', artistId: null, name: 'Untitled', imagePath: null, imageUrl: null,
     wCm: 40, hCm: 60, price: 0, vatApplies: true, discountStatus: 'none', discountPercent: null,
     subLineItems: [], note: '', noteShownToClient: true, year: null, medium: null, edition: null,
     source: null, status: 'proposed', consideredFor: null, displayOrder: 0,
@@ -138,6 +138,46 @@ describe('groupWorksByArtist', () => {
   })
   test('empty in, empty out', () => {
     assert.deepEqual(groupWorksByArtist([]), [])
+  })
+})
+
+describe('grouping by the artist row', () => {
+  test('one artist is one group however their name is spelled on each work', () => {
+    // Two spellings, one artist row. This is what 032 bought: they are one
+    // group because they are one artist, not because the spellings happened
+    // to match once lower-cased.
+    const g = groupWorksByArtist([
+      work({ artist: 'Paula Scher', artistId: 'a1', name: 'Berlin' }),
+      work({ artist: 'Paula scher', artistId: 'a1', name: 'London' }),
+    ])
+    assert.equal(g.length, 1)
+    assert.equal(g[0].artistId, 'a1')
+    assert.equal(g[0].works.length, 2)
+  })
+
+  test('two artists whose names differ stay apart', () => {
+    // 'Nathan' and 'Nathan I' may be two people; nothing here decides that.
+    const g = groupWorksByArtist([
+      work({ artist: 'Nathan', artistId: 'a1' }),
+      work({ artist: 'Nathan I', artistId: 'a2' }),
+    ])
+    assert.equal(g.length, 2)
+  })
+
+  test('works with no artist row still group by name', () => {
+    // Anything written before 032, or by code that has not set an id.
+    const g = groupWorksByArtist([
+      work({ artist: 'Agnes Martin', artistId: null }),
+      work({ artist: 'agnes martin', artistId: null }),
+    ])
+    assert.equal(g.length, 1)
+    assert.equal(g[0].artistId, null)
+  })
+
+  test('unattributed works carry no artist id', () => {
+    const g = groupWorksByArtist([work({ artist: '' })])
+    assert.equal(g[0].artistId, null)
+    assert.equal(g[0].label, 'Unattributed')
   })
 })
 

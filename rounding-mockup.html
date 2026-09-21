@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Corner rounding — consultant UI sample</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Karla:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #F7F4EF;
+    --warm-white: #FDFBF9;
+    --charcoal: #1C1A18;
+    --mid: #6E6862;
+    --accent: #8B6F47;
+    --accent-light: rgba(139,111,71,0.12);
+    --border: #E3DED7;
+    --green: #2E6B4F;
+    --green-light: rgba(46,107,79,0.1);
+    --red: #b94040;
+    --amber-light: rgba(139,111,71,0.12);
+
+    /* The one knob this mockup changes. Everything below derives from it. */
+    --r: 0px;                       /* large surfaces: cards, panels, modals */
+    --r-sm: 0px;                    /* controls: buttons, inputs, tabs */
+    --r-xs: 0px;                    /* badges, chips */
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Karla', sans-serif;
+    background: #EDE9E2;
+    color: var(--charcoal);
+    padding: 32px 28px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Mockup chrome (not part of the app) ───────────────── */
+  .page-head { max-width: 1180px; margin: 0 auto 26px; }
+  .page-title { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 400; letter-spacing: .01em; }
+  .page-lede { font-size: 13.5px; color: var(--mid); line-height: 1.65; max-width: 720px; margin-top: 8px; }
+
+  .controls {
+    position: sticky; top: 0; z-index: 50;
+    max-width: 1180px; margin: 0 auto 30px;
+    background: var(--charcoal); color: #fff;
+    padding: 14px 20px; border-radius: 8px;
+    display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+    box-shadow: 0 6px 24px rgba(0,0,0,.14);
+  }
+  .controls-label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: rgba(255,255,255,.5);
+  }
+  .radio-set { display: flex; gap: 6px; }
+  .radio-set button {
+    font-family: 'Karla', sans-serif; font-size: 12px; font-weight: 500;
+    padding: 6px 13px; border-radius: 5px; cursor: pointer;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); color: rgba(255,255,255,.72);
+    transition: all .15s;
+  }
+  .radio-set button:hover { background: rgba(255,255,255,.16); color: #fff; }
+  .radio-set button.on { background: #fff; color: var(--charcoal); border-color: #fff; }
+  .controls-note { font-size: 11.5px; color: rgba(255,255,255,.42); margin-left: auto; }
+
+  .section { max-width: 1180px; margin: 0 auto 40px; }
+  .section-label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--mid); margin-bottom: 4px;
+  }
+  .section-note { font-size: 12.5px; color: var(--mid); margin-bottom: 14px; line-height: 1.6; }
+  .frame {
+    background: var(--cream); border: 1px solid #DCD6CD; border-radius: 10px;
+    overflow: hidden;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Below: styles lifted from the real app, with border-radius
+     added via the --r variables. Everything else is verbatim.
+     ══════════════════════════════════════════════════════════ */
+
+  /* ── Shared buttons (globals.css) ──────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px;
+    font-family: 'Karla', sans-serif; font-size: 12px; font-weight: 500;
+    letter-spacing: .02em; cursor: pointer;
+    border: 1px solid var(--charcoal); background: transparent;
+    color: var(--charcoal); transition: all .15s; white-space: nowrap;
+    border-radius: var(--r-sm);
+  }
+  .btn:hover { background: var(--charcoal); color: #fff; }
+  .btn-primary { background: var(--charcoal); color: #fff; }
+  .btn-primary:hover { background: var(--accent); border-color: var(--accent); }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+  .btn-ghost { border-color: var(--border); color: var(--mid); }
+  .btn-ghost:hover { background: var(--cream); color: var(--charcoal); border-color: var(--charcoal); }
+  .btn-green { background: var(--green); border-color: var(--green); color: #fff; }
+
+  .field-label {
+    display: block; font-size: 10.5px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--mid); margin-bottom: 5px;
+  }
+  .field-input {
+    width: 100%; padding: 9px 11px; font-family: 'Karla'; font-size: 13px;
+    border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
+    outline: none; border-radius: var(--r-sm);
+  }
+
+  /* ── Dashboard (dashboard.css) ─────────────────────────── */
+  .dash-body { padding: 28px 32px 34px; background: var(--cream); }
+  .dash-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .dash-section-title { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 400; }
+  .dash-kicker {
+    font-size: 10.5px; font-weight: 500; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--mid); margin-bottom: 6px;
+  }
+  .dash-view-tabs { display: flex; gap: 4px; }
+  .dash-view-tab {
+    padding: 5px 14px; border-radius: 4px; font-size: 13px; font-weight: 500;
+    font-family: 'Karla', sans-serif;          /* ← the missing line in the real app */
+    background: transparent; border: 1px solid var(--border); color: var(--mid); cursor: pointer;
+  }
+  .dash-view-tab.active { background: var(--charcoal); color: #fff; border-color: var(--charcoal); }
+
+  .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 18px; }
+  .project-card {
+    background: var(--warm-white); border: 1px solid var(--border); cursor: pointer;
+    transition: border-color .15s, box-shadow .15s; position: relative;
+    border-radius: var(--r); overflow: hidden;
+  }
+  .project-card:hover { border-color: var(--accent); box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+  .project-card-thumb {
+    position: relative; height: 132px; background: #E5E0D8;
+    background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,.06) 1px, transparent 0);
+    background-size: 20px 20px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .project-card-thumb span {
+    font-family: 'Cormorant Garamond', serif; font-size: 62px; font-style: italic;
+    color: var(--charcoal); opacity: .1; line-height: 1; user-select: none;
+  }
+  .project-card-body { padding: 15px 17px; }
+  .project-card-name { font-weight: 500; font-size: 14px; margin-bottom: 3px; }
+  .project-card-client { font-size: 12px; color: var(--mid); }
+  .project-card-meta {
+    display: flex; align-items: center; gap: 10px; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--mid);
+  }
+  .project-card-badge {
+    padding: 2px 7px; font-size: 10px; font-weight: 500; letter-spacing: .04em;
+    text-transform: uppercase; display: inline-flex; align-items: center;
+    border-radius: var(--r-xs);
+  }
+  .badge-draft { background: var(--cream); color: var(--mid); border: 1px solid var(--border); }
+  .badge-sent { background: var(--amber-light); color: var(--accent); border: 1px solid rgba(139,111,71,.2); }
+  .badge-approved { background: var(--green-light); color: var(--green); border: 1px solid rgba(46,107,79,.2); }
+  .project-card-new {
+    border: 1px dashed var(--border); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; min-height: 212px;
+    cursor: pointer; border-radius: var(--r);
+  }
+  .project-card-new:hover { border-color: var(--accent); background: var(--accent-light); }
+  .project-card-new-icon { font-size: 28px; opacity: .25; }
+  .project-card-new-label { font-size: 12px; color: var(--mid); }
+
+  /* ── Studio header (studio.css) ────────────────────────── */
+  .studio-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 58px; border-bottom: 1px solid var(--border);
+    background: var(--warm-white); position: relative;
+  }
+  .studio-header-left { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
+  .studio-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .studio-back { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mid); background: none; border: none; font-family: 'Karla'; cursor: pointer; }
+  .studio-project-name { font-size: 12px; color: var(--mid); font-weight: 400; }
+  .studio-project-name strong { color: var(--charcoal); font-weight: 600; }
+  .header-app-title {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-family: 'Cormorant Garamond', serif; font-size: 15px; font-weight: 400;
+    letter-spacing: .12em; color: var(--charcoal); pointer-events: none; white-space: nowrap;
+  }
+  .budget-view-toggle { display: flex; gap: 2px; }
+  .budget-view-tab {
+    padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: 'Karla';
+    border: 1px solid var(--border); background: transparent; color: var(--mid);
+    cursor: pointer; transition: all .15s; border-radius: var(--r-sm);
+  }
+  .budget-view-tab.active { background: var(--charcoal); color: #fff; border-color: var(--charcoal); }
+
+  .studio-tab-bar {
+    display: flex; align-items: center; border-bottom: 1px solid var(--border);
+    background: var(--warm-white); padding: 0 20px;
+  }
+  .studio-tab {
+    padding: 10px 16px; font-size: 12px; font-weight: 500; cursor: pointer;
+    border: none; background: none; font-family: 'Karla'; color: var(--mid);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .studio-tab.active { color: var(--charcoal); border-bottom-color: var(--accent); }
+  .studio-tab-divider { width: 1px; height: 16px; background: var(--border); margin: 0 6px; }
+  .studio-tab-add {
+    padding: 8px 12px; font-size: 11px; cursor: pointer;
+    border: 1px dashed var(--border); background: var(--warm-white);
+    font-family: 'Karla'; color: var(--mid); margin-left: auto;
+    border-radius: var(--r-sm);
+  }
+
+  /* ── Budget: additional costs (budget.css) ─────────────── */
+  .budget-pane { padding: 24px 28px 30px; background: var(--cream); }
+  .budget-section-kicker {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--mid); margin-bottom: 10px;
+  }
+  .budget-costs-panel {
+    background: var(--warm-white); border: 1px solid var(--border); padding: 0 20px;
+    border-radius: var(--r);
+  }
+  .budget-cost-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 0; border-bottom: 1px solid var(--border); gap: 12px;
+  }
+  .budget-cost-row:last-child { border-bottom: none; }
+  .budget-cost-row--stacked { flex-direction: column; align-items: stretch; gap: 6px; }
+  .budget-cost-row-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .budget-cost-label { font-size: 13px; color: var(--charcoal); display: flex; align-items: center; gap: 8px; flex: 1; }
+  .budget-cost-value-group { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .budget-cost-value { font-size: 14px; font-weight: 500; }
+  .budget-cost-edit {
+    font-size: 11px; color: var(--accent); text-decoration: underline;
+    cursor: pointer; background: none; border: none; font-family: 'Karla'; padding: 0;
+  }
+  .budget-badge {
+    font-size: 10.5px; font-weight: 500; letter-spacing: .03em;
+    padding: 2px 7px; flex-shrink: 0; border-radius: var(--r-xs);
+  }
+  .budget-badge--indicative { background: rgba(139,111,71,.09); color: var(--accent); border: 1px solid rgba(139,111,71,.28); }
+  .budget-badge--confirmed { background: rgba(46,107,79,.08); color: var(--green); border: 1px solid rgba(46,107,79,.28); }
+  .budget-custom-item-controls { display: flex; gap: 18px; padding-bottom: 2px; }
+  .budget-toggle { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--mid); cursor: pointer; }
+  .budget-add-item {
+    display: flex; align-items: center; gap: 7px; width: 100%;
+    padding: 11px 0; font-family: 'Karla'; font-size: 12.5px; color: var(--accent);
+    background: none; border: none; cursor: pointer;
+  }
+  .budget-totals {
+    background: var(--warm-white); border: 1px solid var(--border);
+    padding: 18px 20px; margin-top: 18px; border-radius: var(--r);
+  }
+  .budget-totals-row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; }
+  .budget-totals-label { color: var(--mid); }
+  .budget-totals-value { font-weight: 500; }
+  .budget-grand-total {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 1px solid var(--border); margin-top: 10px; padding-top: 12px;
+  }
+  .budget-grand-total-label { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--mid); }
+  .budget-grand-total-value { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 500; }
+
+  /* ── Modal (globals.css) ───────────────────────────────── */
+  .modal-stage {
+    background: rgba(28,26,24,.55); padding: 34px; display: flex; justify-content: center;
+  }
+  .modal {
+    background: var(--warm-white); border: 1px solid var(--border);
+    padding: 28px; max-width: 420px; width: 100%; border-radius: var(--r);
+  }
+  .modal-title { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 400; margin-bottom: 4px; }
+  .modal-sub { font-size: 12px; color: var(--mid); margin-bottom: 20px; line-height: 1.5; }
+  .field { margin-bottom: 14px; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; padding: 20px; background: var(--cream); }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div class="page-title">Corner rounding — consultant UI</div>
+  <p class="page-lede">
+    The same real screens at four radii. Everything here is the app's own CSS; the only
+    change is a <code>border-radius</code> derived from one variable. The number on each
+    button below is the <strong>button</strong> radius — cards, panels and modals sit
+    2px rounder than the controls inside them, and badges 1px tighter, so nested corners
+    stay concentric. <strong>4px</strong> is what the Active / Archived tabs already use,
+    so that setting makes the rest of the app agree with the one control you liked.
+  </p>
+</div>
+
+<div class="controls">
+  <span class="controls-label">Button radius</span>
+  <div class="radio-set" id="radioSet">
+    <button data-r="0" class="on">0px — today</button>
+    <button data-r="3">3px — subtle</button>
+    <button data-r="4">4px — matches Active/Archived</button>
+    <button data-r="6">6px — soft</button>
+  </div>
+  <span class="controls-note">Panels sit 2px rounder than the controls inside them; badges 1px tighter.</span>
+</div>
+
+<!-- ── Dashboard ──────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-label">Dashboard</div>
+  <p class="section-note">Project cards, the New Project tile, status badges, and the Active / Archived tabs.</p>
+  <div class="frame">
+    <div class="dash-body">
+      <div class="dash-section-header">
+        <div>
+          <div class="dash-kicker">Projects</div>
+          <div class="dash-section-title">Your Work</div>
+        </div>
+        <div class="dash-view-tabs">
+          <button class="dash-view-tab active">Active</button>
+          <button class="dash-view-tab">Archived</button>
+        </div>
+      </div>
+      <div class="projects-grid">
+        <div class="project-card-new">
+          <div class="project-card-new-icon">+</div>
+          <div class="project-card-new-label">New Project</div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-thumb"><span>D</span></div>
+          <div class="project-card-body">
+            <div class="project-card-name">Demo Residence</div>
+            <div class="project-card-client">Mr &amp; Mrs Hamilton</div>
+            <div class="project-card-meta">
+              <span class="project-card-badge badge-approved">Client Final</span>
+              <span>4 elevations</span>
+            </div>
+          </div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-thumb"><span>C</span></div>
+          <div class="project-card-body">
+            <div class="project-card-name">Chelsea Residence – Living Room</div>
+            <div class="project-card-client">Ms Okonkwo</div>
+            <div class="project-card-meta">
+              <span class="project-card-badge badge-sent">2/3 picked</span>
+              <span>3 elevations</span>
+            </div>
+          </div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-thumb"><span>N</span></div>
+          <div class="project-card-body">
+            <div class="project-card-name">Notting Hill Townhouse</div>
+            <div class="project-card-client">Unnamed client</div>
+            <div class="project-card-meta">
+              <span class="project-card-badge badge-draft">Draft</span>
+              <span>1 elevation</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Studio header ──────────────────────────────────────── -->
+<div class="section">
+  <div class="section-label">Studio — header &amp; tab bar</div>
+  <p class="section-note">The Studio / Budget toggle, the header buttons, and the elevation tabs.</p>
+  <div class="frame">
+    <div class="studio-header">
+      <div class="studio-header-left">
+        <button class="studio-back">← Dashboard</button>
+        <div style="width:1px;height:16px;background:var(--border)"></div>
+        <div class="studio-project-name"><strong>Demo Residence</strong> — Mr &amp; Mrs Hamilton</div>
+      </div>
+      <div class="header-app-title">Elevation Studio</div>
+      <div class="studio-header-right">
+        <div class="budget-view-toggle">
+          <button class="budget-view-tab active">Studio</button>
+          <button class="budget-view-tab">Budget</button>
+        </div>
+        <button class="btn btn-sm btn-ghost">Share with client</button>
+        <button class="btn btn-sm">Export PNG</button>
+      </div>
+    </div>
+    <div class="studio-tab-bar">
+      <button class="studio-tab active">Living Room</button>
+      <div class="studio-tab-divider"></div>
+      <button class="studio-tab">North Wall</button>
+      <div class="studio-tab-divider"></div>
+      <button class="studio-tab">Stairwell</button>
+      <button class="studio-tab-add">+ Add elevation</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-sm btn-primary">Save</button>
+      <button class="btn btn-sm">Calibrate</button>
+      <button class="btn btn-sm btn-ghost">Unapprove</button>
+      <button class="btn btn-sm btn-green">✓ Approve</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Budget ─────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-label">Budget — additional costs &amp; summary</div>
+  <p class="section-note">The two panels with the most visible corners on the consultant side.</p>
+  <div class="frame">
+    <div class="budget-pane">
+      <div class="budget-section-kicker">Additional Costs</div>
+      <div class="budget-costs-panel">
+        <div class="budget-cost-row">
+          <div class="budget-cost-label">
+            <span>Installation</span>
+            <span class="budget-badge budget-badge--indicative">Indicative</span>
+          </div>
+          <div class="budget-cost-value-group">
+            <span class="budget-cost-value">£250 – £350</span>
+            <button class="budget-cost-edit">Confirm amount</button>
+          </div>
+        </div>
+        <div class="budget-cost-row budget-cost-row--stacked">
+          <div class="budget-cost-row-main">
+            <div class="budget-cost-label">Consultant fee</div>
+            <div class="budget-cost-value-group">
+              <span class="budget-cost-value">10% (£1,240 – £1,610)</span>
+              <button class="budget-cost-edit">Edit</button>
+            </div>
+          </div>
+          <div class="budget-custom-item-controls">
+            <label class="budget-toggle"><input type="checkbox" checked /><span>VAT applies</span></label>
+            <label class="budget-toggle"><input type="checkbox" /><span>Shown to client</span></label>
+          </div>
+        </div>
+        <div class="budget-cost-row budget-cost-row--stacked">
+          <div class="budget-cost-row-main">
+            <div class="budget-cost-label">Crating &amp; delivery</div>
+            <div class="budget-cost-value-group">
+              <span class="budget-cost-value">£480</span>
+              <button class="budget-cost-edit">Edit</button>
+            </div>
+          </div>
+          <div class="budget-custom-item-controls">
+            <label class="budget-toggle"><input type="checkbox" checked /><span>VAT applies</span></label>
+            <label class="budget-toggle"><input type="checkbox" checked /><span>Shown to client</span></label>
+          </div>
+        </div>
+        <button class="budget-add-item"><span>+</span> Add line item</button>
+      </div>
+
+      <div class="budget-totals">
+        <div class="budget-section-kicker">Summary</div>
+        <div class="budget-totals-row"><span class="budget-totals-label">Artworks</span><span class="budget-totals-value">£12,400 – £16,100</span></div>
+        <div class="budget-totals-row"><span class="budget-totals-label">Framing</span><span class="budget-totals-value">£1,850</span></div>
+        <div class="budget-totals-row"><span class="budget-totals-label">Installation</span><span class="budget-totals-value">£250 – £350</span></div>
+        <div class="budget-totals-row"><span class="budget-totals-label">Other</span><span class="budget-totals-value">£480</span></div>
+        <div class="budget-grand-total">
+          <span class="budget-grand-total-label">Total</span>
+          <span class="budget-grand-total-value">£16,220 – £20,380</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal ──────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-label">Modal — New Project</div>
+  <p class="section-note">Modals, form fields, and footer buttons.</p>
+  <div class="frame">
+    <div class="modal-stage">
+      <div class="modal">
+        <div class="modal-title">New Project</div>
+        <div class="modal-sub">Create a new art placement project for a client.</div>
+        <div class="field">
+          <label class="field-label">Project Name</label>
+          <input class="field-input" value="Chelsea Residence – Living Room" />
+        </div>
+        <div class="field">
+          <label class="field-label">Budget (£, exc VAT, optional)</label>
+          <input class="field-input" value="25000" />
+        </div>
+        <div class="modal-footer">
+          <button class="btn">Cancel</button>
+          <button class="btn btn-primary">Create Project</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const root = document.documentElement
+  const set = document.getElementById('radioSet')
+
+  // `r` is the *button* radius — the thing Tom has a reference for (the
+  // Active / Archived tabs are 4px). Containers sit proportionally rounder
+  // than the controls they hold, which is what keeps nested corners concentric
+  // instead of looking like a smaller square inside a rounder one.
+  function apply(r) {
+    r = Number(r)
+    const lg = r === 0 ? 0 : r + 2          // cards, panels, modals
+    const xs = r === 0 ? 0 : Math.max(2, r - 1)  // badges, chips
+    root.style.setProperty('--r', lg + 'px')
+    root.style.setProperty('--r-sm', r + 'px')
+    root.style.setProperty('--r-xs', xs + 'px')
+  }
+
+  set.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-r]')
+    if (!btn) return
+    set.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn))
+    apply(btn.dataset.r)
+  })
+</script>
+
+</body>
+</html>

@@ -22,6 +22,16 @@ import { toWorkColumns, placementsOf } from '@/lib/works'
 import type { WorkPatch, IndexElevation } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import IndexScreen from '@/components/index/IndexScreen'
+import NotesScreen from '@/components/notes/NotesScreen'
+import {
+  noteRow, notesOn, rowToNote,
+  type Note, type NoteAnchor, type NoteRow,
+} from '@/lib/notes'
+import {
+  artistKey, canRenameTo, findArtistByName, sortArtists, tidyArtistName,
+  type Artist,
+} from '@/lib/artists'
+import type { NotePatch } from '@/components/notes/NotePanel'
 
 interface DbElevation {
   id: string
@@ -40,6 +50,8 @@ interface DbElevation {
     name?: string | null
     imageUrl: string | null
     imagePath: string | null
+    /** The composited wall this option already caches for the dashboard. */
+    thumbnailUrl?: string | null
     orig_w: number
     orig_h: number
     scale_px_per_cm: number | null
@@ -75,8 +87,10 @@ interface Props {
   activityLogs: ActivityLog[]
   /** Every work in the project, placed or not. The index lists these. */
   initialWorks: Work[]
-  /** Artist names across the consultant's projects, for the pick-from-previous list. */
-  artistSuggestions: string[]
+  /** Every note in the project, whatever it is anchored to. */
+  initialNotes: Note[]
+  /** Every artist the practice knows — the picker offers these. */
+  initialArtists: Artist[]
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
@@ -100,7 +114,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, artistSuggestions }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -117,7 +131,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [projectStatus, setProjectStatus] = useState(project.status)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
   const [budget, setBudget] = useState<number | null>(project.budget)
-  const [view, setView] = useState<'studio' | 'index' | 'budget'>('studio')
+  const [view, setView] = useState<'studio' | 'index' | 'budget' | 'notes'>('studio')
+  const [notes, setNotes] = useState<Note[]>(initialNotes)
+  const [artists, setArtists] = useState<Artist[]>(initialArtists)
   // Every work in the project, placed or not. The index reads this; the
   // studio and budget read the copies folded into `elevations`.
   const [works, setWorks] = useState<Work[]>(initialWorks)
@@ -438,6 +454,201 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (error) onStatus('Not saved: ' + error.message)
     else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
   }, [onStatus])
+
+  // ─── NOTES ───────────────────────────────────────────────────────
+  //
+  // All five anchors go through these three, so there is one place that
+  // knows how a note is written and one place that can get it wrong.
+
+  const NOTE_SELECT = `
+    id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
+    body, share, display_order, updated_at, note_works(work_id)
+  `
+
+  const insertNote = useCallback(async (
+    anchor: NoteAnchor, id: string | null, workIds: string[] = [],
+  ) => {
+    const supabase = createClient()
+    const payload = noteRow({
+      projectId: project.id,
+      anchor,
+      elevationId: anchor === 'elevation' ? id : null,
+      optionId:    anchor === 'option'    ? id : null,
+      workId:      anchor === 'work'      ? id : null,
+      artistId:    anchor === 'artist'    ? id : null,
+      body: '',
+      share: 'proposal',
+      displayOrder: notes.filter(n => n.anchor === anchor).length,
+    })
+    const { data, error } = await supabase.from('notes').insert(payload).select(NOTE_SELECT).single()
+    if (error || !data) { onStatus('Could not add the note — please try again'); return }
+
+    // The set of works a note covers is written with it rather than after,
+    // so a note picked out of several works is never briefly about none.
+    if (workIds.length > 0) {
+      const { error: setErr } = await supabase.from('note_works')
+        .insert(workIds.map(work_id => ({ note_id: data.id, work_id })))
+      if (setErr) onStatus('Note added, but not which works it is about')
+    }
+
+    const note = rowToNote(data as unknown as NoteRow)
+    setNotes(prev => [...prev, { ...note, workIds }])
+  }, [project.id, notes]) // eslint-disable-line
+
+  const addNote = useCallback((anchor: NoteAnchor, id: string | null) => {
+    void insertNote(anchor, id)
+  }, [insertNote])
+
+  /**
+   * A note about several works, made by picking them first.
+   *
+   * Works with no artist have no artist to hang it on — artist_key may not be
+   * empty — so it anchors to the project instead and is found through its
+   * work set. The Notes screen leaves those out of "The project" for the same
+   * reason it leaves work-set notes out of an artist's own section: they are
+   * read on the works they cover.
+   */
+  const addWorkSetNote = useCallback((artistId: string, workIds: string[]) => {
+    if (artistId) void insertNote('artist', artistId, workIds)
+    else void insertNote('project', null, workIds)
+  }, [insertNote])
+
+  const changeNote = useCallback(async (noteId: string, patch: NotePatch) => {
+    const before = notes.find(n => n.id === noteId)
+    if (!before) return
+    // Optimistic: a note is read back on more than one screen, and a textarea
+    // that snaps back while the write is in flight reads as a lost edit.
+    setNotes(prev => prev.map(n => (n.id === noteId ? { ...n, ...patch } : n)))
+
+    const supabase = createClient()
+    const { workIds, ...fields } = patch
+
+    if (Object.keys(fields).length > 0) {
+      const { error } = await supabase.from('notes')
+        .update({ ...fields, updated_at: new Date().toISOString() })
+        .eq('id', noteId)
+      if (error) {
+        setNotes(prev => prev.map(n => (n.id === noteId ? before : n)))
+        onStatus('Could not save the note — please try again')
+        return
+      }
+    }
+
+    // The narrowing set is a join table, so it is replaced rather than
+    // patched. Deleting first means a work removed from the set actually
+    // leaves it; an upsert alone would only ever add.
+    if (workIds) {
+      await supabase.from('note_works').delete().eq('note_id', noteId)
+      if (workIds.length > 0) {
+        const { error } = await supabase.from('note_works')
+          .insert(workIds.map(work_id => ({ note_id: noteId, work_id })))
+        if (error) {
+          setNotes(prev => prev.map(n => (n.id === noteId ? before : n)))
+          onStatus('Could not save which works that note is about')
+        }
+      }
+    }
+  }, [notes]) // eslint-disable-line
+
+  const deleteNote = useCallback(async (noteId: string) => {
+    const before = notes
+    setNotes(prev => prev.filter(n => n.id !== noteId))
+    const supabase = createClient()
+    const { error } = await supabase.from('notes').delete().eq('id', noteId)
+    if (error) { setNotes(before); onStatus('Could not remove the note — please try again') }
+  }, [notes]) // eslint-disable-line
+
+  // ─── ARTISTS ─────────────────────────────────────────────────────
+
+  /** The standing note about an artist, carried into every project. */
+  const changeArtistNote = useCallback(async (artistId: string, note: string) => {
+    const before = artists
+    setArtists(prev => prev.map(a => (a.id === artistId ? { ...a, note } : a)))
+    const supabase = createClient()
+    const { error } = await supabase.from('artist_profiles')
+      .update({ note, updated_at: new Date().toISOString() })
+      .eq('id', artistId)
+    if (error) { setArtists(before); onStatus('Could not save the artist note — please try again') }
+  }, [artists]) // eslint-disable-line
+
+  /**
+   * Give an artist a different name.
+   *
+   * One row changes, and their notes follow without being touched — they
+   * point at the row, not at what it is called. Every work showing the old
+   * spelling is brought into line in the same go, because `works.artist` is
+   * a copy kept for display and a copy that disagrees is worse than none.
+   */
+  const renameArtist = useCallback(async (artistId: string, rawName: string) => {
+    const name = tidyArtistName(rawName)
+    const check = canRenameTo(artists, artistId, name)
+    if (!check.ok) { onStatus(check.reason); return }
+
+    const beforeArtists = artists
+    const beforeWorks = works
+    setArtists(prev => sortArtists(prev.map(a => (
+      a.id === artistId ? { ...a, name, nameKey: artistKey(name) } : a
+    ))))
+    setWorks(prev => prev.map(w => (w.artistId === artistId ? { ...w, artist: name } : w)))
+
+    const supabase = createClient()
+    const { error } = await supabase.from('artist_profiles')
+      .update({ name, name_key: artistKey(name), updated_at: new Date().toISOString() })
+      .eq('id', artistId)
+    if (error) {
+      setArtists(beforeArtists); setWorks(beforeWorks)
+      onStatus('Could not rename that artist — please try again')
+      return
+    }
+    // Every work of theirs, in one statement rather than one per work.
+    const { error: wErr } = await supabase.from('works')
+      .update({ artist: name })
+      .eq('artist_id', artistId)
+    if (wErr) {
+      onStatus('Artist renamed, but some works still show the old spelling — reload to retry')
+      return
+    }
+    onStatus(`Renamed to ${name}`)
+  }, [artists, works]) // eslint-disable-line
+
+  /**
+   * Put a work with an artist, creating the artist if this is the first time
+   * the practice has seen them.
+   *
+   * Passing an empty name unattributes the work. Anything already known is
+   * reused whatever the capitals — which is the whole reason this does not
+   * simply write the text onto the work.
+   */
+  const setWorkArtist = useCallback(async (workId: string, rawName: string) => {
+    const name = tidyArtistName(rawName)
+    const supabase = createClient()
+
+    if (!name) {
+      setWorks(prev => prev.map(w => (w.id === workId ? { ...w, artist: '', artistId: null } : w)))
+      await supabase.from('works').update({ artist: '', artist_id: null }).eq('id', workId)
+      return
+    }
+
+    let artist = findArtistByName(artists, name)
+    if (!artist) {
+      const { data, error } = await supabase.from('artist_profiles')
+        .insert({ name, name_key: artistKey(name) })
+        .select('id, name, name_key, note')
+        .single()
+      if (error || !data) { onStatus('Could not add that artist — please try again'); return }
+      artist = { id: data.id, name: data.name, nameKey: data.name_key, note: data.note ?? '' }
+      setArtists(prev => sortArtists([...prev, artist!]))
+    }
+
+    const before = works
+    setWorks(prev => prev.map(w => (
+      w.id === workId ? { ...w, artist: artist!.name, artistId: artist!.id } : w
+    )))
+    const { error } = await supabase.from('works')
+      .update({ artist: artist.name, artist_id: artist.id })
+      .eq('id', workId)
+    if (error) { setWorks(before); onStatus('Could not save the artist — please try again') }
+  }, [artists, works]) // eslint-disable-line
 
   const handleWorkChange = useCallback((workId: string, patch: WorkPatch) => {
     // Optimistic: the budget and the index read these, so they have to move now.
@@ -1031,6 +1242,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   // Widest right-hand button group: studio view with an approved option, which
   // adds the "✓ Approved" chip and the Unapprove button. See studio.css.
+  // Which set of buttons is on the right, which is what decides where the
+  // wordmark has to give way. See the table in studio.css.
+  const headerHasStudioActions = view === 'studio'
   const headerHasWideActions = view === 'studio' && !!activeOptData?.approved
 
   return (
@@ -1048,7 +1262,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           is in its widest form (the approved state adds a chip and an Unapprove
           button), so the centred "Elevation Studio" title can hide before it
           collides rather than overlapping the buttons. */}
-      <div className={`studio-header${headerHasWideActions ? ' studio-header--wide-actions' : ''}`}>
+      <div className={`studio-header${headerHasStudioActions ? ' studio-header--studio-actions' : ''}${headerHasWideActions ? ' studio-header--wide-actions' : ''}`}>
         <div className="studio-header-left">
           <button
             className="studio-back"
@@ -1102,6 +1316,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               Index
             </button>
             <button
+              className={`budget-view-tab${view === 'notes' ? ' active' : ''}`}
+              onClick={() => { syncStudioIntoElevations(); setView('notes'); setIsPreviewingClientView(false) }}
+            >
+              Notes
+            </button>
+            <button
               className={`budget-view-tab${view === 'budget' ? ' active' : ''}`}
               onClick={() => { syncStudioIntoElevations(); setView('budget') }}
             >
@@ -1119,11 +1339,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   </button>
                 </>
               )}
-              <button className="btn btn-sm btn-ghost" onClick={() => studio.setShowShareModal(true)}>
-                Share with client
+              {/* Short labels: the header is the most crowded row in the app
+                  and these two were the widest things in it. The full meaning
+                  moves to the tooltip rather than being lost. */}
+              <button className="btn btn-sm btn-ghost" title="Share this project with the client" onClick={() => studio.setShowShareModal(true)}>
+                Share
               </button>
-              <button className="btn btn-sm" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
-                Export PNG
+              <button className="btn btn-sm" title="Export this wall as a PNG image" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
+                Export
               </button>
             </>
           )}
@@ -1206,6 +1429,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             onUnapprove={handleConsultantUnapprove}
             budget={budget}
             onBudgetChange={updateBudget}
+            optionNotes={notesOn(notes, 'option', optionId)}
+            onAddNote={() => addNote('option', optionId)}
+            onChangeNote={changeNote}
+            onDeleteNote={deleteNote}
           />
           <StudioCanvas
             studio={studio}
@@ -1215,6 +1442,19 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           />
         </div>
       </div>
+
+      {/* Notes view — mounted only when active */}
+      {view === 'notes' && (
+        <NotesScreen
+          projectName={project.name}
+          clientName={project.client_name}
+          notes={notes}
+          elevations={elevations}
+          onAdd={addNote}
+          onChange={changeNote}
+          onDelete={deleteNote}
+        />
+      )}
 
       {/* Budget view — mounted only when active */}
       {view === 'budget' && (
@@ -1269,10 +1509,18 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           clientName={project.client_name}
           works={works}
           elevations={indexElevations}
-          artistSuggestions={artistSuggestions}
           onWorkChange={handleWorkChange}
           onAddWork={() => setShowIndexAddModal(true)}
           onDeleteWork={id => setPendingDeleteWorkId(id)}
+          notes={notes}
+          onAddNote={addNote}
+          onAddWorkSetNote={addWorkSetNote}
+          onChangeNote={changeNote}
+          onDeleteNote={deleteNote}
+          artists={artists}
+          onSetWorkArtist={setWorkArtist}
+          onRenameArtist={renameArtist}
+          onArtistNoteChange={changeArtistNote}
         />
       )}
 

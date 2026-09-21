@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Line Item Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ── DESIGN TOKENS (from src/app/globals.css) ─────────────── */
+  :root {
+    --cream: #F7F4EF;
+    --warm-white: #FDFBF9;
+    --charcoal: #1C1A18;
+    --mid: #6E6862;
+    --accent: #8B6F47;
+    --accent-light: rgba(139,111,71,0.12);
+    --border: #E3DED7;
+    --green: #2E6B4F;
+    --red: #b94040;
+    --radius: 6px;
+    --radius-sm: 4px;
+    --radius-xs: 3px;
+
+    /* Surround — the page the artboards sit on, not part of the app */
+    --surround: #EDE8E0;
+    --surround-ink: #4A443E;
+    --surround-line: #DCD5CB;
+  }
+  /* The app is cream-only, so artboards stay cream in both themes.
+     Only the surrounding page dims, the way a design canvas would. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --surround: #171513;
+      --surround-ink: #A9A199;
+      --surround-line: #2E2A26;
+    }
+  }
+  :root[data-theme="dark"] {
+    --surround: #171513;
+    --surround-ink: #A9A199;
+    --surround-line: #2E2A26;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  /* A flex or grid display beats the hidden attribute's default, so state it. */
+  [hidden] { display: none !important; }
+  body {
+    font-family: 'Karla', sans-serif;
+    background: var(--surround);
+    color: var(--surround-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── PAGE SHELL ───────────────────────────────────────────── */
+  .page { max-width: 880px; margin: 0 auto; padding: 48px 16px 96px; }
+  .page-kicker {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
+  }
+  .page-title {
+    font-family: 'Cormorant Garamond', serif; font-size: 40px; font-weight: 400;
+    line-height: 1.1; margin-bottom: 12px;
+  }
+  .page-intro { font-size: 14.5px; line-height: 1.6; max-width: 62ch; opacity: .85; }
+  .rule { height: 1px; background: var(--surround-line); margin-top: 44px; }
+
+  /* ── SECTION ──────────────────────────────────────────────── */
+  .section { margin-top: 44px; }
+  .section-num {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 8px;
+  }
+  .section-title {
+    font-family: 'Cormorant Garamond', serif; font-size: 27px; font-weight: 500;
+    margin-bottom: 10px; line-height: 1.2;
+  }
+  .section-lede { font-size: 14px; line-height: 1.6; max-width: 62ch; opacity: .85; margin-bottom: 22px; }
+
+  /* ── ARTBOARD — a framed slice of the real app ────────────── */
+  .artboard {
+    background: var(--cream); color: var(--charcoal);
+    border: 1px solid var(--surround-line);
+    border-radius: var(--radius); overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
+  }
+  .artboard-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 0 16px; min-height: 40px; background: var(--charcoal); flex-wrap: wrap;
+  }
+  .artboard-bar-label {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: rgba(255,255,255,.62); padding: 9px 0;
+  }
+  .artboard-bar-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+  .artboard-body { padding: 20px 18px 22px; }
+
+  /* Segmented switch on the dark bar (mirrors .budget-vat-toggle) */
+  .vt { display: flex; border: 1px solid rgba(255,255,255,0.2); border-radius: var(--radius-sm); overflow: hidden; }
+  .vt button {
+    padding: 4px 12px; font-family: 'Karla', sans-serif; font-size: 11px; font-weight: 500;
+    background: transparent; border: none; color: rgba(255,255,255,0.45);
+    cursor: pointer; transition: all .15s; letter-spacing: .02em;
+  }
+  .vt button[aria-pressed="true"] { background: rgba(255,255,255,0.15); color: #fff; }
+  .vt button:hover[aria-pressed="false"] { color: rgba(255,255,255,0.78); }
+
+  /* ── APP: option block ────────────────────────────────────── */
+  .budget-option-block { border: 1px solid var(--border); background: var(--warm-white); border-radius: var(--radius); overflow: hidden; }
+  .budget-option-block + .budget-option-block { margin-top: 12px; }
+  .budget-option-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 11px 14px; background: var(--cream); border-bottom: 1px solid var(--border);
+    gap: 8px; flex-wrap: wrap;
+  }
+  .budget-option-key { font-size: 13px; font-weight: 600; color: var(--charcoal); }
+  .budget-option-subtotal {
+    font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 500;
+    margin-left: auto; white-space: nowrap;
+  }
+  .budget-option-artworks { padding: 0 14px 12px; }
+
+  /* ── APP: artwork line ────────────────────────────────────── */
+  .budget-artwork-line { padding: 10px 0; border-top: 1px solid var(--border); }
+  .budget-artwork-line:first-child { border-top: none; }
+  .budget-artwork-main-row { display: flex; align-items: flex-start; gap: 10px; }
+  .budget-artwork-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .budget-artwork-title { font-family: 'Cormorant Garamond', serif; font-size: 15px; }
+  .budget-artwork-artist { font-size: 12px; color: var(--mid); }
+  .budget-artwork-dims { font-size: 12px; color: var(--mid); white-space: nowrap; flex-shrink: 0; }
+  .budget-artwork-price { font-size: 14px; font-weight: 500; text-align: right; min-width: 84px; flex-shrink: 0; white-space: nowrap; }
+  @media (max-width: 560px) { .budget-artwork-dims { display: none; } }
+
+  /* ── NEW: sub line item row (generalises the framing row) ─── */
+  .sub-row { display: flex; align-items: baseline; margin-top: 4px; gap: 8px; }
+  .sub-label {
+    flex: 1; font-size: 12px; color: var(--mid); padding-left: 14px;
+    position: relative; min-width: 0;
+  }
+  .sub-label::before {
+    content: ''; position: absolute; left: 3px; top: .55em;
+    width: 6px; height: 1px; background: var(--border);
+  }
+  .sub-cost { font-size: 12px; color: var(--mid); min-width: 84px; text-align: right; flex-shrink: 0; white-space: nowrap; }
+  .sub-tag { font-size: 10px; color: var(--mid); opacity: .75; margin-left: 5px; }
+
+  /* ── NEW: price with a discount applied ───────────────────── */
+  .price-was { color: var(--mid); text-decoration: line-through; font-weight: 400; margin-right: 7px; }
+  .tbc-note { font-size: 11.5px; color: var(--mid); font-style: italic; margin-top: 4px; padding-left: 14px; }
+
+  /* ── Badges ───────────────────────────────────────────────── */
+  .budget-badge {
+    display: inline-block; font-size: 10.5px; font-weight: 500; letter-spacing: .03em;
+    padding: 2px 7px; border-radius: var(--radius-xs); white-space: nowrap; vertical-align: middle;
+  }
+  .badge-discount { background: rgba(46,107,79,.08);  color: var(--green);    border: 1px solid rgba(46,107,79,.28); }
+  .badge-tbc      { background: rgba(110,104,98,.08); color: var(--mid);      border: 1px solid rgba(110,104,98,.26); }
+  .badge-novat    { background: rgba(28,26,24,.05);   color: var(--charcoal); border: 1px solid rgba(28,26,24,.18); }
+  .badge-internal { background: rgba(185,64,64,.07);  color: var(--red);      border: 1px solid rgba(185,64,64,.22); }
+  .badge-indic    { background: rgba(139,111,71,.09); color: var(--accent);   border: 1px solid rgba(139,111,71,.28); }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+
+  /* ── The note line ────────────────────────────────────────── */
+  .note-row {
+    display: flex; gap: 8px; align-items: flex-start;
+    margin-top: 7px; padding-left: 10px; border-left: 2px solid var(--accent-light);
+  }
+  .note-row--internal { border-left-color: rgba(185,64,64,.22); }
+  .note-text { font-size: 12px; line-height: 1.5; color: var(--mid); flex: 1; min-width: 0; }
+  .note-icon { flex-shrink: 0; margin-top: 2px; opacity: .55; }
+  .note-row--option {
+    margin: 0; padding: 10px 14px 11px; border-left: none;
+    background: rgba(139,111,71,.045); border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Consultant edit card ─────────────────────────────────── */
+  .edit-card { background: var(--warm-white); border: 1px solid var(--charcoal); border-radius: var(--radius); padding: 15px 16px 16px; }
+  .edit-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+  .edit-head-title { font-family: 'Cormorant Garamond', serif; font-size: 17px; }
+  .edit-head-sub { font-size: 12px; color: var(--mid); }
+
+  .field { margin-bottom: 15px; }
+  .field:last-child { margin-bottom: 0; }
+  .field-label {
+    display: block; font-size: 10.5px; font-weight: 500; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--mid); margin-bottom: 6px;
+  }
+  .field-area {
+    width: 100%; padding: 8px 10px; font-family: 'Karla', sans-serif; font-size: 13px;
+    border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
+    outline: none; border-radius: var(--radius-sm); resize: vertical; min-height: 62px; line-height: 1.5;
+  }
+  .field-area:focus { border-color: var(--charcoal); }
+  .field-hint { font-size: 11.5px; color: var(--mid); margin-top: 6px; line-height: 1.45; }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; flex-wrap: wrap; }
+  .seg button {
+    padding: 5px 11px; font-family: 'Karla', sans-serif; font-size: 11.5px; font-weight: 500;
+    background: transparent; border: none; color: var(--mid); cursor: pointer; transition: all .15s;
+  }
+  .seg button[aria-pressed="true"] { background: var(--charcoal); color: #fff; }
+  .seg button:hover[aria-pressed="false"] { color: var(--charcoal); }
+
+  .amount-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .amount-prefix { font-size: 13px; color: var(--mid); }
+  .amount-input {
+    padding: 6px 9px; font-family: 'Karla', sans-serif; font-size: 12.5px; width: 96px;
+    border: 1px solid var(--border); background: var(--cream); color: var(--charcoal);
+    outline: none; border-radius: var(--radius-xs);
+  }
+  .amount-input:focus { border-color: var(--charcoal); }
+  .amount-input--pct { width: 58px; }
+  .amount-input--label { width: 100%; max-width: 190px; }
+  .amount-result { font-size: 12.5px; color: var(--mid); }
+  .amount-result strong { color: var(--charcoal); font-weight: 500; }
+
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--mid); cursor: pointer; user-select: none; }
+  .toggle input { accent-color: var(--charcoal); cursor: pointer; }
+
+  /* Sub item editor rows */
+  .sub-edit {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 9px 0; border-top: 1px solid var(--border);
+  }
+  .sub-edit:first-of-type { border-top: none; }
+  .sub-edit-remove {
+    background: none; border: none; color: var(--mid); cursor: pointer; font-size: 15px;
+    line-height: 1; padding: 2px 5px; border-radius: var(--radius-xs); font-family: 'Karla', sans-serif;
+  }
+  .sub-edit-remove:hover { color: var(--red); background: rgba(185,64,64,.08); }
+  .sub-add-row { display: flex; gap: 14px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border); }
+  .link-btn {
+    font-size: 12px; color: var(--accent); background: none; border: none;
+    cursor: pointer; font-family: 'Karla', sans-serif; padding: 0; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .link-btn:hover { color: var(--charcoal); }
+  .empty-note { font-size: 12px; color: var(--mid); font-style: italic; padding: 4px 0 10px; }
+
+  /* Live preview strip */
+  .preview-wrap { margin-top: 18px; }
+  .preview-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--mid); margin-bottom: 9px; flex-wrap: wrap;
+  }
+  .seg--sm button { padding: 3px 9px; font-size: 10.5px; }
+  .preview-line { background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px 14px 10px; }
+  .preview-total {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--mid);
+  }
+  .preview-total strong { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 500; color: var(--charcoal); }
+
+  /* ── Totals panel ─────────────────────────────────────────── */
+  .budget-totals { background: var(--warm-white); border: 1px solid var(--border); padding: 18px 20px; border-radius: var(--radius); }
+  .budget-section-kicker {
+    font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--mid); padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .budget-totals-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .budget-totals-label { color: var(--mid); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .budget-totals-value { font-weight: 500; white-space: nowrap; }
+  .budget-grand-total {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    padding: 14px 0 0; border-top: 2px solid var(--charcoal); margin-top: 4px;
+  }
+  .budget-grand-total-label { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  .budget-grand-total-value { font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 500; white-space: nowrap; }
+  .budget-variance-row { font-size: 13.5px; font-weight: 500; padding: 5px 0; }
+  .budget-client-budget-section { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 4px; }
+  .budget-client-budget-row { border-bottom: none; padding-bottom: 4px; }
+
+  /* ── Caption ──────────────────────────────────────────────── */
+  .caption { font-size: 12.5px; line-height: 1.55; opacity: .8; margin-top: 11px; max-width: 64ch; }
+  .caption strong { font-weight: 700; opacity: 1; }
+
+  /* ── Closing ──────────────────────────────────────────────── */
+  .closing {
+    margin-top: 44px; padding: 20px 22px;
+    border: 1px solid var(--surround-line); border-radius: var(--radius);
+    background: rgba(139,111,71,.06);
+  }
+  .closing-title { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 500; margin-bottom: 8px; }
+  .closing p { font-size: 13.5px; line-height: 1.6; opacity: .88; }
+  .closing p + p { margin-top: 9px; }
+
+  @media (max-width: 560px) {
+    .page { padding: 32px 14px 72px; }
+    .page-title { font-size: 31px; }
+    .section-title { font-size: 23px; }
+    .artboard-body { padding: 16px 13px 18px; }
+    .budget-option-artworks { padding: 0 11px 10px; }
+    .budget-option-header { padding: 10px 11px; }
+    .amount-input--label { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="page-kicker">Elevation Studio · Budget</div>
+  <h1 class="page-title">Notes, discounts and<br>sub line items</h1>
+  <p class="page-intro">
+    Second pass, with your decisions folded in. Discounts are confirmed or to be confirmed,
+    with nothing in between. Import duty and framing are the same kind of thing. Every figure
+    on this page is checked by the test suite.
+  </p>
+
+  <div class="rule"></div>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-num">One</div>
+    <h2 class="section-title">The annotated line</h2>
+    <p class="section-lede">
+      The word Discount now appears on the badge, so a client reading the budget knows what
+      the struck-through figure means. Notes marked internal are the only thing the client
+      view removes. Switch between the two to see.
+    </p>
+
+    <div class="artboard">
+      <div class="artboard-bar">
+        <span class="artboard-bar-label">Budget</span>
+        <div class="artboard-bar-group">
+          <div class="vt" id="viewSwitch" role="group" aria-label="Choose view">
+            <button type="button" data-view="consultant" aria-pressed="true">Consultant</button>
+            <button type="button" data-view="client" aria-pressed="false">Client</button>
+          </div>
+        </div>
+      </div>
+      <div class="artboard-body">
+
+        <div class="budget-option-block">
+          <div class="budget-option-header">
+            <span class="budget-option-key">Dance Synced, blue &amp; green</span>
+            <span class="budget-option-subtotal">£16,000</span>
+          </div>
+          <div class="note-row note-row--option">
+            <span class="note-icon" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.5h10M3 6h10M3 9.5h7"/></svg>
+            </span>
+            <span class="note-text">
+              Cristea Roberts Gallery, London. Both works come in the artist's own sprayed white
+              aluminium frames, so no further framing is needed.
+            </span>
+          </div>
+          <div class="budget-option-artworks">
+
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">Dance Synced 5 (blue)</span>
+                  <span class="budget-artwork-artist">Julian Opie</span>
+                </div>
+                <span class="budget-artwork-dims">84.5 × 140 cm</span>
+                <span class="budget-artwork-price"><span class="price-was">£10,000</span>£8,000</span>
+              </div>
+              <div class="badge-row"><span class="budget-badge badge-discount">Discount 20%</span></div>
+            </div>
+
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">Dance Synced 2 (green)</span>
+                  <span class="budget-artwork-artist">Julian Opie</span>
+                </div>
+                <span class="budget-artwork-dims">84.5 × 140 cm</span>
+                <span class="budget-artwork-price"><span class="price-was">£10,000</span>£8,000</span>
+              </div>
+              <div class="badge-row"><span class="budget-badge badge-discount">Discount 20%</span></div>
+              <div class="note-row note-row--internal" data-internal>
+                <span class="note-icon" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="1.9"/><path d="M2 14 14 2"/></svg>
+                </span>
+                <span class="note-text">
+                  Rate reflects our standing relationship with the gallery. Don't put the reason in
+                  front of the client. <span class="budget-badge badge-internal" style="margin-left:4px">Internal</span>
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="budget-option-block">
+          <div class="budget-option-header">
+            <span class="budget-option-key">Female sprinters 1 &amp; 2</span>
+            <span class="budget-option-subtotal">£23,626</span>
+          </div>
+          <div class="budget-option-artworks">
+
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">Female sprinter 1</span>
+                  <span class="budget-artwork-artist">Julian Opie</span>
+                </div>
+                <span class="budget-artwork-dims">77.3 × 120 cm</span>
+                <span class="budget-artwork-price">£11,250</span>
+              </div>
+              <div class="sub-row">
+                <span class="sub-label">Import duty, 5%<span class="sub-tag">no VAT</span></span>
+                <span class="sub-cost">£563</span>
+              </div>
+              <div class="badge-row">
+                <span class="budget-badge badge-novat">No VAT</span>
+                <span class="budget-badge badge-tbc">Discount 10% TBC</span>
+              </div>
+              <p class="tbc-note">Not yet agreed. Would bring this work to £10,125.</p>
+              <div class="note-row">
+                <span class="note-icon" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.5h10M3 6h10M3 9.5h7"/></svg>
+                </span>
+                <span class="note-text">
+                  Gormley's Gallery, Dublin. No VAT is charged, but 5% import duty applies on
+                  shipping to London. We expect to negotiate on the pair.
+                </span>
+              </div>
+            </div>
+
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">Female sprinter 2</span>
+                  <span class="budget-artwork-artist">Julian Opie</span>
+                </div>
+                <span class="budget-artwork-dims">77.3 × 120 cm</span>
+                <span class="budget-artwork-price">£11,250</span>
+              </div>
+              <div class="sub-row">
+                <span class="sub-label">Import duty, 5%<span class="sub-tag">no VAT</span></span>
+                <span class="sub-cost">£563</span>
+              </div>
+              <div class="badge-row">
+                <span class="budget-badge badge-novat">No VAT</span>
+                <span class="budget-badge badge-tbc">Discount 10% TBC</span>
+              </div>
+              <p class="tbc-note">Not yet agreed. Would bring this work to £10,125.</p>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <p class="caption">
+      <strong>Two discount states, as you asked.</strong> Confirmed strikes the list price
+      through and moves the total. To be confirmed shows the rate being chased and what it
+      would come to, but moves no figure, so the client sees it without the budget promising
+      it. A consultant who doubts a discount will happen at all picks None. Nothing produces a
+      range any more, which makes the project total a great deal firmer than the first pass.
+    </p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-num">Two</div>
+    <h2 class="section-title">Framing becomes a sub line item</h2>
+    <p class="section-lede">
+      Framing is already a sub line item, it just has hard-coded plumbing: one per artwork, no
+      VAT switch, no note. Making it one kind among several costs nothing in the display and
+      gives duty, shipping and crating somewhere to live.
+    </p>
+
+    <div class="artboard">
+      <div class="artboard-bar"><span class="artboard-bar-label">Paula Scher · three works</span></div>
+      <div class="artboard-body">
+        <div class="budget-option-block">
+          <div class="budget-option-header">
+            <span class="budget-option-key">Berlin, World Trade Routes &amp; London</span>
+            <span class="budget-option-subtotal">£20,750</span>
+          </div>
+          <div class="budget-option-artworks">
+
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">Berlin</span>
+                  <span class="budget-artwork-artist">Paula Scher</span>
+                </div>
+                <span class="budget-artwork-dims">91.4 × 114.3 cm</span>
+                <span class="budget-artwork-price">£5,300</span>
+              </div>
+              <div class="sub-row">
+                <span class="sub-label">Framing</span>
+                <span class="sub-cost">£450</span>
+              </div>
+              <div class="note-row">
+                <span class="note-icon" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.5h10M3 6h10M3 9.5h7"/></svg>
+                </span>
+                <span class="note-text">
+                  USD 7,000 at today's exchange rate. Released from New York through Sims Reed
+                  Gallery, London. Framing cost is indicative.
+                </span>
+              </div>
+            </div>
+
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">World Trade Routes</span>
+                  <span class="budget-artwork-artist">Paula Scher</span>
+                </div>
+                <span class="budget-artwork-dims">89.5 × 152.4 cm</span>
+                <span class="budget-artwork-price">£8,800</span>
+              </div>
+              <div class="sub-row">
+                <span class="sub-label">Framing</span>
+                <span class="sub-cost">£600</span>
+              </div>
+              <div class="sub-row">
+                <span class="sub-label">Crating and delivery</span>
+                <span class="sub-cost">£300</span>
+              </div>
+            </div>
+
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">London</span>
+                  <span class="budget-artwork-artist">Paula Scher</span>
+                </div>
+                <span class="budget-artwork-dims">101.6 × 114.3 cm</span>
+                <span class="budget-artwork-price">£5,300</span>
+              </div>
+              <div class="sub-row">
+                <span class="sub-label">Already framed<span class="sub-tag">no cost</span></span>
+                <span class="sub-cost">—</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="caption">
+      <strong>Why this beats a project-level line.</strong> A cost attached to a work travels
+      with it. If the client picks a different option, duty on the Dublin sprinters leaves with
+      the sprinters. A project-level Import duty line would stay behind and quietly be wrong.
+      Keep a kind on each sub item so framing can still have its own row in the summary.
+    </p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-num">Three</div>
+    <h2 class="section-title">What it feels like to edit</h2>
+    <p class="section-lede">
+      This one is live. Change anything and the budget line below redraws, the way it would in
+      the app. You asked how it would feel without getting to a desk, so try it here first.
+    </p>
+
+    <div class="artboard">
+      <div class="artboard-bar"><span class="artboard-bar-label">Edit artwork · Female sprinter 1</span></div>
+      <div class="artboard-body">
+        <div class="edit-card">
+          <div class="edit-head">
+            <span class="edit-head-title">Female sprinter 1</span>
+            <span class="edit-head-sub">Julian Opie · 77.3 × 120 cm</span>
+          </div>
+
+          <div class="field">
+            <span class="field-label">Price</span>
+            <div class="amount-row">
+              <span class="amount-prefix">£</span>
+              <input class="amount-input" id="fPrice" type="number" min="0" step="50" value="11250" aria-label="Price excluding VAT">
+              <span class="amount-result">ex-VAT</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field-label">VAT</span>
+            <div class="seg" id="fVat" role="group" aria-label="VAT treatment">
+              <button type="button" data-v="1">Standard 20%</button>
+              <button type="button" data-v="0" aria-pressed="true">No VAT</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field-label">Discount</span>
+            <div class="seg" id="fDisc" role="group" aria-label="Discount status" style="margin-bottom:10px">
+              <button type="button" data-d="none">None</button>
+              <button type="button" data-d="confirmed">Confirmed</button>
+              <button type="button" data-d="tbc" aria-pressed="true">TBC</button>
+            </div>
+            <div class="amount-row" id="fDiscPctRow" hidden>
+              <input class="amount-input amount-input--pct" id="fDiscPct" type="number" min="0" max="100" value="10" aria-label="Discount percentage">
+              <span class="amount-prefix">%</span>
+              <span class="amount-result" id="fDiscResult"></span>
+            </div>
+            <p class="field-hint" id="fDiscHint"></p>
+          </div>
+
+          <div class="field">
+            <span class="field-label">Sub line items</span>
+            <div id="fSubs"></div>
+            <div class="sub-add-row">
+              <button class="link-btn" type="button" data-add="framing"><span>+</span> Framing</button>
+              <button class="link-btn" type="button" data-add="duty"><span>+</span> Import duty</button>
+              <button class="link-btn" type="button" data-add="other"><span>+</span> Something else</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field-label">Note</span>
+            <textarea class="field-area" id="fNote" aria-label="Note">Gormley's Gallery, Dublin. No VAT is charged, but 5% import duty applies on shipping to London. We expect to negotiate on the pair.</textarea>
+            <div style="margin-top:9px">
+              <label class="toggle"><input type="checkbox" id="fNoteShown" checked> Show this note to the client</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="preview-wrap">
+          <div class="preview-head">
+            <span>As it appears in the budget</span>
+            <div class="seg seg--sm" id="fViewVat" role="group" aria-label="Budget VAT view">
+              <button type="button" data-m="0" aria-pressed="true">ex-VAT</button>
+              <button type="button" data-m="1">inc. VAT</button>
+            </div>
+          </div>
+          <div class="preview-line">
+            <div class="budget-artwork-line" id="pvLine"></div>
+            <div class="preview-total">
+              <span>Line total</span>
+              <strong id="pvTotal">£0</strong>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <p class="caption">
+      <strong>Everything the consultant sets is in one panel.</strong> Price, VAT, discount,
+      sub items and the note, with no trip to a separate Additional costs section. Try putting
+      the discount on Confirmed and watching the struck-through price appear.
+    </p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-num">Four</div>
+    <h2 class="section-title">How the total responds</h2>
+    <p class="section-lede">
+      The Dance Synced pair and the two Dublin sprinters, in the inc-VAT view. Sixty tests in
+      the suite hold these figures in place.
+    </p>
+
+    <div class="artboard">
+      <div class="artboard-bar"><span class="artboard-bar-label">Summary · inc. VAT</span></div>
+      <div class="artboard-body">
+        <div class="budget-totals">
+          <div class="budget-section-kicker">Summary</div>
+          <div>
+            <div class="budget-totals-row">
+              <span class="budget-totals-label">Artworks</span>
+              <span class="budget-totals-value">£19,200</span>
+            </div>
+            <div class="budget-totals-row">
+              <span class="budget-totals-label">Artworks<span class="budget-badge badge-novat">No VAT</span></span>
+              <span class="budget-totals-value">£22,500</span>
+            </div>
+            <div class="budget-totals-row">
+              <span class="budget-totals-label">Import duty<span class="budget-badge badge-novat">No VAT</span></span>
+              <span class="budget-totals-value">£1,126</span>
+            </div>
+            <div class="budget-totals-row">
+              <span class="budget-totals-label">Installation<span class="budget-badge badge-indic">Indicative</span></span>
+              <span class="budget-totals-value">£150 – £222</span>
+            </div>
+            <div class="budget-totals-row">
+              <span class="budget-totals-label">Consultant fee, 15%</span>
+              <span class="budget-totals-value">£6,930</span>
+            </div>
+          </div>
+          <div class="budget-grand-total">
+            <span class="budget-grand-total-label">Total inc. VAT</span>
+            <span class="budget-grand-total-value">£49,906 – £49,978</span>
+          </div>
+          <div class="budget-client-budget-section">
+            <div class="budget-totals-row budget-client-budget-row">
+              <span class="budget-totals-label">Client budget</span>
+              <span class="budget-totals-value">£50,000</span>
+            </div>
+            <div class="budget-variance-row" style="color: var(--green)">Best case: £94 under budget</div>
+            <div class="budget-variance-row" style="color: var(--green)">Worst case: £22 under budget</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="caption">
+      <strong>The spread is now seventy-two pounds.</strong> Installation is the only indicative
+      figure left, so that is the whole range. In the first pass, expected discounts pushed it
+      into the thousands. Dropping that state was the right call.
+    </p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-num">Five</div>
+    <h2 class="section-title">Pair pricing, left alone</h2>
+    <p class="section-lede">
+      Agreed and unchanged from the first pass. One figure and one note on the option, which
+      already stands for a chosen combination.
+    </p>
+
+    <div class="artboard">
+      <div class="artboard-bar"><span class="artboard-bar-label">Option header</span></div>
+      <div class="artboard-body">
+        <div class="budget-option-block">
+          <div class="budget-option-header">
+            <span class="budget-option-key">Men sprinters 1 &amp; 3</span>
+            <span class="budget-option-subtotal">£21,250</span>
+          </div>
+          <div class="note-row note-row--option">
+            <span class="note-icon" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.5h10M3 6h10M3 9.5h7"/></svg>
+            </span>
+            <span class="note-text">
+              <span class="budget-badge badge-discount" style="margin-right:5px">Discount 15% on the pair</span>
+              £25,000 before discount. The rate applies to two works bought together. Sprinters 1
+              and 3 give the greater sense of distance between the figures.
+            </span>
+          </div>
+          <div class="budget-option-artworks">
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">Men sprinter 1</span>
+                  <span class="budget-artwork-artist">Julian Opie</span>
+                </div>
+                <span class="budget-artwork-dims">77.3 × 120 cm</span>
+                <span class="budget-artwork-price">£12,500</span>
+              </div>
+            </div>
+            <div class="budget-artwork-line">
+              <div class="budget-artwork-main-row">
+                <div class="budget-artwork-identity">
+                  <span class="budget-artwork-title">Men sprinter 3</span>
+                  <span class="budget-artwork-artist">Julian Opie</span>
+                </div>
+                <span class="budget-artwork-dims">77.3 × 120 cm</span>
+                <span class="budget-artwork-price">£12,500</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <div class="closing">
+    <div class="closing-title">What the sub-item change costs</div>
+    <p>
+      Framing is special-cased in eight files. The artwork carries a framed or requires-framing
+      status and a cost, the studio sidebar has a two-button toggle for it, and the summary has
+      its own Framing row. Turning it into a sub item touches all of that.
+    </p>
+    <p>
+      It is worth doing in two steps. Add sub items first and copy the existing framing values
+      into one, while the old columns stay put and keep working. Then, once the app reads only
+      the sub item, a second migration drops the old columns. Additive first, destructive last,
+      which is the order the deploy guide already asks for.
+    </p>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Section one: consultant / client view ────────────────────────────────
+  var viewSwitch = document.getElementById('viewSwitch');
+  if (viewSwitch) {
+    viewSwitch.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-view]');
+      if (!btn) return;
+      var board = viewSwitch.closest('.artboard');
+      viewSwitch.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+      // The client sees discounts now. Internal notes are all that is hidden.
+      var client = btn.dataset.view === 'client';
+      board.querySelectorAll('[data-internal]').forEach(function (el) {
+        el.style.display = client ? 'none' : '';
+      });
+    });
+  }
+
+  // ── Section three: the live editor ───────────────────────────────────────
+  var pvLine = document.getElementById('pvLine');
+  if (!pvLine) return;
+
+  var nextId = 1;
+  var state = {
+    price: 11250,
+    vatApplies: false,
+    discount: 'tbc',        // none | confirmed | tbc
+    discountPct: 10,
+    vatMode: false,         // the budget's own ex/inc VAT view
+    note: document.getElementById('fNote').value,
+    noteShown: true,
+    subs: [
+      { id: nextId++, label: 'Import duty', mode: 'pct', pct: 5, amount: 0, vatApplies: false }
+    ]
+  };
+
+  var PRESETS = {
+    framing: { label: 'Framing', mode: 'fixed', amount: 450, pct: 0, vatApplies: true },
+    duty:    { label: 'Import duty', mode: 'pct', amount: 0, pct: 5, vatApplies: false },
+    other:   { label: '', mode: 'fixed', amount: 0, pct: 0, vatApplies: true }
+  };
+
+  function gbp(n) { return '£' + Math.round(n).toLocaleString('en-GB'); }
+
+  /** Net price after a confirmed discount. TBC and none leave it alone. */
+  function netPrice() {
+    if (state.discount !== 'confirmed') return state.price;
+    return Math.round(state.price * (1 - state.discountPct / 100));
+  }
+
+  /** A sub item's own amount. Percentages are of the net parent price. */
+  function subAmount(s) {
+    return s.mode === 'pct' ? Math.round(netPrice() * (s.pct / 100)) : Math.round(s.amount);
+  }
+
+  /** Apply the budget's VAT view to one figure. */
+  function show(value, vatApplies) {
+    return state.vatMode && vatApplies ? Math.round(value * 1.2) : Math.round(value);
+  }
+
+  function lineTotal() {
+    return state.subs.reduce(
+      function (sum, s) { return sum + show(subAmount(s), s.vatApplies); },
+      show(netPrice(), state.vatApplies)
+    );
+  }
+
+  // ── Render: the editable sub item rows ───────────────────────────────────
+  function renderSubs() {
+    var wrap = document.getElementById('fSubs');
+    wrap.innerHTML = '';
+
+    if (state.subs.length === 0) {
+      var empty = document.createElement('p');
+      empty.className = 'empty-note';
+      empty.textContent = 'No sub items on this work.';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    state.subs.forEach(function (s) {
+      var row = document.createElement('div');
+      row.className = 'sub-edit';
+
+      var name = document.createElement('input');
+      name.className = 'amount-input amount-input--label';
+      name.type = 'text';
+      name.value = s.label;
+      name.placeholder = 'Label';
+      name.setAttribute('aria-label', 'Sub item label');
+      name.addEventListener('input', function () { s.label = name.value; renderPreview(); });
+      row.appendChild(name);
+
+      if (s.mode === 'pct') {
+        var pct = document.createElement('input');
+        pct.className = 'amount-input amount-input--pct';
+        pct.type = 'number'; pct.min = '0'; pct.max = '100'; pct.value = String(s.pct);
+        pct.setAttribute('aria-label', 'Percentage of the work');
+        pct.addEventListener('input', function () {
+          s.pct = Number(pct.value) || 0; renderSubs(); renderPreview();
+        });
+        row.appendChild(pct);
+        var pctSign = document.createElement('span');
+        pctSign.className = 'amount-prefix'; pctSign.textContent = '%';
+        row.appendChild(pctSign);
+        var resolved = document.createElement('span');
+        resolved.className = 'amount-result';
+        resolved.textContent = gbp(subAmount(s));
+        row.appendChild(resolved);
+      } else {
+        var pound = document.createElement('span');
+        pound.className = 'amount-prefix'; pound.textContent = '£';
+        row.appendChild(pound);
+        var amt = document.createElement('input');
+        amt.className = 'amount-input'; amt.type = 'number'; amt.min = '0'; amt.step = '50';
+        amt.value = String(s.amount);
+        amt.setAttribute('aria-label', 'Sub item amount');
+        amt.addEventListener('input', function () {
+          s.amount = Number(amt.value) || 0; renderPreview();
+        });
+        row.appendChild(amt);
+      }
+
+      var vatLabel = document.createElement('label');
+      vatLabel.className = 'toggle';
+      var vatBox = document.createElement('input');
+      vatBox.type = 'checkbox'; vatBox.checked = s.vatApplies;
+      vatBox.addEventListener('change', function () {
+        s.vatApplies = vatBox.checked; renderPreview();
+      });
+      vatLabel.appendChild(vatBox);
+      vatLabel.appendChild(document.createTextNode('VAT'));
+      row.appendChild(vatLabel);
+
+      var del = document.createElement('button');
+      del.className = 'sub-edit-remove'; del.type = 'button';
+      del.textContent = '×';
+      del.setAttribute('aria-label', 'Remove ' + (s.label || 'sub item'));
+      del.addEventListener('click', function () {
+        state.subs = state.subs.filter(function (x) { return x.id !== s.id; });
+        renderSubs(); renderPreview();
+      });
+      row.appendChild(del);
+
+      wrap.appendChild(row);
+    });
+  }
+
+  // ── Render: the budget line as it would appear ───────────────────────────
+  function renderPreview() {
+    var net = netPrice();
+    var discounted = state.discount === 'confirmed' && net !== state.price;
+
+    var priceHtml = discounted
+      ? '<span class="price-was">' + gbp(show(state.price, state.vatApplies)) + '</span>' +
+        gbp(show(net, state.vatApplies))
+      : gbp(show(net, state.vatApplies));
+
+    var html =
+      '<div class="budget-artwork-main-row">' +
+        '<div class="budget-artwork-identity">' +
+          '<span class="budget-artwork-title">Female sprinter 1</span>' +
+          '<span class="budget-artwork-artist">Julian Opie</span>' +
+        '</div>' +
+        '<span class="budget-artwork-dims">77.3 × 120 cm</span>' +
+        '<span class="budget-artwork-price">' + priceHtml + '</span>' +
+      '</div>';
+
+    state.subs.forEach(function (s) {
+      var amount = subAmount(s);
+      var label = s.label || 'Untitled';
+      if (s.mode === 'pct') label += ', ' + s.pct + '%';
+      var tag = (!s.vatApplies && state.vatMode) ? '<span class="sub-tag">no VAT</span>' : '';
+      html +=
+        '<div class="sub-row">' +
+          '<span class="sub-label">' + esc(label) + tag + '</span>' +
+          '<span class="sub-cost">' + gbp(show(amount, s.vatApplies)) + '</span>' +
+        '</div>';
+    });
+
+    var badges = [];
+    if (!state.vatApplies) badges.push('<span class="budget-badge badge-novat">No VAT</span>');
+    if (state.discount === 'confirmed') {
+      badges.push('<span class="budget-badge badge-discount">Discount ' + state.discountPct + '%</span>');
+    } else if (state.discount === 'tbc') {
+      badges.push('<span class="budget-badge badge-tbc">Discount ' + state.discountPct + '% TBC</span>');
+    }
+    if (badges.length) html += '<div class="badge-row">' + badges.join('') + '</div>';
+
+    if (state.note.trim()) {
+      var internal = !state.noteShown;
+      html +=
+        '<div class="note-row' + (internal ? ' note-row--internal' : '') + '">' +
+          '<span class="note-icon" aria-hidden="true">' +
+            '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">' +
+            (internal
+              ? '<path d="M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="1.9"/><path d="M2 14 14 2"/>'
+              : '<path d="M3 2.5h10M3 6h10M3 9.5h7"/>') +
+            '</svg>' +
+          '</span>' +
+          '<span class="note-text">' + esc(state.note) +
+            (internal ? ' <span class="budget-badge badge-internal">Internal</span>' : '') +
+          '</span>' +
+        '</div>';
+    }
+
+    pvLine.innerHTML = html;
+    document.getElementById('pvTotal').textContent = gbp(lineTotal());
+
+    // Discount controls
+    var pctRow = document.getElementById('fDiscPctRow');
+    pctRow.hidden = state.discount === 'none';
+    var wouldBe = Math.round(state.price * (1 - state.discountPct / 100));
+    document.getElementById('fDiscResult').innerHTML = state.discount === 'confirmed'
+      ? 'nets to <strong>' + gbp(net) + '</strong> ex-VAT'
+      : 'would be <strong>' + gbp(wouldBe) + '</strong> ex-VAT';
+
+    var hints = {
+      none: 'No discount on this work.',
+      confirmed: 'Agreed with the gallery. The struck-through price is shown to the client so the saving is visible.',
+      tbc: 'Shown to the client with the rate you are chasing, but no total moves until it is agreed. Pick None if you doubt it will happen at all.'
+    };
+    document.getElementById('fDiscHint').textContent = hints[state.discount];
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function bindSeg(id, handler) {
+    var el = document.getElementById(id);
+    el.addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      el.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+      handler(btn);
+    });
+  }
+
+  bindSeg('fVat', function (btn) { state.vatApplies = btn.dataset.v === '1'; renderPreview(); });
+  bindSeg('fDisc', function (btn) { state.discount = btn.dataset.d; renderSubs(); renderPreview(); });
+  bindSeg('fViewVat', function (btn) { state.vatMode = btn.dataset.m === '1'; renderSubs(); renderPreview(); });
+
+  document.getElementById('fPrice').addEventListener('input', function (e) {
+    state.price = Number(e.target.value) || 0; renderSubs(); renderPreview();
+  });
+  document.getElementById('fDiscPct').addEventListener('input', function (e) {
+    state.discountPct = Number(e.target.value) || 0; renderSubs(); renderPreview();
+  });
+  document.getElementById('fNote').addEventListener('input', function (e) {
+    state.note = e.target.value; renderPreview();
+  });
+  document.getElementById('fNoteShown').addEventListener('change', function (e) {
+    state.noteShown = e.target.checked; renderPreview();
+  });
+
+  document.querySelectorAll('[data-add]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var p = PRESETS[btn.dataset.add];
+      state.subs.push({
+        id: nextId++, label: p.label, mode: p.mode,
+        amount: p.amount, pct: p.pct, vatApplies: p.vatApplies
+      });
+      renderSubs(); renderPreview();
+    });
+  });
+
+  renderSubs();
+  renderPreview();
+})();
+</script>
+</body>
+</html>

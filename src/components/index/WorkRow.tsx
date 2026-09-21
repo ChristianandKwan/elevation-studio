@@ -13,10 +13,16 @@ interface Props {
   placed: Placed[]
   elevations: IndexElevation[]
   onChange: (patch: WorkPatch) => void
+  /**
+   * The artist goes through its own path, not through `onChange`: naming an
+   * artist may create one, and a work points at the row rather than carrying
+   * the text.
+   */
+  onArtistChange: (name: string) => void
   onDelete: () => void
 }
 
-export default function WorkRow({ work, placed, elevations, onChange, onDelete }: Props) {
+export default function WorkRow({ work, placed, elevations, onChange, onArtistChange, onDelete }: Props) {
   const [editing, setEditing] = useState(false)
 
   if (editing) {
@@ -25,6 +31,7 @@ export default function WorkRow({ work, placed, elevations, onChange, onDelete }
         work={work}
         elevations={elevations}
         onChange={onChange}
+        onArtistChange={onArtistChange}
         onDelete={onDelete}
         onDone={() => setEditing(false)}
       />

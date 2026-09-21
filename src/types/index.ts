@@ -55,6 +55,8 @@ export interface Work {
   id: string
   projectId: string
   artist: string
+  /** The artist row this work belongs to. Null when unattributed. */
+  artistId: string | null
   name: string
   /** Storage path in `artwork-images`; null for a work with no image yet. */
   imagePath: string | null

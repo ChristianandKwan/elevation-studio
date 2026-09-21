@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Elevation Studio — Font comparison</title>
+
+<!-- Each pairing loads only what it needs to keep the comparison fair -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Karla:wght@300;400;500;700&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Manrope:wght@300;400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Public+Sans:wght@300;400;500;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=Mona+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+:root {
+  --cream:        #F7F4EF;
+  --warm-white:   #FDFBF9;
+  --charcoal:     #1C1A18;
+  --mid:          #6E6862; /* slightly darkened from #7A746E for contrast */
+  --accent:       #8B6F47;
+  --border:       #E3DED7;
+  --green:        #2E6B4F;
+  --red:          #B94040;
+  --green-light:  rgba(46,107,79,.10);
+  --accent-light: rgba(139,111,71,.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: 'Karla', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Top brief ───────────────────────────────────────────────── */
+.brief {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 56px 32px 24px;
+}
+.brief-kicker {
+  font-family: 'Karla', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--mid);
+  margin-bottom: 12px;
+}
+.brief-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 1.15;
+  margin-bottom: 14px;
+  max-width: 720px;
+}
+.brief-body {
+  font-family: 'Karla', sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--mid);
+  max-width: 640px;
+}
+.brief-body strong { color: var(--charcoal); font-weight: 500; }
+
+/* ── Grid of pairings ────────────────────────────────────────── */
+.grid {
+  max-width: 1380px;
+  margin: 24px auto 80px;
+  padding: 0 32px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+}
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+/* ── A single pairing card ───────────────────────────────────── */
+.card {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.card-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--cream);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.card-meta-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.card-tag {
+  font-family: 'Karla', sans-serif;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--charcoal);
+  background: var(--warm-white);
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+}
+.card-tag--current { background: var(--charcoal); color: white; border-color: var(--charcoal); }
+.card-name {
+  font-family: 'Karla', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--charcoal);
+  letter-spacing: .01em;
+}
+.card-name span {
+  color: var(--mid);
+  font-weight: 400;
+}
+.card-why {
+  font-family: 'Karla', sans-serif;
+  font-size: 11px;
+  color: var(--mid);
+  font-style: italic;
+  flex-basis: 100%;
+}
+
+/* ── Specimen content (varies by pairing) ────────────────────── */
+.specimen {
+  padding: 32px 36px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.s-kicker {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--mid);
+}
+.s-h1 {
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.005em;
+  color: var(--charcoal);
+}
+.s-h1 em {
+  font-style: italic;
+  font-weight: 400;
+}
+.s-sub {
+  font-size: 13px;
+  color: var(--mid);
+  margin-top: -14px;
+}
+.s-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--charcoal);
+  max-width: 56ch;
+}
+.s-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+/* Artwork line — mimics budget screen */
+.s-art-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 18px;
+  padding: 6px 0;
+}
+.s-art-name {
+  font-size: 16px;
+  line-height: 1.25;
+}
+.s-art-artist {
+  font-size: 12px;
+  color: var(--mid);
+  margin-top: 2px;
+}
+.s-art-dims {
+  font-size: 12px;
+  color: var(--mid);
+  white-space: nowrap;
+}
+.s-art-price {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Total row */
+.s-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-top: 14px;
+  border-top: 2px solid var(--charcoal);
+  margin-top: 6px;
+}
+.s-total-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.s-total-value {
+  font-size: 22px;
+  font-weight: 500;
+}
+
+/* Button row */
+.s-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.s-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  border: 1px solid var(--charcoal);
+  background: transparent;
+  color: var(--charcoal);
+  cursor: pointer;
+}
+.s-btn--primary { background: var(--charcoal); color: white; }
+.s-btn--ghost { border-color: var(--border); color: var(--mid); }
+
+/* Approval chip */
+.s-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  padding: 3px 9px;
+  background: var(--green-light);
+  color: var(--green);
+  border: 1px solid rgba(46,107,79,.2);
+  align-self: flex-start;
+}
+
+/* ── Pairing-specific font assignments ───────────────────────── */
+.p-current .s-kicker,
+.p-current .s-sub,
+.p-current .s-body,
+.p-current .s-art-artist,
+.p-current .s-art-dims,
+.p-current .s-art-price,
+.p-current .s-total-label,
+.p-current .s-btn,
+.p-current .s-chip      { font-family: 'Karla', sans-serif; }
+.p-current .s-h1,
+.p-current .s-art-name,
+.p-current .s-total-value { font-family: 'Cormorant Garamond', serif; }
+
+.p-spectral .s-kicker,
+.p-spectral .s-sub,
+.p-spectral .s-body,
+.p-spectral .s-art-artist,
+.p-spectral .s-art-dims,
+.p-spectral .s-art-price,
+.p-spectral .s-total-label,
+.p-spectral .s-btn,
+.p-spectral .s-chip      { font-family: 'Manrope', sans-serif; font-feature-settings: "ss01" 1, "cv11" 1; }
+.p-spectral .s-h1,
+.p-spectral .s-art-name,
+.p-spectral .s-total-value { font-family: 'Spectral', serif; }
+.p-spectral .s-h1 { letter-spacing: -0.01em; }
+
+.p-garamond .s-kicker,
+.p-garamond .s-sub,
+.p-garamond .s-body,
+.p-garamond .s-art-artist,
+.p-garamond .s-art-dims,
+.p-garamond .s-art-price,
+.p-garamond .s-total-label,
+.p-garamond .s-btn,
+.p-garamond .s-chip      { font-family: 'Public Sans', sans-serif; }
+.p-garamond .s-h1,
+.p-garamond .s-art-name,
+.p-garamond .s-total-value { font-family: 'EB Garamond', serif; }
+.p-garamond .s-h1 { font-weight: 500; }
+
+.p-source .s-kicker,
+.p-source .s-sub,
+.p-source .s-body,
+.p-source .s-art-artist,
+.p-source .s-art-dims,
+.p-source .s-art-price,
+.p-source .s-total-label,
+.p-source .s-btn,
+.p-source .s-chip      { font-family: 'Mona Sans', sans-serif; font-stretch: 100%; }
+.p-source .s-h1,
+.p-source .s-art-name,
+.p-source .s-total-value { font-family: 'Source Serif 4', serif; font-optical-sizing: auto; }
+.p-source .s-h1 { font-variation-settings: "opsz" 60; font-weight: 400; }
+
+/* ── Lower comparison strip: same word in all four ───────────── */
+.specimen-strip {
+  max-width: 1380px;
+  margin: 0 auto 80px;
+  padding: 0 32px;
+}
+.strip-kicker {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--mid);
+  margin-bottom: 14px;
+  font-family: 'Karla', sans-serif;
+}
+.strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  background: var(--warm-white);
+}
+@media (max-width: 1100px) {
+  .strip { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .strip { grid-template-columns: 1fr; }
+}
+.strip-cell {
+  padding: 28px 22px 20px;
+  border-right: 1px solid var(--border);
+}
+.strip-cell:last-child { border-right: none; }
+@media (max-width: 1100px) {
+  .strip-cell:nth-child(2) { border-right: none; }
+}
+.strip-label {
+  font-family: 'Karla', sans-serif;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--mid);
+  margin-bottom: 14px;
+}
+.strip-word {
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 400;
+}
+.strip-word em { font-style: italic; }
+.strip-cell.cell-current  .strip-word { font-family: 'Cormorant Garamond', serif; }
+.strip-cell.cell-spectral .strip-word { font-family: 'Spectral', serif; }
+.strip-cell.cell-garamond .strip-word { font-family: 'EB Garamond', serif; font-weight: 500; }
+.strip-cell.cell-source   .strip-word { font-family: 'Source Serif 4', serif; font-optical-sizing: auto; font-variation-settings: "opsz" 60; }
+
+/* Footer note */
+.footnote {
+  max-width: 1380px;
+  margin: 0 auto 64px;
+  padding: 0 32px;
+  font-family: 'Karla', sans-serif;
+  font-size: 12px;
+  color: var(--mid);
+  line-height: 1.7;
+  max-width: 720px;
+}
+.footnote strong { color: var(--charcoal); font-weight: 500; }
+</style>
+</head>
+
+<body>
+
+<header class="brief">
+  <div class="brief-kicker">Typography study · Elevation Studio</div>
+  <h1 class="brief-title">Three alternative font pairings, compared against Cormorant Garamond &amp; Karla.</h1>
+  <p class="brief-body">
+    Each card below shows the same screen content — kicker, project title, body copy, an artwork line, total, and buttons —
+    rendered in a different pairing. The first card is the <strong>current baseline</strong> shipping in Elevation Studio.
+    The remaining three are alternatives that step away from the editorial-serif-on-cream lane that brand work has
+    converged on by 2026, while preserving the gallery, considered, art-consultancy register.
+    Open in a browser; ideally a wide screen so all four sit side by side.
+  </p>
+</header>
+
+<section class="grid">
+
+  <!-- ─────────────────────── CURRENT ─────────────────────── -->
+  <article class="card p-current">
+    <header class="card-meta">
+      <div class="card-meta-left">
+        <span class="card-tag card-tag--current">Current</span>
+        <span class="card-name">Cormorant Garamond <span>+ Karla</span></span>
+      </div>
+      <p class="card-why">Display-serif-on-cream is the saturated brand-design lane in 2026. Identity to preserve, but worth knowing.</p>
+    </header>
+    <div class="specimen">
+      <div class="s-kicker">Elevations · Living Room</div>
+      <h2 class="s-h1">Chelsea Residence — <em>Living Room</em></h2>
+      <div class="s-sub">Mr &amp; Mrs Hamilton · Prepared 24 April 2026</div>
+      <p class="s-body">
+        Two options for the south wall. Option A leans on a single statement work; Option B distributes
+        the budget across three smaller pieces and reserves the painting above the fireplace for a future
+        commission. Either reading is on-brief.
+      </p>
+      <div class="s-divider"></div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Untitled (Linen, 4)</div>
+          <div class="s-art-artist">Elena Pereda · 2024 · Acrylic on linen</div>
+        </div>
+        <div class="s-art-dims">120 × 90 cm</div>
+        <div class="s-art-price">£14,200</div>
+      </div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Field Notes II</div>
+          <div class="s-art-artist">Marcus Thane · 2023 · Mixed media</div>
+        </div>
+        <div class="s-art-dims">60 × 80 cm</div>
+        <div class="s-art-price">£6,400</div>
+      </div>
+      <div class="s-total-row">
+        <span class="s-total-label">Option A total</span>
+        <span class="s-total-value">£23,840</span>
+      </div>
+      <span class="s-chip">✓ Client picked</span>
+      <div class="s-actions">
+        <button class="s-btn s-btn--primary">Approve option</button>
+        <button class="s-btn s-btn--ghost">Request changes</button>
+      </div>
+    </div>
+  </article>
+
+  <!-- ─────────────────────── SPECTRAL + MANROPE ─────────────────────── -->
+  <article class="card p-spectral">
+    <header class="card-meta">
+      <div class="card-meta-left">
+        <span class="card-tag">Alt 1</span>
+        <span class="card-name">Spectral <span>+ Manrope</span></span>
+      </div>
+      <p class="card-why">Editorial elegance with a quieter voice. Spectral was drawn for the screen and reads cleaner at small sizes; Manrope has more personality than Inter without shouting.</p>
+    </header>
+    <div class="specimen">
+      <div class="s-kicker">Elevations · Living Room</div>
+      <h2 class="s-h1">Chelsea Residence — <em>Living Room</em></h2>
+      <div class="s-sub">Mr &amp; Mrs Hamilton · Prepared 24 April 2026</div>
+      <p class="s-body">
+        Two options for the south wall. Option A leans on a single statement work; Option B distributes
+        the budget across three smaller pieces and reserves the painting above the fireplace for a future
+        commission. Either reading is on-brief.
+      </p>
+      <div class="s-divider"></div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Untitled (Linen, 4)</div>
+          <div class="s-art-artist">Elena Pereda · 2024 · Acrylic on linen</div>
+        </div>
+        <div class="s-art-dims">120 × 90 cm</div>
+        <div class="s-art-price">£14,200</div>
+      </div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Field Notes II</div>
+          <div class="s-art-artist">Marcus Thane · 2023 · Mixed media</div>
+        </div>
+        <div class="s-art-dims">60 × 80 cm</div>
+        <div class="s-art-price">£6,400</div>
+      </div>
+      <div class="s-total-row">
+        <span class="s-total-label">Option A total</span>
+        <span class="s-total-value">£23,840</span>
+      </div>
+      <span class="s-chip">✓ Client picked</span>
+      <div class="s-actions">
+        <button class="s-btn s-btn--primary">Approve option</button>
+        <button class="s-btn s-btn--ghost">Request changes</button>
+      </div>
+    </div>
+  </article>
+
+  <!-- ─────────────────────── EB GARAMOND + PUBLIC SANS ─────────────────────── -->
+  <article class="card p-garamond">
+    <header class="card-meta">
+      <div class="card-meta-left">
+        <span class="card-tag">Alt 2</span>
+        <span class="card-name">EB Garamond <span>+ Public Sans</span></span>
+      </div>
+      <p class="card-why">A historically grounded Garamond revival reads as authoritative and crafted — the right register for a consultancy. Public Sans is the workhorse without baggage.</p>
+    </header>
+    <div class="specimen">
+      <div class="s-kicker">Elevations · Living Room</div>
+      <h2 class="s-h1">Chelsea Residence — <em>Living Room</em></h2>
+      <div class="s-sub">Mr &amp; Mrs Hamilton · Prepared 24 April 2026</div>
+      <p class="s-body">
+        Two options for the south wall. Option A leans on a single statement work; Option B distributes
+        the budget across three smaller pieces and reserves the painting above the fireplace for a future
+        commission. Either reading is on-brief.
+      </p>
+      <div class="s-divider"></div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Untitled (Linen, 4)</div>
+          <div class="s-art-artist">Elena Pereda · 2024 · Acrylic on linen</div>
+        </div>
+        <div class="s-art-dims">120 × 90 cm</div>
+        <div class="s-art-price">£14,200</div>
+      </div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Field Notes II</div>
+          <div class="s-art-artist">Marcus Thane · 2023 · Mixed media</div>
+        </div>
+        <div class="s-art-dims">60 × 80 cm</div>
+        <div class="s-art-price">£6,400</div>
+      </div>
+      <div class="s-total-row">
+        <span class="s-total-label">Option A total</span>
+        <span class="s-total-value">£23,840</span>
+      </div>
+      <span class="s-chip">✓ Client picked</span>
+      <div class="s-actions">
+        <button class="s-btn s-btn--primary">Approve option</button>
+        <button class="s-btn s-btn--ghost">Request changes</button>
+      </div>
+    </div>
+  </article>
+
+  <!-- ─────────────────────── SOURCE SERIF 4 + MONA SANS ─────────────────────── -->
+  <article class="card p-source">
+    <header class="card-meta">
+      <div class="card-meta-left">
+        <span class="card-tag">Alt 3</span>
+        <span class="card-name">Source Serif 4 <span>+ Mona Sans</span></span>
+      </div>
+      <p class="card-why">Adobe&rsquo;s editorial serif with optical sizing — refined at large display sizes, readable at small. Mona Sans is GitHub&rsquo;s grotesque: precise, not monoculture-Inter.</p>
+    </header>
+    <div class="specimen">
+      <div class="s-kicker">Elevations · Living Room</div>
+      <h2 class="s-h1">Chelsea Residence — <em>Living Room</em></h2>
+      <div class="s-sub">Mr &amp; Mrs Hamilton · Prepared 24 April 2026</div>
+      <p class="s-body">
+        Two options for the south wall. Option A leans on a single statement work; Option B distributes
+        the budget across three smaller pieces and reserves the painting above the fireplace for a future
+        commission. Either reading is on-brief.
+      </p>
+      <div class="s-divider"></div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Untitled (Linen, 4)</div>
+          <div class="s-art-artist">Elena Pereda · 2024 · Acrylic on linen</div>
+        </div>
+        <div class="s-art-dims">120 × 90 cm</div>
+        <div class="s-art-price">£14,200</div>
+      </div>
+      <div class="s-art-row">
+        <div>
+          <div class="s-art-name">Field Notes II</div>
+          <div class="s-art-artist">Marcus Thane · 2023 · Mixed media</div>
+        </div>
+        <div class="s-art-dims">60 × 80 cm</div>
+        <div class="s-art-price">£6,400</div>
+      </div>
+      <div class="s-total-row">
+        <span class="s-total-label">Option A total</span>
+        <span class="s-total-value">£23,840</span>
+      </div>
+      <span class="s-chip">✓ Client picked</span>
+      <div class="s-actions">
+        <button class="s-btn s-btn--primary">Approve option</button>
+        <button class="s-btn s-btn--ghost">Request changes</button>
+      </div>
+    </div>
+  </article>
+
+</section>
+
+<!-- One word, four ways — the cleanest comparison -->
+<section class="specimen-strip">
+  <div class="strip-kicker">Same word, four ways</div>
+  <div class="strip">
+    <div class="strip-cell cell-current">
+      <div class="strip-label">Current · Cormorant</div>
+      <div class="strip-word">Elevation</div>
+    </div>
+    <div class="strip-cell cell-spectral">
+      <div class="strip-label">Alt 1 · Spectral</div>
+      <div class="strip-word">Elevation</div>
+    </div>
+    <div class="strip-cell cell-garamond">
+      <div class="strip-label">Alt 2 · EB Garamond</div>
+      <div class="strip-word">Elevation</div>
+    </div>
+    <div class="strip-cell cell-source">
+      <div class="strip-label">Alt 3 · Source Serif 4</div>
+      <div class="strip-word">Elevation</div>
+    </div>
+  </div>
+</section>
+
+<footer class="footnote">
+  <p>
+    <strong>How to read this.</strong>
+    Look at the project title in each card, then the artwork names, then the total figure — those are the three places
+    Elevation Studio leans hardest on the serif. The italic in &ldquo;<em>Living Room</em>&rdquo; also tells you a lot
+    about each face&rsquo;s personality. The strip above isolates a single word at display size for direct comparison.
+  </p>
+  <p style="margin-top: 14px;">
+    <strong>What I&rsquo;d look for.</strong>
+    Spectral feels closest to the current brand without being the saturated default. EB Garamond is the most
+    historically grounded and has the most authority — best if you want the consultancy to feel established.
+    Source Serif 4 is the most modern and the easiest to read at small sizes; it&rsquo;d be the safest if you ever
+    extend Elevation Studio with denser data tables. None of the three is on impeccable&rsquo;s 2026 reflex-reject list.
+  </p>
+  <p style="margin-top: 14px;">
+    <strong>What this isn&rsquo;t.</strong>
+    A real type test wants the actual content (real client names, real artwork titles, the longest dimension string,
+    a 32-character project name, currency rounding edge cases) and the actual breakpoints. This is a reading sample —
+    enough to react to. If one of the three feels right, the next step is a single-page implementation in your dev
+    branch and a five-minute test on the actual budget screen.
+  </p>
+</footer>
+
+</body>
+</html>

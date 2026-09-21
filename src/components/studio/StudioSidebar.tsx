@@ -6,6 +6,8 @@ import type { ActivityLog, Artwork } from '@/types'
 import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail, MIN_ELEVATION_LONG_EDGE } from '@/lib/utils'
 import { wallSizeLabel } from '@/lib/wall'
 import BlankWallModal from './BlankWallModal'
+import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
+import type { Note } from '@/lib/notes'
 import {
   FRAME_COLORS, frameLabel, MOUNT_COLORS, mountLabel, MOUNT_DEFAULT_MM, mountIsUniform,
 } from '@/lib/frames'
@@ -30,9 +32,14 @@ interface Props {
   onUnapprove?: () => void
   budget?: number | null
   onBudgetChange?: (budget: number | null) => void
+  /** Notes on this option only — the full record lives on the Notes screen. */
+  optionNotes?: Note[]
+  onAddNote?: () => void
+  onChangeNote?: (noteId: string, patch: NotePatch) => void
+  onDeleteNote?: (noteId: string) => void
 }
 
-export default function StudioSidebar({ studio, onStatus, optionId, clientNotes, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange }: Props) {
+export default function StudioSidebar({ studio, onStatus, optionId, clientNotes, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange, optionNotes, onAddNote, onChangeNote, onDeleteNote }: Props) {
   const { state, uploadElevation, setBlankWall, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -521,6 +528,23 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Why this option, and what it costs to make happen. The Notes screen
+          holds the whole record; this is the shortcut for writing one while
+          looking at the wall it is about. */}
+      {optionNotes && onAddNote && onChangeNote && onDeleteNote && (
+        <div className="sidebar-section">
+          <div className="s-title">Notes on this option</div>
+          <NotePanel
+            notes={optionNotes}
+            anchor="option"
+            onAdd={onAddNote}
+            onChange={onChangeNote}
+            onDelete={onDeleteNote}
+            compact
+          />
         </div>
       )}
 
