@@ -63,7 +63,9 @@ export default function NotesScreen({
         <Section
           anchor="project"
           suffix={projectName}
-          notes={notesOn(notes, 'project')}
+          // A note covering a set of works can be anchored to the project
+          // when those works have no artist. It belongs to them, not here.
+          notes={notesOn(notes, 'project').filter(n => n.workIds.length === 0)}
           onAdd={() => onAdd('project', null)}
           onChange={onChange}
           onDelete={onDelete}

@@ -56,11 +56,11 @@ export default function NotePanel({
         />
       ))}
 
-      <button type="button" className="btn btn-sm note-add" onClick={onAdd}>
-        {notes.length === 0
-          ? `Write about ${ANCHOR_META[anchor].inline}`
-          : '+ Add another note'}
-      </button>
+      {/* A quiet line rather than a button. Every section on the Notes screen
+          has one, and a column of hard-edged buttons down an otherwise calm
+          page made the page look like a form to fill in rather than a place
+          to write. What each one is for is already said above it. */}
+      <button type="button" className="note-add" onClick={onAdd}>+ Note</button>
     </div>
   )
 }

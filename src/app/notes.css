@@ -27,8 +27,15 @@
 /* ── The panel ──────────────────────────────────────────── */
 .note-panel { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
 .note-panel.compact { gap: 7px; margin-bottom: 10px; }
-.note-empty { font-size: 11.5px; color: var(--mid); font-style: italic; }
-.note-add { align-self: flex-start; }
+/* The one way to start a note, everywhere. A quiet line, not a button: a
+   column of hard-edged buttons down the Notes page made a page for writing
+   look like a form for filling in. */
+.note-add {
+  align-self: flex-start; padding: 2px 0;
+  font-size: 11px; color: var(--mid); cursor: pointer;
+  background: none; border: none; font-family: inherit;
+}
+.note-add:hover { color: var(--accent); }
 
 /* ── One note ───────────────────────────────────────────── */
 .note-card {
@@ -118,13 +125,9 @@
 }
 
 /* ── A work's notes in the index ────────────────────────── */
+/* Indented to clear the thumbnail, so the notes line up with the work's
+   title rather than with the edge of the page. */
 .work-notes { margin: 0 0 14px 62px; }
-.work-notes-toggle {
-  display: inline-block; margin: 0 0 10px 62px; padding: 2px 0;
-  font-size: 11px; color: var(--mid); cursor: pointer;
-  background: none; border: none;
-}
-.work-notes-toggle:hover { color: var(--accent); }
 
 /* A note shown where it is not anchored — an artist's consignment note
    appearing on each work in that set. Marked, because it is the same note:
@@ -181,12 +184,15 @@
 
 /* An option's composited wall beside its heading. Small enough to scan, big
    enough to tell two arrangements of the same wall apart. */
-.notes-option-head { display: flex; align-items: center; gap: 10px; }
+.notes-option-head { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
 .notes-option-thumb {
   width: 64px; height: 40px; object-fit: cover; flex: none;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  margin-top: 16px;
 }
+.notes-option-head .notes-sub-kicker { margin: 0; }
+/* The panel under an option sits clear of the thumbnail above it rather than
+   tucking under its bottom edge. */
+.notes-suborder .note-panel { margin-top: 10px; margin-bottom: 20px; }
 
 /* Picking the works a note covers. Spelled out rather than hinted: this is
    the one control on the index nobody finds or explains to themselves. */

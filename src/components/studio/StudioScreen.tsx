@@ -505,9 +505,18 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     void insertNote(anchor, id)
   }, [insertNote])
 
-  /** A note about several of one artist's works, made by picking them first. */
+  /**
+   * A note about several works, made by picking them first.
+   *
+   * Works with no artist have no artist to hang it on — artist_key may not be
+   * empty — so it anchors to the project instead and is found through its
+   * work set. The Notes screen leaves those out of "The project" for the same
+   * reason it leaves work-set notes out of an artist's own section: they are
+   * read on the works they cover.
+   */
   const addWorkSetNote = useCallback((key: string, workIds: string[]) => {
-    void insertNote('artist', key, workIds)
+    if (key) void insertNote('artist', key, workIds)
+    else void insertNote('project', null, workIds)
   }, [insertNote])
 
   const changeNote = useCallback(async (noteId: string, patch: NotePatch) => {

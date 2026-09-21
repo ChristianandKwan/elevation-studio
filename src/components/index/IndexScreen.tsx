@@ -167,16 +167,22 @@ function ArtistGroupSection({
         <span className="index-kicker-count">{works.length}</span>
       </div>
 
-      {artistKeyValue && (
+      {/* Writing about several works at once does not need the works to have
+          an artist — a shared lead time or one consignment is just as likely
+          among unattributed pieces. This used to sit inside the artist block
+          below, so a group of works with no artist had nowhere to do it. */}
+      {(artistKeyValue || works.length > 1) && (
         <>
           <div className="artist-note-tools">
-            <button
-              type="button"
-              className={`artist-note-tab${showAbout ? ' on' : ''}`}
-              onClick={() => setShowAbout(v => !v)}
-            >
-              {showAbout ? 'Hide notes about this artist' : `Notes about ${label}`}
-            </button>
+            {artistKeyValue && (
+              <button
+                type="button"
+                className={`artist-note-tab${showAbout ? ' on' : ''}`}
+                onClick={() => setShowAbout(v => !v)}
+              >
+                {showAbout ? 'Hide notes about this artist' : `Notes about ${label}`}
+              </button>
+            )}
             {works.length > 1 && !picking && (
               // A real button rather than another quiet tab: this is the one
               // thing on the screen nobody finds on their own.
@@ -213,7 +219,7 @@ function ArtistGroupSection({
             </div>
           )}
 
-          {showAbout && (
+          {showAbout && artistKeyValue && (
             <div className="artist-note-open">
               <ArtistStandingNote
                 name={label}
@@ -260,7 +266,6 @@ function ArtistGroupSection({
               it belongs to — a consignment note is about this work as much as
               one written on it directly. */}
           <WorkNotes
-            work={w}
             notes={notesMentioning(notes, w.id)}
             nameOf={nameOf}
             onAdd={() => onAddNote('work', w.id)}
@@ -274,41 +279,25 @@ function ArtistGroupSection({
 }
 
 /**
- * A work's notes, collapsed until there is something to read or somebody
- * wants to write. The index is a list to scan; an always-open editor under
- * every row would bury the rows.
+ * A work's notes: the ones written on it, plus any note covering a set it
+ * belongs to. With nothing written it is a single "+ Note" line, so the index
+ * stays a list to scan.
  */
 function WorkNotes({
-  work, notes, nameOf, onAdd, onChange, onDelete,
+  notes, nameOf, onAdd, onChange, onDelete,
 }: {
-  work: Work
   notes: Note[]
   nameOf: (id: string) => string | undefined
   onAdd: () => void
   onChange: (noteId: string, patch: NotePatch) => void
   onDelete: (noteId: string) => void
 }) {
-  const [open, setOpen] = useState(notes.length > 0)
-  const written = notes.filter(n => n.body.trim().length > 0).length
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="work-notes-toggle"
-        // On a work with nothing written yet, "+ Note" opens the panel AND
-        // starts the note. Opening a panel whose only content is another
-        // button saying much the same thing made this two clicks for one
-        // intention.
-        onClick={() => { setOpen(true); if (notes.length === 0) onAdd() }}
-      >
-        {written > 0
-          ? `${written} note${written === 1 ? '' : 's'} on ${work.name}`
-          : '+ Note'}
-      </button>
-    )
-  }
-
+  // No open/closed state. A panel with no notes in it is already just a
+  // "+ Note" line, so the collapsed state was the same thing drawn twice —
+  // and keeping the two in step was where the bugs were: clicking "+ Note"
+  // flashed the panel's own add button before the new note arrived, and
+  // removing the last note left the panel open showing a button that no
+  // longer matched the one you pressed to get there.
   return (
     <div className="work-notes">
       <NotePanel
