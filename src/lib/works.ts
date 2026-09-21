@@ -1,4 +1,4 @@
-import type { Artwork, Work, WorkStatus } from '@/types'
+import type { Artwork, SetAside, Work } from '@/types'
 
 /**
  * A work belongs to the project; a placement puts it on an elevation option.
@@ -13,22 +13,43 @@ import type { Artwork, Work, WorkStatus } from '@/types'
  * This module has no runtime imports so `node --test` can run it.
  */
 
-export const WORK_STATUSES: WorkStatus[] = ['proposed', 'considered', 'declined']
+export const SET_ASIDE_VALUES: SetAside[] = ['us', 'client']
 
-export const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
-  proposed: 'Proposed',
-  considered: 'Considered',
-  declined: 'Declined',
+/**
+ * Said from the consultant's side, and never grading the client's judgement:
+ * the client passed on a work, they did not get it wrong.
+ */
+export const SET_ASIDE_LABEL: Record<SetAside, string> = {
+  us: 'Ruled out by us',
+  client: 'Passed by the client',
 }
 
-export const WORK_STATUS_HINT: Record<WorkStatus, string> = {
-  proposed: 'Put forward to the client.',
-  considered: 'Looked at, not put forward yet.',
-  declined: 'Not recommended. Say why in the note — it stays in the record.',
+/** The short form for a badge, where the row already says which work it is. */
+export const SET_ASIDE_BADGE: Record<SetAside, string> = {
+  us: 'Ruled out',
+  client: 'Passed',
 }
 
-export function parseWorkStatus(raw: unknown): WorkStatus {
-  return WORK_STATUSES.includes(raw as WorkStatus) ? (raw as WorkStatus) : 'proposed'
+export const SET_ASIDE_HINT: Record<SetAside, string> = {
+  us: 'Not recommended by us. Say why in the note — it stays in the record.',
+  client: 'The client passed on this one. Say what they said in the note.',
+}
+
+export function parseSetAside(raw: unknown): SetAside | null {
+  return SET_ASIDE_VALUES.includes(raw as SetAside) ? (raw as SetAside) : null
+}
+
+/**
+ * Where a work stands, worked out rather than stored.
+ *
+ * Deliberately *not* derived: picking one option does not set aside the works
+ * on the others. Options are alternatives, so a work on the option that was
+ * not chosen has not been turned down by anybody — saying otherwise would put
+ * words in the client's mouth. Only an explicit set-aside takes a work out.
+ */
+export function standingOf(work: Work, placed: Placed[]): string {
+  if (work.setAside) return SET_ASIDE_LABEL[work.setAside]
+  return placed.length > 0 ? 'On a wall' : 'Not placed'
 }
 
 /** The columns a placement row carries: where it hangs, how it is framed and lit. */
@@ -37,7 +58,7 @@ export const PLACEMENT_COLUMNS =
 
 /** The columns a work row carries. */
 export const WORK_COLUMNS =
-  'id, project_id, artist, artist_id, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, note, note_shown_to_client, year, medium, edition, source, status, considered_for, display_order'
+  'id, project_id, artist, artist_id, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, note, note_shown_to_client, year, medium, edition, source, set_aside, considered_for, display_order'
 
 /** A placement with its work joined in — what the studio and portal loaders select. */
 export const PLACEMENT_WITH_WORK_SELECT = `${PLACEMENT_COLUMNS}, work:works(${WORK_COLUMNS})`
@@ -87,7 +108,7 @@ export function workRow(art: Artwork) {
 export type WorkPatch = Partial<Pick<Work,
   | 'name' | 'artist' | 'wCm' | 'hCm' | 'price' | 'vatApplies' | 'discountStatus'
   | 'discountPercent' | 'subLineItems' | 'note' | 'noteShownToClient'
-  | 'year' | 'medium' | 'edition' | 'source' | 'status' | 'consideredFor'
+  | 'year' | 'medium' | 'edition' | 'source' | 'setAside' | 'consideredFor'
 >>
 
 /** Map a patch onto the columns it writes. */
@@ -108,7 +129,7 @@ export function toWorkColumns(patch: WorkPatch): Record<string, unknown> {
   if (patch.medium !== undefined) row.medium = patch.medium
   if (patch.edition !== undefined) row.edition = patch.edition
   if (patch.source !== undefined) row.source = patch.source
-  if (patch.status !== undefined) row.status = patch.status
+  if (patch.setAside !== undefined) row.set_aside = patch.setAside
   if (patch.consideredFor !== undefined) row.considered_for = patch.consideredFor
   return row
 }

@@ -19,8 +19,8 @@
 /* A work */
 .index-row { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
 .index-kicker + .index-row { border-top: none; }
-.index-row--declined .index-thumb,
-.index-row--declined .budget-artwork-title { opacity: .55; }
+.index-row--aside .index-thumb,
+.index-row--aside .budget-artwork-title { opacity: .55; }
 
 /* A work is whatever shape it is; the box is always square. Centring with
    flex rather than grid matters: in a grid the image's own box grew to its
@@ -47,9 +47,13 @@
   padding: 2px 7px; border-radius: var(--radius-xs); flex-shrink: 0; margin-top: 1px;
   border: 1px solid transparent; white-space: nowrap;
 }
-.index-status--proposed   { color: var(--green);  background: var(--green-light);  border-color: rgba(46,107,79,.25); }
-.index-status--considered { color: var(--accent); background: var(--accent-light); border-color: rgba(139,111,71,.25); }
-.index-status--declined   { color: var(--mid);    background: rgba(0,0,0,.04);     border-color: var(--border); }
+/* Only a work somebody took out carries a badge. Live is the ordinary case
+   and says nothing — where a live work stands is the chip row underneath,
+   worked out from the walls it hangs on. The empty span holds the column so
+   the Edit buttons still line up down the list. */
+.index-status--us     { color: var(--mid);    background: rgba(0,0,0,.04);     border-color: var(--border); }
+.index-status--client { color: var(--accent); background: var(--accent-light); border-color: rgba(139,111,71,.25); }
+.index-status--none   { background: none; border-color: transparent; }
 
 /* Where it hangs */
 .index-where { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; align-items: center; }

@@ -58,7 +58,7 @@ export default function IndexScreen({
   }, [works])
   const groups = useMemo(() => groupWorksByArtist(works), [works])
   const placedCount = works.filter(w => placementsOf(w.id, elevations).length > 0).length
-  const declinedCount = works.filter(w => w.status === 'declined').length
+  const setAsideCount = works.filter(w => w.setAside).length
 
   return (
     <div className="index-view">
@@ -70,7 +70,7 @@ export default function IndexScreen({
               {clientName && <>{clientName} · </>}
               {works.length} work{works.length === 1 ? '' : 's'}
               {works.length > 0 && <> · {placedCount} on a wall</>}
-              {declinedCount > 0 && <> · {declinedCount} declined</>}
+              {setAsideCount > 0 && <> · {setAsideCount} set aside</>}
             </p>
           </div>
           <button type="button" className="btn btn-sm btn-primary" onClick={onAddWork}>+ Add work</button>

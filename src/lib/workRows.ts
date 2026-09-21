@@ -1,6 +1,6 @@
 import type { Artwork, Work } from '@/types'
 import { readLineItemFields } from './lineItems'
-import { parseWorkStatus } from './works'
+import { parseSetAside } from './works'
 
 /**
  * Database rows → the app's Work and Artwork shapes.
@@ -35,7 +35,7 @@ export function rowToWork(row: Row, imageUrl: string | null): Work {
     medium: strOrNull(row.medium),
     edition: strOrNull(row.edition),
     source: strOrNull(row.source),
-    status: parseWorkStatus(row.status),
+    setAside: parseSetAside(row.set_aside),
     consideredFor: strOrNull(row.considered_for),
     displayOrder: num(row.display_order, 0),
   }
