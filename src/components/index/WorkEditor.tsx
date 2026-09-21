@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { MoneyFields } from '@/components/budget/ArtworkLineEditor'
 import { WORK_STATUSES, WORK_STATUS_LABEL, WORK_STATUS_HINT } from '@/lib/works'
 import type { IndexElevation, WorkPatch } from '@/lib/works'
@@ -9,6 +10,8 @@ interface Props {
   work: Work
   elevations: IndexElevation[]
   onChange: (patch: WorkPatch) => void
+  /** Naming an artist may create one, so it does not go through onChange. */
+  onArtistChange: (name: string) => void
   onDelete: () => void
   onDone: () => void
 }
@@ -28,7 +31,7 @@ function text(value: string): string | null {
  * Everything about a work in one place: what it is, where it comes from,
  * where it stands, and — through the budget's own fields — what it costs.
  */
-export default function WorkEditor({ work, elevations, onChange, onDelete, onDone }: Props) {
+export default function WorkEditor({ work, elevations, onChange, onArtistChange, onDelete, onDone }: Props) {
   return (
     <div className="ble index-editor">
       <div className="ble-head">
@@ -57,14 +60,14 @@ export default function WorkEditor({ work, elevations, onChange, onDelete, onDon
         </div>
         <div className="ble-field">
           <span className="ble-label">Artist</span>
-          <input
-            type="text"
-            className="ble-input ble-input--label"
-            list="index-artists"
+          {/* Committed on blur, not on every keystroke: a name that does not
+              match anyone creates an artist, and doing that per character
+              would leave a row for every prefix of it. The list offers the
+              artists the practice already knows; typing a new name is allowed
+              and adds them. */}
+          <ArtistField
             value={work.artist}
-            placeholder="As it should appear in the proposal"
-            aria-label="Artist"
-            onChange={e => onChange({ artist: e.target.value })}
+            onCommit={onArtistChange}
           />
         </div>
 
@@ -143,5 +146,35 @@ export default function WorkEditor({ work, elevations, onChange, onDelete, onDon
         onChange={onChange}
       />
     </div>
+  )
+}
+
+/**
+ * The artist on a work.
+ *
+ * Free text with the known artists offered beside it. It holds its own value
+ * while being typed and commits on blur or Enter, because committing a
+ * half-typed name would create an artist called "Jul".
+ */
+function ArtistField({ value, onCommit }: { value: string; onCommit: (name: string) => void }) {
+  const [draft, setDraft] = useState(value)
+  const [seen, setSeen] = useState(value)
+  if (value !== seen) { setSeen(value); setDraft(value) }
+
+  return (
+    <input
+      type="text"
+      className="ble-input ble-input--label"
+      list="index-artists"
+      value={draft}
+      placeholder="As it should appear in the proposal"
+      aria-label="Artist"
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== value) onCommit(draft) }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') setDraft(value)
+      }}
+    />
   )
 }

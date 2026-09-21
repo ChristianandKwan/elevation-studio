@@ -23,6 +23,7 @@ export function rowToWork(row: Row, imageUrl: string | null): Work {
     id: row.id as string,
     projectId: str(row.project_id),
     artist: str(row.artist),
+    artistId: strOrNull(row.artist_id),
     name: str(row.name, 'Untitled'),
     imagePath: strOrNull(row.image_path),
     imageUrl,

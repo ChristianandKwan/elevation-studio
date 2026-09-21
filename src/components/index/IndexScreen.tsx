@@ -7,16 +7,23 @@ import type { IndexElevation, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
 import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
 import ArtistStandingNote from '@/components/notes/ArtistStandingNote'
-import { ANCHOR_META, artistKey, notesMentioning, notesOn, type Note, type NoteAnchor } from '@/lib/notes'
-import type { ArtistProfile } from '@/components/studio/StudioScreen'
+import { ANCHOR_META, notesMentioning, notesOn, type Note, type NoteAnchor } from '@/lib/notes'
+import ArtistNameEditor from './ArtistNameEditor'
+import type { Artist } from '@/lib/artists'
 
 interface Props {
   projectName: string
   clientName: string
   works: Work[]
   elevations: IndexElevation[]
-  /** Artists across the consultant's projects, so a name is typed the same way twice. */
-  artistSuggestions: string[]
+  /** Every artist the practice knows — the work editor offers these. */
+  artists: Artist[]
+  /** Put a work with an artist, creating them if they are new. */
+  onSetWorkArtist: (workId: string, name: string) => void
+  /** Rename an artist everywhere at once. */
+  onRenameArtist: (artistId: string, name: string) => void
+  /** The standing note about an artist, carried into every project. */
+  onArtistNoteChange: (artistId: string, note: string) => void
   onWorkChange: (workId: string, patch: WorkPatch) => void
   onAddWork: () => void
   onDeleteWork: (workId: string) => void
@@ -27,9 +34,6 @@ interface Props {
   onAddWorkSetNote: (artistKey: string, workIds: string[]) => void
   onChangeNote: (noteId: string, patch: NotePatch) => void
   onDeleteNote: (noteId: string) => void
-  /** Standing artist notes — the same text in every project they appear in. */
-  artistProfiles: ArtistProfile[]
-  onArtistProfileChange: (name: string, note: string) => void
 }
 
 /**
@@ -38,9 +42,9 @@ interface Props {
  * what it costs, this is the record of what was looked at.
  */
 export default function IndexScreen({
-  projectName, clientName, works, elevations, artistSuggestions, onWorkChange, onAddWork, onDeleteWork,
+  projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
   notes, onAddNote, onAddWorkSetNote, onChangeNote, onDeleteNote,
-  artistProfiles, onArtistProfileChange,
+  artists, onSetWorkArtist, onRenameArtist, onArtistNoteChange,
 }: Props) {
   const nameOf = useMemo(() => {
     const m = new Map(works.map(w => [w.id, w.name]))
@@ -66,9 +70,12 @@ export default function IndexScreen({
           <button type="button" className="btn btn-sm btn-primary" onClick={onAddWork}>+ Add work</button>
         </div>
 
-        {/* The artist inputs in the editor and the add modal both read this list. */}
+        {/* The artist inputs in the editor and the add modal both read this
+            list. It is the artist rows themselves now, not a list scraped
+            from the spellings on works — that is how 'Paula scher' got in
+            beside 'Paula Scher'. */}
         <datalist id="index-artists">
-          {artistSuggestions.map(a => <option key={a} value={a} />)}
+          {artists.map(a => <option key={a.id} value={a.name} />)}
         </datalist>
 
         {groups.length === 0 ? (
@@ -78,20 +85,20 @@ export default function IndexScreen({
           </div>
         ) : (
           groups.map(g => {
-            // The works' own artist, not the group label. Works with no
-            // artist group under a placeholder, and must not become one.
-            const key = artistKey(g.works[0]?.artist)
+            const artist = g.artistId ? artists.find(a => a.id === g.artistId) : undefined
             return (
               <ArtistGroupSection
                 key={g.key}
-                artistKeyValue={key}
+                artist={artist}
+                artists={artists}
                 label={g.label}
                 works={g.works}
                 elevations={elevations}
                 notes={notes}
                 nameOf={nameOf}
-                standingNote={artistProfiles.find(p => p.nameKey === key)?.note ?? ''}
-                onStandingNoteChange={note => onArtistProfileChange(g.label, note)}
+                onRenameArtist={onRenameArtist}
+                onArtistNoteChange={onArtistNoteChange}
+                onSetWorkArtist={onSetWorkArtist}
                 onWorkChange={onWorkChange}
                 onDeleteWork={onDeleteWork}
                 onAddNote={onAddNote}
@@ -117,26 +124,30 @@ export default function IndexScreen({
  * works from inside it, which nobody could explain.
  */
 function ArtistGroupSection({
-  artistKeyValue, label, works, elevations, notes, nameOf,
-  standingNote, onStandingNoteChange,
+  artist, artists, label, works, elevations, notes, nameOf,
+  onRenameArtist, onArtistNoteChange, onSetWorkArtist,
   onWorkChange, onDeleteWork,
   onAddNote, onAddWorkSetNote, onChangeNote, onDeleteNote,
 }: {
-  artistKeyValue: string
+  /** Undefined for the unattributed group, which is the absence of an artist. */
+  artist?: Artist
+  artists: Artist[]
   label: string
   works: Work[]
   elevations: IndexElevation[]
   notes: Note[]
   nameOf: (id: string) => string | undefined
-  standingNote: string
-  onStandingNoteChange: (note: string) => void
+  onRenameArtist: (artistId: string, name: string) => void
+  onArtistNoteChange: (artistId: string, note: string) => void
+  onSetWorkArtist: (workId: string, name: string) => void
   onWorkChange: (workId: string, patch: WorkPatch) => void
   onDeleteWork: (workId: string) => void
   onAddNote: (anchor: NoteAnchor, id: string | null) => void
-  onAddWorkSetNote: (artistKey: string, workIds: string[]) => void
+  onAddWorkSetNote: (artistId: string, workIds: string[]) => void
   onChangeNote: (noteId: string, patch: NotePatch) => void
   onDeleteNote: (noteId: string) => void
 }) {
+  const artistKeyValue = artist?.id ?? ''
   const [picking, setPicking] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [showAbout, setShowAbout] = useState(false)
@@ -163,7 +174,15 @@ function ArtistGroupSection({
   return (
     <section className="index-group">
       <div className="budget-section-kicker index-kicker">
-        <span>{label}</span>
+        {artist
+          ? (
+            <ArtistNameEditor
+              artist={artist}
+              artists={artists}
+              onRename={name => onRenameArtist(artist.id, name)}
+            />
+          )
+          : <span>{label}</span>}
         <span className="index-kicker-count">{works.length}</span>
       </div>
 
@@ -222,9 +241,9 @@ function ArtistGroupSection({
           {showAbout && artistKeyValue && (
             <div className="artist-note-open">
               <ArtistStandingNote
-                name={label}
-                note={standingNote}
-                onChange={onStandingNoteChange}
+                name={artist!.name}
+                note={artist!.note}
+                onChange={note => onArtistNoteChange(artist!.id, note)}
               />
               <p className="notes-hint">{ANCHOR_META.artist.prompt}</p>
               <NotePanel
@@ -258,6 +277,7 @@ function ArtistGroupSection({
                 placed={placementsOf(w.id, elevations)}
                 elevations={elevations}
                 onChange={patch => onWorkChange(w.id, patch)}
+                onArtistChange={name => onSetWorkArtist(w.id, name)}
                 onDelete={() => onDeleteWork(w.id)}
               />
             </div>

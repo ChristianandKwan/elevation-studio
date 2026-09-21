@@ -24,9 +24,13 @@ import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import IndexScreen from '@/components/index/IndexScreen'
 import NotesScreen from '@/components/notes/NotesScreen'
 import {
-  artistKey, noteRow, notesOn, rowToNote,
+  noteRow, notesOn, rowToNote,
   type Note, type NoteAnchor, type NoteRow,
 } from '@/lib/notes'
+import {
+  artistKey, canRenameTo, findArtistByName, sortArtists, tidyArtistName,
+  type Artist,
+} from '@/lib/artists'
 import type { NotePatch } from '@/components/notes/NotePanel'
 
 interface DbElevation {
@@ -83,20 +87,10 @@ interface Props {
   activityLogs: ActivityLog[]
   /** Every work in the project, placed or not. The index lists these. */
   initialWorks: Work[]
-  /** Artist names across the consultant's projects, for the pick-from-previous list. */
-  artistSuggestions: string[]
   /** Every note in the project, whatever it is anchored to. */
   initialNotes: Note[]
-  /** Standing artist notes, narrowed to the artists this project has. */
-  initialArtistProfiles: ArtistProfile[]
-}
-
-/** A standing note about an artist, shared by every project. */
-export interface ArtistProfile {
-  id: string
-  name: string
-  nameKey: string
-  note: string
+  /** Every artist the practice knows — the picker offers these. */
+  initialArtists: Artist[]
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
@@ -120,7 +114,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, artistSuggestions, initialNotes, initialArtistProfiles }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -139,7 +133,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [budget, setBudget] = useState<number | null>(project.budget)
   const [view, setView] = useState<'studio' | 'index' | 'budget' | 'notes'>('studio')
   const [notes, setNotes] = useState<Note[]>(initialNotes)
-  const [artistProfiles, setArtistProfiles] = useState<ArtistProfile[]>(initialArtistProfiles)
+  const [artists, setArtists] = useState<Artist[]>(initialArtists)
   // Every work in the project, placed or not. The index reads this; the
   // studio and budget read the copies folded into `elevations`.
   const [works, setWorks] = useState<Work[]>(initialWorks)
@@ -467,7 +461,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   // knows how a note is written and one place that can get it wrong.
 
   const NOTE_SELECT = `
-    id, project_id, anchor_type, elevation_id, option_id, work_id, artist_key,
+    id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
     body, share, display_order, updated_at, note_works(work_id)
   `
 
@@ -481,7 +475,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       elevationId: anchor === 'elevation' ? id : null,
       optionId:    anchor === 'option'    ? id : null,
       workId:      anchor === 'work'      ? id : null,
-      artistKey:   anchor === 'artist'    ? id : null,
+      artistId:    anchor === 'artist'    ? id : null,
       body: '',
       share: 'proposal',
       displayOrder: notes.filter(n => n.anchor === anchor).length,
@@ -514,8 +508,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
    * reason it leaves work-set notes out of an artist's own section: they are
    * read on the works they cover.
    */
-  const addWorkSetNote = useCallback((key: string, workIds: string[]) => {
-    if (key) void insertNote('artist', key, workIds)
+  const addWorkSetNote = useCallback((artistId: string, workIds: string[]) => {
+    if (artistId) void insertNote('artist', artistId, workIds)
     else void insertNote('project', null, workIds)
   }, [insertNote])
 
@@ -564,29 +558,97 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (error) { setNotes(before); onStatus('Could not remove the note — please try again') }
   }, [notes]) // eslint-disable-line
 
+  // ─── ARTISTS ─────────────────────────────────────────────────────
+
+  /** The standing note about an artist, carried into every project. */
+  const changeArtistNote = useCallback(async (artistId: string, note: string) => {
+    const before = artists
+    setArtists(prev => prev.map(a => (a.id === artistId ? { ...a, note } : a)))
+    const supabase = createClient()
+    const { error } = await supabase.from('artist_profiles')
+      .update({ note, updated_at: new Date().toISOString() })
+      .eq('id', artistId)
+    if (error) { setArtists(before); onStatus('Could not save the artist note — please try again') }
+  }, [artists]) // eslint-disable-line
+
   /**
-   * The standing note about an artist — the same text in every project they
-   * appear in. Upserted on the normalised name because artists are a text
-   * field on works and there is no row to hang an id off until now.
+   * Give an artist a different name.
+   *
+   * One row changes, and their notes follow without being touched — they
+   * point at the row, not at what it is called. Every work showing the old
+   * spelling is brought into line in the same go, because `works.artist` is
+   * a copy kept for display and a copy that disagrees is worse than none.
    */
-  const changeArtistProfile = useCallback(async (name: string, note: string) => {
-    const key = artistKey(name)
-    if (!key) return
-    const existing = artistProfiles.find(p => p.nameKey === key)
-    setArtistProfiles(prev => existing
-      ? prev.map(p => (p.nameKey === key ? { ...p, note } : p))
-      : [...prev, { id: `pending-${key}`, name, nameKey: key, note }])
+  const renameArtist = useCallback(async (artistId: string, rawName: string) => {
+    const name = tidyArtistName(rawName)
+    const check = canRenameTo(artists, artistId, name)
+    if (!check.ok) { onStatus(check.reason); return }
+
+    const beforeArtists = artists
+    const beforeWorks = works
+    setArtists(prev => sortArtists(prev.map(a => (
+      a.id === artistId ? { ...a, name, nameKey: artistKey(name) } : a
+    ))))
+    setWorks(prev => prev.map(w => (w.artistId === artistId ? { ...w, artist: name } : w)))
 
     const supabase = createClient()
-    const { data, error } = await supabase.from('artist_profiles')
-      .upsert({ name, name_key: key, note, updated_at: new Date().toISOString() }, { onConflict: 'name_key' })
-      .select('id, name, name_key, note')
-      .single()
-    if (error || !data) { onStatus('Could not save the artist note — please try again'); return }
-    setArtistProfiles(prev => prev.map(p => (
-      p.nameKey === key ? { id: data.id, name: data.name, nameKey: data.name_key, note: data.note ?? '' } : p
+    const { error } = await supabase.from('artist_profiles')
+      .update({ name, name_key: artistKey(name), updated_at: new Date().toISOString() })
+      .eq('id', artistId)
+    if (error) {
+      setArtists(beforeArtists); setWorks(beforeWorks)
+      onStatus('Could not rename that artist — please try again')
+      return
+    }
+    // Every work of theirs, in one statement rather than one per work.
+    const { error: wErr } = await supabase.from('works')
+      .update({ artist: name })
+      .eq('artist_id', artistId)
+    if (wErr) {
+      onStatus('Artist renamed, but some works still show the old spelling — reload to retry')
+      return
+    }
+    onStatus(`Renamed to ${name}`)
+  }, [artists, works]) // eslint-disable-line
+
+  /**
+   * Put a work with an artist, creating the artist if this is the first time
+   * the practice has seen them.
+   *
+   * Passing an empty name unattributes the work. Anything already known is
+   * reused whatever the capitals — which is the whole reason this does not
+   * simply write the text onto the work.
+   */
+  const setWorkArtist = useCallback(async (workId: string, rawName: string) => {
+    const name = tidyArtistName(rawName)
+    const supabase = createClient()
+
+    if (!name) {
+      setWorks(prev => prev.map(w => (w.id === workId ? { ...w, artist: '', artistId: null } : w)))
+      await supabase.from('works').update({ artist: '', artist_id: null }).eq('id', workId)
+      return
+    }
+
+    let artist = findArtistByName(artists, name)
+    if (!artist) {
+      const { data, error } = await supabase.from('artist_profiles')
+        .insert({ name, name_key: artistKey(name) })
+        .select('id, name, name_key, note')
+        .single()
+      if (error || !data) { onStatus('Could not add that artist — please try again'); return }
+      artist = { id: data.id, name: data.name, nameKey: data.name_key, note: data.note ?? '' }
+      setArtists(prev => sortArtists([...prev, artist!]))
+    }
+
+    const before = works
+    setWorks(prev => prev.map(w => (
+      w.id === workId ? { ...w, artist: artist!.name, artistId: artist!.id } : w
     )))
-  }, [artistProfiles]) // eslint-disable-line
+    const { error } = await supabase.from('works')
+      .update({ artist: artist.name, artist_id: artist.id })
+      .eq('id', workId)
+    if (error) { setWorks(before); onStatus('Could not save the artist — please try again') }
+  }, [artists, works]) // eslint-disable-line
 
   const handleWorkChange = useCallback((workId: string, patch: WorkPatch) => {
     // Optimistic: the budget and the index read these, so they have to move now.
@@ -1447,7 +1509,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           clientName={project.client_name}
           works={works}
           elevations={indexElevations}
-          artistSuggestions={artistSuggestions}
           onWorkChange={handleWorkChange}
           onAddWork={() => setShowIndexAddModal(true)}
           onDeleteWork={id => setPendingDeleteWorkId(id)}
@@ -1456,8 +1517,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onAddWorkSetNote={addWorkSetNote}
           onChangeNote={changeNote}
           onDeleteNote={deleteNote}
-          artistProfiles={artistProfiles}
-          onArtistProfileChange={changeArtistProfile}
+          artists={artists}
+          onSetWorkArtist={setWorkArtist}
+          onRenameArtist={renameArtist}
+          onArtistNoteChange={changeArtistNote}
         />
       )}
 

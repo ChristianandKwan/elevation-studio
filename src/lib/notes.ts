@@ -16,6 +16,10 @@
  *
  * Nothing here talks to the database or the DOM, so `node --test` can run it
  * and every screen can share it.
+ *
+ * Artists are anchored by id, not by name. They were anchored by normalised
+ * name until 032, which meant renaming an artist left their notes pointing at
+ * a name nothing had any more — see src/lib/artists.ts.
  */
 
 /** What a note is about. */
@@ -85,19 +89,6 @@ export function isNoteAnchor(v: unknown): v is NoteAnchor {
   return typeof v === 'string' && (NOTE_ANCHORS as readonly string[]).includes(v)
 }
 
-/**
- * How an artist's name becomes a key.
- *
- * Artists are a text field on works, not a table, so "Agnes Martin",
- * "agnes martin" and "Agnes  Martin " have to resolve to one artist. This is
- * the same normalisation the artist picker already groups on; anything
- * writing artist_key or artist_profiles.name_key must go through it or the
- * unique constraint will let a second spelling in.
- */
-export function artistKey(name: string | null | undefined): string {
-  return (name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
-}
-
 export interface Note {
   id: string
   projectId: string
@@ -105,7 +96,7 @@ export interface Note {
   elevationId: string | null
   optionId: string | null
   workId: string | null
-  artistKey: string | null
+  artistId: string | null
   body: string
   share: NoteShare
   /**
@@ -126,7 +117,7 @@ export interface NoteRow {
   elevation_id: string | null
   option_id: string | null
   work_id: string | null
-  artist_key: string | null
+  artist_id: string | null
   body: string
   share: string
   display_order: number
@@ -147,7 +138,7 @@ export function rowToNote(r: NoteRow): Note {
     elevationId: r.elevation_id,
     optionId: r.option_id,
     workId: r.work_id,
-    artistKey: r.artist_key,
+    artistId: r.artist_id,
     body: r.body ?? '',
     share: r.share === 'private' ? 'private' : 'proposal',
     workIds: (r.note_works ?? []).map(w => w.work_id),
@@ -164,7 +155,7 @@ export function noteRow(n: Omit<Note, 'id' | 'workIds' | 'updatedAt'>): Record<s
     elevation_id:  n.anchor === 'elevation' ? n.elevationId : null,
     option_id:     n.anchor === 'option'    ? n.optionId    : null,
     work_id:       n.anchor === 'work'      ? n.workId      : null,
-    artist_key:    n.anchor === 'artist'    ? n.artistKey   : null,
+    artist_id:     n.anchor === 'artist'    ? n.artistId    : null,
     body:          n.body,
     share:         n.share,
     display_order: n.displayOrder,
@@ -186,7 +177,7 @@ export function notesOn(
         case 'elevation': return n.elevationId === id
         case 'option':    return n.optionId === id
         case 'work':      return n.workId === id
-        case 'artist':    return n.artistKey === id
+        case 'artist':    return n.artistId === id
       }
     })
     .sort((a, b) => a.displayOrder - b.displayOrder)

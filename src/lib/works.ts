@@ -37,7 +37,7 @@ export const PLACEMENT_COLUMNS =
 
 /** The columns a work row carries. */
 export const WORK_COLUMNS =
-  'id, project_id, artist, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, note, note_shown_to_client, year, medium, edition, source, status, considered_for, display_order'
+  'id, project_id, artist, artist_id, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, note, note_shown_to_client, year, medium, edition, source, status, considered_for, display_order'
 
 /** A placement with its work joined in — what the studio and portal loaders select. */
 export const PLACEMENT_WITH_WORK_SELECT = `${PLACEMENT_COLUMNS}, work:works(${WORK_COLUMNS})`
@@ -126,15 +126,29 @@ export function workStoragePath(projectId: string, fileName: string, uuid: strin
 
 export const UNATTRIBUTED = 'Unattributed'
 
-export interface ArtistGroup { key: string; label: string; works: Work[] }
+export interface ArtistGroup {
+  key: string
+  label: string
+  /** The artist row, or null for works with no artist. */
+  artistId: string | null
+  works: Work[]
+}
 
-/** Works grouped by artist, as the index lists them. Unattributed works come last. */
+/**
+ * Works grouped by artist, as the index lists them. Unattributed works come
+ * last.
+ *
+ * Grouped by `artistId` where there is one, so two spellings of an artist are
+ * one group because they are one row — not because the spellings happened to
+ * match once lower-cased. Works from before migration 032, or written by code
+ * that has not set an id, still fall back to the name.
+ */
 export function groupWorksByArtist(works: Work[]): ArtistGroup[] {
   const groups = new Map<string, ArtistGroup>()
   for (const w of works) {
     const label = w.artist.trim() || UNATTRIBUTED
-    const key = label.toLowerCase()
-    const g = groups.get(key) ?? { key, label, works: [] }
+    const key = w.artistId ?? label.toLowerCase()
+    const g = groups.get(key) ?? { key, label, artistId: w.artistId ?? null, works: [] }
     g.works.push(w)
     groups.set(key, g)
   }

@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ANCHOR_META, ARTIST_STANDING_PROMPT, NOTE_ANCHORS,
-  artistKey, noteRow, notesForExport, notesMentioning, notesOn,
+  noteRow, notesForExport, notesMentioning, notesOn,
   rowToNote, workSetLabel, writtenCount,
   type Note, type NoteRow,
 } from './notes.ts'
@@ -10,7 +10,7 @@ import {
 function note(over: Partial<Note> = {}): Note {
   return {
     id: 'n1', projectId: 'p1', anchor: 'project',
-    elevationId: null, optionId: null, workId: null, artistKey: null,
+    elevationId: null, optionId: null, workId: null, artistId: null,
     body: 'because', share: 'proposal',
     workIds: [], displayOrder: 0, updatedAt: null,
     ...over,
@@ -33,14 +33,14 @@ describe('the anchors', () => {
     // Both carry no foreign key; the constraint in 031 enforces it.
     const row = noteRow({
       projectId: 'p1', anchor: 'budget',
-      elevationId: 'e1', optionId: 'o1', workId: 'w1', artistKey: 'someone',
+      elevationId: 'e1', optionId: 'o1', workId: 'w1', artistId: 'artist-9',
       body: 'ceiling is 40k', share: 'proposal', displayOrder: 0,
     })
     assert.equal(row.anchor_type, 'budget')
     assert.equal(row.elevation_id, null)
     assert.equal(row.option_id, null)
     assert.equal(row.work_id, null)
-    assert.equal(row.artist_key, null)
+    assert.equal(row.artist_id, null)
   })
 
   test('the budget prompt sends per-line pricing elsewhere', () => {
@@ -58,24 +58,22 @@ describe('the anchors', () => {
   })
 })
 
-describe('artistKey', () => {
-  test('two spellings of one artist are one artist', () => {
-    assert.equal(artistKey('Agnes Martin'), artistKey('agnes martin'))
-    assert.equal(artistKey('  Agnes   Martin '), 'agnes martin')
+describe('artists are anchored by id, not by name', () => {
+  test('a note points at the artist row', () => {
+    const row = noteRow({
+      projectId: 'p1', anchor: 'artist',
+      elevationId: null, optionId: null, workId: null, artistId: 'artist-1',
+      body: 'Represented by X', share: 'proposal', displayOrder: 0,
+    })
+    assert.equal(row.artist_id, 'artist-1')
+    assert.ok(!('artist_key' in row), 'artist_key was dropped in 032')
   })
 
-  test('nothing in, empty out', () => {
-    assert.equal(artistKey(null), '')
-    assert.equal(artistKey(undefined), '')
-    assert.equal(artistKey('   '), '')
-  })
-
-  test('an empty key is falsy, which is what the screens guard on', () => {
-    // Works with no artist group under a placeholder label in the index. The
-    // key has to come from the artist field, not that label, or the
-    // placeholder becomes an artist with notes and a standing profile.
-    assert.ok(!artistKey(''), 'empty key must be falsy')
-    assert.ok(artistKey('Unattributed'), 'a real artist of that name still keys')
+  test('renaming an artist cannot orphan their notes', () => {
+    // The whole reason 032 exists. The note refers to the artist's row, so
+    // whatever that row is called today is irrelevant to finding it.
+    const n = [note({ id: 'x', anchor: 'artist', artistId: 'artist-1' })]
+    assert.deepEqual(notesOn(n, 'artist', 'artist-1').map(v => v.id), ['x'])
   })
 })
 
@@ -83,7 +81,7 @@ describe('rows in and out', () => {
   test('a row becomes a note', () => {
     const row: NoteRow = {
       id: 'n9', project_id: 'p1', anchor_type: 'artist',
-      elevation_id: null, option_id: null, work_id: null, artist_key: 'agnes martin',
+      elevation_id: null, option_id: null, work_id: null, artist_id: 'artist-1',
       body: 'Represented by X', share: 'private',
       display_order: 2, updated_at: '2026-09-20T10:00:00Z',
       note_works: [{ work_id: 'w1' }, { work_id: 'w2' }],
@@ -97,7 +95,7 @@ describe('rows in and out', () => {
   test('an unrecognised anchor is filed oddly rather than lost', () => {
     const n = rowToNote({
       id: 'n1', project_id: 'p1', anchor_type: 'nonsense',
-      elevation_id: null, option_id: null, work_id: null, artist_key: null,
+      elevation_id: null, option_id: null, work_id: null, artist_id: null,
       body: 'still text', share: 'whatever', display_order: 0,
     })
     assert.equal(n.body, 'still text')
@@ -108,19 +106,19 @@ describe('rows in and out', () => {
   test('writing a note clears the anchors it is not', () => {
     const row = noteRow({
       projectId: 'p1', anchor: 'option',
-      elevationId: 'e1', optionId: 'o1', workId: 'w1', artistKey: 'someone',
+      elevationId: 'e1', optionId: 'o1', workId: 'w1', artistId: 'artist-9',
       body: 'paired', share: 'proposal', displayOrder: 0,
     })
     assert.equal(row.option_id, 'o1')
     assert.equal(row.elevation_id, null)
     assert.equal(row.work_id, null)
-    assert.equal(row.artist_key, null)
+    assert.equal(row.artist_id, null)
   })
 
   test('a note carries no role any more', () => {
     const row = noteRow({
       projectId: 'p1', anchor: 'project',
-      elevationId: null, optionId: null, workId: null, artistKey: null,
+      elevationId: null, optionId: null, workId: null, artistId: null,
       body: 'x', share: 'proposal', displayOrder: 0,
     })
     assert.ok(!('role' in row), 'role was dropped in 031 and must not be written')
@@ -159,10 +157,10 @@ describe('finding the notes on a thing', () => {
 
 describe('a note covering several works', () => {
   const consignment = note({
-    id: 'set', anchor: 'artist', artistKey: 'agnes martin', workIds: ['w1', 'w2'],
+    id: 'set', anchor: 'artist', artistId: 'artist-1', workIds: ['w1', 'w2'],
   })
   const onTheWork = note({ id: 'own', anchor: 'work', workId: 'w1' })
-  const aboutTheArtist = note({ id: 'artist', anchor: 'artist', artistKey: 'agnes martin' })
+  const aboutTheArtist = note({ id: 'artist', anchor: 'artist', artistId: 'artist-1' })
   const notes = [consignment, onTheWork, aboutTheArtist]
 
   test('a work sees both its own note and the set it belongs to', () => {
@@ -184,7 +182,7 @@ describe('a note covering several works', () => {
 
   test('a set note is still an artist note', () => {
     assert.deepEqual(
-      notesOn(notes, 'artist', 'agnes martin').map(n => n.id).sort(),
+      notesOn(notes, 'artist', 'artist-1').map(n => n.id).sort(),
       ['artist', 'set'],
     )
   })

@@ -7,7 +7,8 @@ import { sortOptions } from '@/lib/options'
 import { readOptionNoteFields } from '@/lib/lineItems'
 import { PLACEMENT_WITH_WORK_SELECT, WORK_COLUMNS } from '@/lib/works'
 import { placementsToArtworks, rowToWork } from '@/lib/workRows'
-import { artistKey, rowToNote, type NoteRow } from '@/lib/notes'
+import { rowToNote, type NoteRow } from '@/lib/notes'
+import { rowToArtist, sortArtists, type ArtistRow } from '@/lib/artists'
 import { blankWallDataUrl } from '@/lib/wall'
 
 interface Props {
@@ -39,7 +40,7 @@ export default async function ProjectPage({ params }: Props) {
   // Elevations → options → placements, each placement with its work joined
   // in. Works themselves are fetched separately below, because the index
   // lists every work in the project whether or not it hangs anywhere.
-  const [{ data: elevations }, { data: workRows }, { data: artistRows }] = await Promise.all([
+  const [{ data: elevations }, { data: workRows }, { data: artistRowsAll }] = await Promise.all([
     supabase
       .from('elevations')
       .select(`
@@ -58,9 +59,10 @@ export default async function ProjectPage({ params }: Props) {
       .eq('project_id', id)
       .order('display_order', { ascending: true })
       .order('created_at', { ascending: true }),
-    // Artists across every project this consultant can see, for the
-    // pick-from-previous list. RLS scopes the read.
-    supabase.from('works').select('artist').neq('artist', '').limit(2000),
+    // Every artist the practice knows. One row per artist across all
+    // projects — the work editor offers these rather than a list scraped from
+    // the spellings on works, which is how near-duplicates got in.
+    supabase.from('artist_profiles').select('id, name, name_key, note').order('name', { ascending: true }),
   ])
 
   // Collect all image paths up-front, deduplicated. Every artwork image now
@@ -129,9 +131,9 @@ export default async function ProjectPage({ params }: Props) {
 
   const works = (workRows ?? []).map(w => rowToWork(w as Record<string, unknown>, artUrlFor((w.image_path as string | null) ?? null)))
 
-  const artistSuggestions = [...new Set(
-    (artistRows ?? []).map(r => (typeof r.artist === 'string' ? r.artist.trim() : '')).filter(Boolean),
-  )].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }))
+  // The picker offers the artist rows themselves now, so a suggestion list
+  // scraped from the spellings on works would only reintroduce what 032
+  // collapsed. `artists` above is the list.
 
   // Most recent client token, expired or not. The expiry filter used to live in
   // this query, which meant an expired link was indistinguishable from never
@@ -153,8 +155,8 @@ export default async function ProjectPage({ params }: Props) {
   const { data: noteRows } = await supabase
     .from('notes')
     .select(`
-      id, project_id, anchor_type, elevation_id, option_id, work_id, artist_key,
-      role, body, share, display_order, updated_at,
+      id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
+      body, share, display_order, updated_at,
       note_works(work_id)
     `)
     .eq('project_id', id)
@@ -162,25 +164,7 @@ export default async function ProjectPage({ params }: Props) {
 
   const notes = (noteRows ?? []).map(r => rowToNote(r as unknown as NoteRow))
 
-  // Standing artist notes, narrowed to the artists this project actually has.
-  // The table is studio-wide, so fetching it whole would grow with every
-  // project ever made.
-  const projectArtistKeys = [...new Set(
-    (workRows ?? []).map(w => artistKey((w.artist as string | null) ?? '')).filter(Boolean),
-  )]
-  const { data: artistProfileRows } = projectArtistKeys.length
-    ? await supabase
-        .from('artist_profiles')
-        .select('id, name, name_key, note')
-        .in('name_key', projectArtistKeys)
-    : { data: [] }
-
-  const artistProfiles = (artistProfileRows ?? []).map(r => ({
-    id: r.id as string,
-    name: r.name as string,
-    nameKey: r.name_key as string,
-    note: (r.note as string) ?? '',
-  }))
+  const artists = sortArtists((artistRowsAll ?? []).map(r => rowToArtist(r as unknown as ArtistRow)))
 
   // Fetch last 10 activity logs for the project
   const { data: activityLogs } = await supabase
@@ -195,12 +179,11 @@ export default async function ProjectPage({ params }: Props) {
       project={{ ...project, consultantName: profile?.name ?? 'Consultant', budget: (project as any).budget ?? null }}
       elevations={elevationsWithUrls}
       initialWorks={works}
-      artistSuggestions={artistSuggestions}
       existingToken={clientLinkExpired ? null : (tokenRow?.token ?? null)}
       clientLinkExpired={clientLinkExpired}
       activityLogs={(activityLogs ?? []).map(a => ({ id: a.id, type: a.type, text: a.text, createdAt: a.created_at }))}
       initialNotes={notes}
-      initialArtistProfiles={artistProfiles}
+      initialArtists={artists}
     />
   )
 }

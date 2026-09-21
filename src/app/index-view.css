@@ -107,3 +107,29 @@
   .index-view { overflow: visible; }
   .index-row { page-break-inside: avoid; }
 }
+
+/* ── An artist's name, editable where it is shown ────────── */
+/* Renaming used to mean editing every work of theirs one at a time. The
+   heading bears the name, so the heading is where it changes. */
+.artist-name { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.artist-rename-btn {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 6px; cursor: pointer; color: var(--mid);
+  background: none; border: 1px solid transparent; border-radius: var(--radius-xs);
+  opacity: 0; transition: opacity .12s;
+}
+/* Kept out of the way until the heading is hovered — renaming an artist is a
+   deliberate act, not something to trip over while scanning a list. */
+.index-kicker:hover .artist-rename-btn,
+.artist-rename-btn:focus-visible { opacity: 1; }
+.artist-rename-btn:hover { color: var(--accent); border-color: var(--accent); }
+.artist-name-input {
+  font-family: inherit; font-size: inherit; letter-spacing: inherit;
+  text-transform: none; color: var(--charcoal);
+  padding: 3px 7px; min-width: 200px;
+  border: 1px solid var(--charcoal); border-radius: var(--radius-sm); background: white;
+}
+.artist-rename-hint {
+  font-size: 10.5px; letter-spacing: 0; text-transform: none;
+  color: var(--mid); font-weight: 400;
+}
