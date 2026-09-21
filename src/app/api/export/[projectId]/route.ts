@@ -42,6 +42,7 @@ function readChoices(raw: unknown): ExportChoices | null {
     optionIds: ids as string[],
     includeSetAside: bool(body.includeSetAside, DEFAULT_CHOICES.includeSetAside),
     includeWallRenders: bool(body.includeWallRenders, DEFAULT_CHOICES.includeWallRenders),
+    includeBareWalls: bool(body.includeBareWalls, DEFAULT_CHOICES.includeBareWalls),
     includeWorkImages: bool(body.includeWorkImages, DEFAULT_CHOICES.includeWorkImages),
     includeThumbnails: bool(body.includeThumbnails, DEFAULT_CHOICES.includeThumbnails),
     includeBudgetImage: bool(body.includeBudgetImage, DEFAULT_CHOICES.includeBudgetImage),

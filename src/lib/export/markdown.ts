@@ -35,7 +35,8 @@
  * `node --test` cover it without a database.
  */
 import type {
-  ExportBudget, ExportElevation, ExportNote, ExportSnapshot, ExportWork,
+  ExportBudget, ExportElevation, ExportNote, ExportOption,
+  ExportSnapshot, ExportWork,
 } from './types'
 
 /**
@@ -170,19 +171,50 @@ function titleCase(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : s
 }
 
-function elevationSection(elev: ExportElevation, works: Map<string, ExportWork>): string[] {
-  const opt = elev.option
+/**
+ * One elevation: the wall, then each option of it that was included.
+ *
+ * The options are alternatives, and a proposal usually shows the client more
+ * than one, so they are nested under the elevation rather than the elevation
+ * being repeated per option. What is common to them all — the wall, its size,
+ * the empty room, the notes about the space — is said once, above.
+ */
+function elevationSection(elev: ExportElevation, works: Map<string, ExportWork>): string[][] {
   const out: string[] = [`### ${elev.name}`]
 
   out.push(facts([
-    ['Option', opt.title],
+    ['Wall', elev.wallWCm && elev.wallHCm ? size(elev.wallWCm, elev.wallHCm) : null],
+    ['Options', String(elev.options.length)],
+  ]))
+
+  if (elev.bareWallFile) {
+    out.push(`![${elev.name}, empty](${elev.bareWallFile})`)
+    out.push('*The room with nothing hung.*')
+  }
+
+  out.push('**About this elevation**')
+  out.push(...notesBlock(elev.notes))
+
+  const blocks: string[][] = [out]
+  if (elev.options.length === 0) {
+    blocks.push(['*No options of this elevation were included.*'])
+  }
+  for (const opt of elev.options) blocks.push(optionSection(elev, opt, works))
+  return blocks
+}
+
+function optionSection(
+  elev: ExportElevation, opt: ExportOption, works: Map<string, ExportWork>,
+): string[] {
+  const out: string[] = [`#### ${opt.title}`]
+
+  out.push(facts([
     ['Picked by the client', opt.picked ? 'yes' : null],
-    ['Wall', opt.wallWCm && opt.wallHCm ? size(opt.wallWCm, opt.wallHCm) : null],
     ['Works', String(opt.workIds.length)],
   ]))
 
   if (opt.renderFile) out.push(`![${elev.name}, ${opt.title}](${opt.renderFile})`)
-  if (opt.thumbnailFile) out.push(`![${elev.name} thumbnail](${opt.thumbnailFile})`)
+  if (opt.thumbnailFile) out.push(`![${elev.name}, ${opt.title}, thumbnail](${opt.thumbnailFile})`)
 
   const hung = opt.workIds.length === 0
     ? ['- *Nothing hung yet.*']
@@ -194,8 +226,7 @@ function elevationSection(elev: ExportElevation, works: Map<string, ExportWork>)
   out.push('**On this wall**')
   out.push(tight(hung))
 
-  out.push('**About this elevation**')
-  out.push(...notesBlock([...elev.notes, ...opt.notes]))
+  out.push(...noteLines(opt.notes))
   return out
 }
 
@@ -272,7 +303,7 @@ export function buildMarkdown(snap: ExportSnapshot): string {
     elevBlock.push('*No elevations were included in this export.*')
   }
   blocks.push(elevBlock)
-  for (const elev of snap.elevations) blocks.push(elevationSection(elev, byId))
+  for (const elev of snap.elevations) blocks.push(...elevationSection(elev, byId))
 
   // The proposal is the works on the chosen walls. Everything else the
   // project holds is context, and saying so is the difference between three

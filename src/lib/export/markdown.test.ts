@@ -26,6 +26,7 @@ const CHOICES: ExportChoices = {
   includeWorkImages: true,
   includeThumbnails: false,
   includeBudgetImage: false,
+  includeBareWalls: false,
 }
 
 function work(over: Partial<ExportWork> = {}): ExportWork {
@@ -39,15 +40,20 @@ function work(over: Partial<ExportWork> = {}): ExportWork {
   }
 }
 
+function option(over: Partial<ExportElevation['options'][number]> = {}) {
+  return {
+    id: 'opt1', title: 'Option A', picked: true,
+    renderFile: 'images/elevations/living-room-option-a.jpg', thumbnailFile: null,
+    workIds: ['w1'], notes: [],
+    ...over,
+  }
+}
+
 function elevation(over: Partial<ExportElevation> = {}): ExportElevation {
   return {
     id: 'e1', name: 'Living Room', notes: [],
-    option: {
-      id: 'opt1', title: 'Option A', picked: true,
-      wallWCm: 320, wallHCm: 240,
-      renderFile: 'images/elevations/living-room.png', thumbnailFile: null,
-      workIds: ['w1'], notes: [],
-    },
+    wallWCm: 320, wallHCm: 240, bareWallFile: null,
+    options: [option()],
     ...over,
   }
 }
@@ -107,10 +113,7 @@ describe('the document holds its shape', () => {
   test('a list is emitted as contiguous items', () => {
     const md = buildMarkdown(snapshot({
       works: [work(), work({ id: 'w2', name: 'Sprinters 1' })],
-      elevations: [{
-        ...elevation(),
-        option: { ...elevation().option, workIds: ['w1', 'w2'] },
-      }],
+      elevations: [elevation({ options: [option({ workIds: ['w1', 'w2'] })] })],
     }))
     const list = md.slice(md.indexOf('**On this wall**'))
     assert.ok(list.includes('- Julian Opie — Street 1 (100 × 70 cm)\n- Julian Opie — Sprinters 1'))
@@ -255,15 +258,14 @@ describe('set aside', () => {
 })
 
 describe('elevations', () => {
-  test('the wall render is referenced from the elevation that owns it', () => {
+  test('the wall render is referenced from the option that owns it', () => {
     const md = buildMarkdown(snapshot())
-    assert.ok(md.includes('![Living Room, Option A](images/elevations/living-room.png)'))
+    assert.ok(md.includes('![Living Room, Option A](images/elevations/living-room-option-a.jpg)'))
   })
 
   test('an elevation with nothing hung says so', () => {
-    const e = elevation()
     const md = buildMarkdown(snapshot({
-      elevations: [{ ...e, option: { ...e.option, workIds: [] } }],
+      elevations: [elevation({ options: [option({ workIds: [] })] })],
     }))
     assert.ok(md.includes('*Nothing hung yet.*'))
   })
@@ -273,11 +275,39 @@ describe('elevations', () => {
   })
 
   test('an unpicked option carries no verdict either way', () => {
-    const e = elevation()
     const md = buildMarkdown(snapshot({
-      elevations: [{ ...e, option: { ...e.option, picked: false } }],
+      elevations: [elevation({ options: [option({ picked: false })] })],
     }))
     assert.ok(!md.includes('Picked by the client'))
+  })
+
+  test('several options nest under one elevation, said once', () => {
+    // The options are alternatives for one wall, so the wall, its size and
+    // the notes about the space belong to the elevation, not to each option.
+    const md = buildMarkdown(snapshot({
+      elevations: [elevation({
+        options: [
+          option({ id: 'a', title: 'Option A' }),
+          option({ id: 'b', title: 'Option B', picked: false, workIds: [] }),
+        ],
+      })],
+    }))
+    assert.equal(md.match(/^### Living Room$/gm)?.length, 1)
+    assert.equal(md.match(/^#### Option /gm)?.length, 2)
+    assert.equal(md.match(/\*\*Wall\*\* 320 × 240 cm/g)?.length, 1)
+    assert.ok(md.includes('**Options** 2'))
+  })
+
+  test('the empty wall is shown once, above the options', () => {
+    const md = buildMarkdown(snapshot({
+      elevations: [elevation({ bareWallFile: 'images/elevations/living-room-empty.jpg' })],
+    }))
+    assert.ok(md.includes('![Living Room, empty](images/elevations/living-room-empty.jpg)'))
+    assert.ok(md.indexOf('living-room-empty.jpg') < md.indexOf('#### Option A'))
+  })
+
+  test('no empty wall, no mention of one', () => {
+    assert.ok(!buildMarkdown(snapshot()).includes('empty'))
   })
 })
 

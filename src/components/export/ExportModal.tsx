@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { IndexElevation } from '@/lib/works'
 import { DEFAULT_CHOICES, type ExportChoices } from '@/lib/export/types'
+import { ArcSpinner } from '@/components/ui/Spinner'
 
 interface Props {
   projectId: string
@@ -49,34 +50,60 @@ export default function ExportModal({
   projectId, projectName, elevations, setAsideCount, onCaptureBudget, onClose,
 }: Props) {
   /**
-   * The option chosen per elevation, or null where the elevation is out.
+   * Every option that will go in the pack.
    *
-   * Keyed by elevation rather than held as a flat list of option ids so that
-   * unticking an elevation and picking a different option are the same
-   * gesture in different places — and so the invariant the export relies on,
-   * one option per elevation at most, cannot be expressed wrongly.
+   * A set of option ids rather than one-per-elevation: a proposal usually
+   * shows the client the alternatives that were considered, so all of them
+   * is the common case and the default. Unticking an elevation's last option
+   * takes the elevation out of the export entirely.
    */
-  const [picked, setPicked] = useState<Record<string, string | null>>(() => {
-    const initial: Record<string, string | null> = {}
-    for (const e of elevations) {
-      if (e.options.length === 0) { initial[e.id] = null; continue }
-      const pickedIndex = e.clientPickedOption
-        ? e.optionKeys.indexOf(e.clientPickedOption)
-        : -1
-      initial[e.id] = (pickedIndex >= 0 ? e.options[pickedIndex] : e.options[0]).id
-    }
-    return initial
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(elevations.flatMap(e => e.options.map(o => o.id))),
+  )
+
+  const toggleOption = (id: string) => setPicked(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
   })
 
-  const [includeSetAside, setIncludeSetAside] = useState(DEFAULT_CHOICES.includeSetAside)
+  const setElevation = (elev: IndexElevation, on: boolean) => setPicked(prev => {
+    const next = new Set(prev)
+    for (const o of elev.options) {
+      if (on) next.add(o.id)
+      else next.delete(o.id)
+    }
+    return next
+  })
+
   const [includeWallRenders, setWallRenders] = useState(DEFAULT_CHOICES.includeWallRenders)
+  const [includeBareWalls, setBareWalls] = useState(DEFAULT_CHOICES.includeBareWalls)
   const [includeWorkImages, setWorkImages] = useState(DEFAULT_CHOICES.includeWorkImages)
-  const [includeThumbnails, setThumbnails] = useState(DEFAULT_CHOICES.includeThumbnails)
   const [includeBudgetImage, setBudgetImage] = useState(DEFAULT_CHOICES.includeBudgetImage)
+  const [includeSetAside, setIncludeSetAside] = useState(DEFAULT_CHOICES.includeSetAside)
+  const [includeThumbnails, setThumbnails] = useState(DEFAULT_CHOICES.includeThumbnails)
 
   const [busy, setBusy] = useState(false)
   /** Which half of the work is running, so the wait can say what it is doing. */
   const [stage, setStage] = useState<'budget' | 'pack'>('pack')
+  /**
+   * Seconds spent so far.
+   *
+   * The pack is built in one request, so there is no honest percentage to
+   * show — the server cannot report back while it is working. A counter that
+   * is plainly still moving is the next best thing, and it is what tells the
+   * consultant the difference between slow and stuck. A spinner alone does
+   * not: this took a full minute on a real project and looked stalled.
+   */
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return }
+    const started = Date.now()
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [busy])
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<PackResponse | null>(null)
 
@@ -86,10 +113,7 @@ export default function ExportModal({
     return () => document.removeEventListener('keydown', handler)
   }, [onClose, busy])
 
-  const optionIds = useMemo(
-    () => Object.values(picked).filter((id): id is string => !!id),
-    [picked],
-  )
+  const optionIds = useMemo(() => [...picked], [picked])
 
   async function runExport() {
     setBusy(true)
@@ -97,8 +121,8 @@ export default function ExportModal({
     setStage(includeBudgetImage ? 'budget' : 'pack')
     try {
       const choices: ExportChoices = {
-        optionIds, includeSetAside, includeWallRenders, includeWorkImages,
-        includeThumbnails, includeBudgetImage,
+        optionIds, includeWallRenders, includeBareWalls, includeWorkImages,
+        includeBudgetImage, includeSetAside, includeThumbnails,
       }
       // Taken here rather than on the server: the budget's appearance is a
       // rendered screen, and the only place that screen exists is a browser.
@@ -159,35 +183,43 @@ export default function ExportModal({
         </div>
 
         <div className="field">
-          <label className="field-label">Which walls, and which version of each</label>
+          <label className="field-label">Which walls, and which versions of each</label>
           {elevations.length === 0 ? (
             <p className="export-hint">This project has no elevations yet.</p>
           ) : (
             <div className="export-elevations">
               {elevations.map(elev => {
-                const on = !!picked[elev.id]
+                const chosen = elev.options.filter(o => picked.has(o.id)).length
+                const all = chosen === elev.options.length && chosen > 0
                 return (
-                  <div key={elev.id} className={`export-elev${on ? '' : ' off'}`}>
+                  <div key={elev.id} className={`export-elev${chosen ? '' : ' off'}`}>
                     <label className="export-check">
                       <input
                         type="checkbox"
-                        checked={on}
+                        checked={chosen > 0}
+                        // Part-way through is neither on nor off, and a box
+                        // that looked empty while two of five were ticked
+                        // would be lying about what is going out.
+                        ref={el => { if (el) el.indeterminate = chosen > 0 && !all }}
                         disabled={elev.options.length === 0}
-                        onChange={e => setPicked(p => ({
-                          ...p,
-                          [elev.id]: e.target.checked ? elev.options[0]?.id ?? null : null,
-                        }))}
+                        onChange={e => setElevation(elev, e.target.checked)}
                       />
                       <span className="export-elev-name">{elev.name}</span>
+                      {elev.options.length > 1 && (
+                        <span className="export-check-note">
+                          {' '}— {chosen} of {elev.options.length}
+                        </span>
+                      )}
                     </label>
-                    {on && elev.options.length > 1 && (
+                    {elev.options.length > 1 && (
                       <div className="export-options">
                         {elev.options.map((opt, i) => (
                           <button
                             key={opt.id}
                             type="button"
-                            className={`export-opt${picked[elev.id] === opt.id ? ' active' : ''}`}
-                            onClick={() => setPicked(p => ({ ...p, [elev.id]: opt.id }))}
+                            className={`export-opt${picked.has(opt.id) ? ' active' : ''}`}
+                            aria-pressed={picked.has(opt.id)}
+                            onClick={() => toggleOption(opt.id)}
                           >
                             {opt.title}
                             {elev.clientPickedOption === elev.optionKeys[i] && (
@@ -208,32 +240,21 @@ export default function ExportModal({
         </div>
 
         <div className="field">
-          <label className="field-label">What else goes in</label>
-          <label className="export-check">
-            <input
-              type="checkbox"
-              checked={includeSetAside}
-              onChange={e => setIncludeSetAside(e.target.checked)}
-            />
-            <span>
-              Works set aside
-              <span className="export-check-note">
-                {setAsideCount === 0
-                  ? ' — nothing is set aside in this project'
-                  : ` — ${setAsideCount} of them, in a section of their own, saying who decided`}
-              </span>
-            </span>
-          </label>
-        </div>
-
-        <div className="field">
-          <label className="field-label">Pictures</label>
+          <label className="field-label">What goes in the pack</label>
           <label className="export-check">
             <input type="checkbox" checked={includeWallRenders}
               onChange={e => setWallRenders(e.target.checked)} />
             <span>
-              The walls
-              <span className="export-check-note"> — each one as it will look, framed and hung</span>
+              The walls, hung
+              <span className="export-check-note"> — each option as it will look, framed on the wall</span>
+            </span>
+          </label>
+          <label className="export-check">
+            <input type="checkbox" checked={includeBareWalls}
+              onChange={e => setBareWalls(e.target.checked)} />
+            <span>
+              The empty walls
+              <span className="export-check-note"> — the same room with nothing hung, one per elevation</span>
             </span>
           </label>
           <label className="export-check">
@@ -250,6 +271,18 @@ export default function ExportModal({
             <span>
               The budget as a page
               <span className="export-check-note"> — the budget screen as it would print, on A4</span>
+            </span>
+          </label>
+          <label className="export-check">
+            <input type="checkbox" checked={includeSetAside}
+              onChange={e => setIncludeSetAside(e.target.checked)} />
+            <span>
+              Works set aside
+              <span className="export-check-note">
+                {setAsideCount === 0
+                  ? ' — nothing is set aside in this project'
+                  : ` — ${setAsideCount} of them, in a section of their own, saying who decided`}
+              </span>
             </span>
           </label>
           <label className="export-check">
@@ -275,11 +308,19 @@ export default function ExportModal({
           </button>
         </div>
         {busy && (
-          <p className="export-hint export-hint--busy">
-            {stage === 'budget'
-              ? 'Laying the budget out as a page…'
-              : 'Rendering each wall at full size. A big project takes a few seconds.'}
-          </p>
+          <div className="export-progress" role="status" aria-live="polite">
+            <ArcSpinner size={28} />
+            <div>
+              <p className="export-progress-stage">
+                {stage === 'budget'
+                  ? 'Laying the budget out as a page…'
+                  : `Rendering ${optionIds.length} wall${optionIds.length === 1 ? '' : 's'} at full size…`}
+              </p>
+              <p className="export-progress-elapsed">
+                {elapsed}s · a large project can take a minute
+              </p>
+            </div>
+          </div>
         )}
       </div>
     </div>

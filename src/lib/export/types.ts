@@ -17,12 +17,26 @@ import type { SetAside, SubLineItem } from '@/types'
 
 /** What the consultant ticked on the export screen. */
 export interface ExportChoices {
-  /** Option ids to include, one per elevation — the consultant picks which. */
+  /**
+   * Every option to include, across every elevation.
+   *
+   * An elevation contributes as many options as are ticked, not one. A
+   * proposal usually shows the client the alternatives that were considered,
+   * so all of them is the common case and the default — the earlier version
+   * allowed exactly one per elevation and there was no way to ask for more.
+   */
   optionIds: string[]
   /** Include works somebody has taken out of the running. Off by default. */
   includeSetAside: boolean
-  /** The wall as it will look, one PNG per included option. */
+  /** The wall as it will look, framed and hung: one picture per option. */
   includeWallRenders: boolean
+  /**
+   * The room with nothing on it, one per elevation.
+   *
+   * Consultants use an empty wall as a page in the proposal, so it is worth
+   * having beside the hung versions rather than instead of them.
+   */
+  includeBareWalls: boolean
   /** Each work's own image file, full size, on its own. */
   includeWorkImages: boolean
   /** The small cached option thumbnails. Rarely wanted beside the renders. */
@@ -38,11 +52,12 @@ export interface ExportChoices {
 }
 
 export const DEFAULT_CHOICES: Omit<ExportChoices, 'optionIds'> = {
-  includeSetAside: false,
   includeWallRenders: true,
+  includeBareWalls: false,
   includeWorkImages: true,
-  includeThumbnails: false,
   includeBudgetImage: true,
+  includeSetAside: false,
+  includeThumbnails: false,
 }
 
 /** A note, already filtered to the ones that may leave the studio. */
@@ -83,8 +98,6 @@ export interface ExportOption {
   title: string
   /** True when this is the option the client picked. */
   picked: boolean
-  wallWCm: number | null
-  wallHCm: number | null
   /** Paths inside the zip. */
   renderFile: string | null
   thumbnailFile: string | null
@@ -96,7 +109,13 @@ export interface ExportOption {
 export interface ExportElevation {
   id: string
   name: string
-  option: ExportOption
+  /** The wall itself, which every option of it shares. */
+  wallWCm: number | null
+  wallHCm: number | null
+  /** The room with nothing hung, where it was asked for. */
+  bareWallFile: string | null
+  /** Every option the consultant included, in their own order. */
+  options: ExportOption[]
   notes: ExportNote[]
 }
 

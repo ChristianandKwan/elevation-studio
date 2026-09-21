@@ -31,7 +31,11 @@ import sharp from 'sharp'
 import { buildThumbnailBuffer, EXPORT_WALL_W, type ArtworkEntry } from '@/lib/thumbnail'
 import { notesForExport, notesMentioning, notesOn, rowToNote, workSetLabel, type Note, type NoteRow } from '@/lib/notes'
 import { sortOptions, optionTitleFor } from '@/lib/options'
-import { netPrice, subItemAmount, installCostDisplay, consultantFeeRange, displayFrozenAmount } from '@/components/budget/budgetCalc'
+import {
+  netPrice, subItemAmount, installCostDisplay, consultantFeeRange,
+  displayFrozenAmount, computeProjectTotals, getOptionTotals, bucketTotal,
+  type BudgetArtwork, type BudgetElevationData,
+} from '@/components/budget/budgetCalc'
 import { parseSubLineItems, parseDiscountStatus, parseDiscountPercent } from '@/lib/lineItems'
 import { parseSetAside } from '@/lib/works'
 import type { BudgetConsultantFee, BudgetCustomLineItem, BudgetInstallation } from '@/types'
@@ -236,6 +240,34 @@ function toExportNote(n: Note, nameOf: (id: string) => string | undefined): Expo
 
 // ── Images ─────────────────────────────────────────────────────────────────
 
+/**
+ * How many images to fetch or render at once.
+ *
+ * Rendering a wall is a second of sharp compositing and downloading a work is
+ * a round trip to storage; doing either one at a time made a project with a
+ * dozen options take the best part of a minute. Four at a time is most of the
+ * win without asking a serverless function to hold twelve decoded images in
+ * memory at the same moment.
+ */
+const CONCURRENCY = 4
+
+/** Map over `items` with at most `CONCURRENCY` in flight, keeping order. */
+async function mapLimit<T, R>(
+  items: T[], fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.min(CONCURRENCY, items.length) }, async () => {
+    for (;;) {
+      const i = next++
+      if (i >= items.length) return
+      out[i] = await fn(items[i], i)
+    }
+  })
+  await Promise.all(workers)
+  return out
+}
+
 /** A file destined for the zip. */
 interface PackFile {
   path: string
@@ -281,7 +313,16 @@ async function download(
  * already has to keep in step.
  */
 async function renderWall(
-  supabase: SupabaseClient, opt: OptionRow, workById: Map<string, WorkRow>,
+  supabase: SupabaseClient,
+  opt: OptionRow,
+  workById: Map<string, WorkRow>,
+  /**
+   * Draw the room with nothing on it. Consultants use an empty wall as a page
+   * in the proposal, and it is the same pipeline with no artworks passed —
+   * which also means it is the same crop, scale and colour as the hung
+   * versions beside it, rather than the raw photograph at some other size.
+   */
+  bare = false,
 ): Promise<Uint8Array | null> {
   if (!opt.orig_w || !opt.orig_h) return null
 
@@ -297,7 +338,9 @@ async function renderWall(
   }
 
   // One signed URL per file, not per placement: the same print can hang twice.
-  const placed = (opt.artworks ?? []).filter(a => a.visible && workById.get(a.work_id)?.image_path)
+  const placed = bare
+    ? []
+    : (opt.artworks ?? []).filter(a => a.visible && workById.get(a.work_id)?.image_path)
   const paths = [...new Set(placed.map(a => workById.get(a.work_id)!.image_path as string))]
   const urls = new Map<string, string>()
   await Promise.all(paths.map(async path => {
@@ -345,48 +388,116 @@ async function renderWall(
  * carries for undecided elevations collapse — except indicative installation,
  * which is a range because the cost genuinely is one.
  */
+/**
+ * The money, using the budget screen's own arithmetic.
+ *
+ * Every figure comes from `budgetCalc.ts`. Nothing is recomputed: there is
+ * one budget in this product, and a second implementation of it would drift
+ * and the drift would land in a client's proposal.
+ *
+ * Because an elevation can now contribute several options, the total is a
+ * range wherever the client has not picked one — the cheapest set they could
+ * choose and the dearest. That is `computeProjectTotals`, and both ends are
+ * combinations they could really buy rather than a minimum of each field
+ * taken separately, which is a distinction that module learned the hard way.
+ */
 function buildBudget(
-  chosen: Array<{ opt: OptionRow; works: WorkRow[] }>,
+  chosen: Array<{ elev: ElevationRow; opts: OptionRow[]; options: OptionRow[] }>,
+  works: WorkRow[],
   budgetRow: BudgetRow | null,
   clientBudget: number | null,
   budgetNotes: ExportNote[],
   imageFile: string | null,
 ) {
-  const lines: ExportBudgetLine[] = []
-  let total = 0
-  /**
-   * Artwork prices alone, with no framing, duty or installation in it.
-   *
-   * This is the base a percentage consultant fee is taken on — see `artMin`
-   * in TotalsPanel.tsx, which is `artVatable + artExempt`. Charging the fee
-   * on the running total instead would quietly inflate it by a percentage of
-   * the framing and the installation.
-   */
-  let artOnly = 0
+  const byId = new Map(works.map(w => [w.id, w]))
 
-  for (const { opt, works } of chosen) {
-    for (const a of (opt.artworks ?? []).filter(p => p.visible)) {
-      const w = works.find(x => x.id === a.work_id)
-      if (!w) continue
-      const net = netPrice({
-        price: w.price ?? 0,
-        discountStatus: parseDiscountStatus(w.discount_status),
-        discountPercent: parseDiscountPercent(w.discount_percent),
-      })
-      lines.push({ label: `${w.name ?? 'Untitled'} — ${w.artist || 'Unattributed'}`, amount: net })
-      total += net
-      artOnly += net
-
-      for (const item of parseSubLineItems(w.sub_line_items)) {
-        const amount = subItemAmount(item, net)
-        if (amount === 0) continue
-        lines.push({ label: item.label?.trim() || item.kind, amount, sub: true })
-        total += amount
-      }
+  const asBudgetArtwork = (a: PlacementRow): BudgetArtwork | null => {
+    const w = byId.get(a.work_id)
+    if (!w) return null
+    return {
+      id: a.id,
+      workId: w.id,
+      name: w.name ?? 'Untitled',
+      artist: w.artist ?? '',
+      wCm: w.w_cm,
+      hCm: w.h_cm,
+      price: w.price ?? 0,
+      visible: a.visible,
+      note: '',
+      noteShownToClient: true,
+      vatApplies: w.vat_applies ?? true,
+      discountStatus: parseDiscountStatus(w.discount_status),
+      discountPercent: parseDiscountPercent(w.discount_percent),
+      subLineItems: parseSubLineItems(w.sub_line_items),
     }
   }
 
-  let totalMax = total
+  const budgetElevations: BudgetElevationData[] = chosen.map(({ elev, opts, options }) => ({
+    id: elev.id,
+    name: elev.name,
+    // Only a pick the consultant actually included counts. Leaving the key in
+    // place while its option is out of the export would have
+    // `computeProjectTotals` look for an option that is not there, find
+    // nothing, and quietly contribute zero for the whole elevation.
+    clientPickedOption: opts.some(o => o.option === elev.client_picked_option)
+      ? elev.client_picked_option
+      : null,
+    hiddenFromClient: false,
+    options: opts.map(opt => ({
+      key: opt.option,
+      label: optionTitleFor(options, opt.option),
+      title: optionTitleFor(options, opt.option),
+      name: opt.name ?? null,
+      consultantNote: '',
+      consultantNoteShownToClient: true,
+      artworks: (opt.artworks ?? [])
+        .map(asBudgetArtwork)
+        .filter((a): a is BudgetArtwork => a !== null),
+    })),
+  }))
+
+  const totals = computeProjectTotals(budgetElevations, false)
+  const artMin = totals.min.artVatable + totals.min.artExempt
+  const artMax = totals.max.artVatable + totals.max.artExempt
+
+  const lines: ExportBudgetLine[] = []
+
+  // Per-elevation detail. Where the client has picked, the works themselves
+  // are listed, because that is what is actually being bought. Where they
+  // have not, the alternatives are a range and naming one option's works
+  // would present a choice that has not been made as though it had.
+  for (const elev of budgetElevations) {
+    const picked = elev.clientPickedOption
+      ? elev.options.find(o => o.key === elev.clientPickedOption)
+      : undefined
+
+    if (picked) {
+      lines.push({ label: `${elev.name} — ${picked.title}`, amount: bucketTotal(getOptionTotals(picked.artworks), false) })
+      for (const a of picked.artworks.filter(x => x.visible)) {
+        const net = netPrice(a)
+        lines.push({ label: `${a.name} — ${a.artist || 'Unattributed'}`, amount: net, sub: true })
+        for (const item of a.subLineItems) {
+          const amount = subItemAmount(item, net)
+          if (amount === 0) continue
+          lines.push({ label: item.label?.trim() || item.kind, amount, sub: true })
+        }
+      }
+      continue
+    }
+
+    const each = elev.options.map(o => bucketTotal(getOptionTotals(o.artworks), false))
+    if (each.length === 0) continue
+    const lo = Math.min(...each)
+    const hi = Math.max(...each)
+    lines.push({
+      label: `${elev.name} — ${elev.options.length} option${elev.options.length === 1 ? '' : 's'}, none picked yet`,
+      amount: lo,
+      ...(hi !== lo ? { amountMax: hi } : {}),
+    })
+  }
+
+  let total = bucketTotal(totals.min, false)
+  let totalMax = bucketTotal(totals.max, false)
 
   // Lines the consultant has marked as not shown to the client stay out. The
   // pack is the input to a client proposal, and the budget screen's own
@@ -394,11 +505,9 @@ function buildBudget(
   // second way here would be a second answer to drift from.
   const install = budgetRow?.installation
   if (install && (install.shownToClient ?? true)) {
-    // Indicative installation is tiered on how many works are going out, so
-    // the count is the ones actually in this export. A confirmed amount
-    // ignores the count, which `installCostDisplay` already handles.
-    const count = artCountOf(chosen)
-    const display = installCostDisplay(install, count, count)
+    // Indicative installation is tiered on how many works are going out, and
+    // that count itself has two ends once an elevation is undecided.
+    const display = installCostDisplay(install, totals.min.artCount, totals.max.artCount)
     if (display.max > 0) {
       lines.push({
         label: display.isIndicative ? 'Installation (indicative)' : 'Installation',
@@ -423,8 +532,15 @@ function buildBudget(
       total += amount
       totalMax += amount
     } else {
-      const range = consultantFeeRange(fee, artOnly, artOnly)
-      lines.push({ label: `Consultant fee (${fee.amount}%)`, amount: range.min })
+      // Taken on artwork prices alone — see `artMin` in TotalsPanel.tsx.
+      // Charging it on the running total would add a percentage of the
+      // framing and the installation too.
+      const range = consultantFeeRange(fee, artMin, artMax)
+      lines.push({
+        label: `Consultant fee (${fee.amount}%)`,
+        amount: range.min,
+        ...(range.max !== range.min ? { amountMax: range.max } : {}),
+      })
       total += range.min
       totalMax += range.max
     }
@@ -444,17 +560,6 @@ function buildBudget(
     totalMax: Math.max(total, totalMax),
     clientBudget, notes: budgetNotes,
   }
-}
-
-/** How many works are actually going out, which is what installation is tiered on. */
-function artCountOf(chosen: Array<{ opt: OptionRow; works: WorkRow[] }>): number {
-  let n = 0
-  for (const { opt, works } of chosen) {
-    for (const a of (opt.artworks ?? []).filter(p => p.visible)) {
-      if (works.some(w => w.id === a.work_id)) n += 1
-    }
-  }
-  return n
 }
 
 // ── Assembly ───────────────────────────────────────────────────────────────
@@ -496,45 +601,89 @@ export async function assemblePack(
   // Which option was picked for each elevation. An elevation the consultant
   // unticked contributes nothing — not an empty section, no mention at all.
   //
-  // `options` is carried alongside because the option's *title* is a function
-  // of its position among its siblings, never of the stored key — see
-  // options.ts. Taking the first match also enforces the invariant the rest
-  // of the pack assumes: at most one option per elevation, whatever the
-  // request asked for.
+  // An elevation contributes every option that was ticked, in their own
+  // order. `options` is carried alongside because an option's *title* is a
+  // function of its position among all its siblings, never of the stored key
+  // and never of its position among the included ones — see options.ts.
   const wanted = new Set(choices.optionIds)
-  const chosen: Array<{ elev: ElevationRow; opt: OptionRow; options: OptionRow[] }> = []
+  const chosen: Array<{ elev: ElevationRow; opts: OptionRow[]; options: OptionRow[] }> = []
   for (const elev of elevations) {
     const options = sortOptions(elev.elevation_options ?? [])
-    const opt = options.find(o => wanted.has(o.id))
-    if (opt) chosen.push({ elev, opt, options })
+    const opts = options.filter(o => wanted.has(o.id))
+    if (opts.length > 0) chosen.push({ elev, opts, options })
   }
 
   const files: PackFile[] = []
   const taken = new Set<string>()
 
-  // ── Wall renders, one per chosen option ──
+  // ── Wall renders, one per included option ──
+  //
+  // The names are worked out first and the rendering done in parallel, so a
+  // project with a dozen options is not a dozen sequential seconds. Names
+  // have to be allocated up front either way: `uniquePath` is a running
+  // claim on a set, and racing it would hand two walls the same filename.
   const renderPaths = new Map<string, string>()
   if (choices.includeWallRenders) {
-    for (const { elev, opt } of chosen) {
-      const bytes = await renderWall(supabase, opt, workById)
-      if (!bytes) continue
-      const path = uniquePath(taken, 'images/elevations', fileSlug(elev.name, 'elevation'), '.jpg')
-      files.push({ path, bytes })
-      renderPaths.set(opt.id, path)
-    }
+    const jobs = chosen.flatMap(({ elev, opts, options }) =>
+      opts.map(opt => ({
+        opt,
+        // Named by elevation and option, because an elevation now
+        // contributes several walls and "living-room.jpg" would be whichever
+        // of them was written last.
+        path: uniquePath(
+          taken,
+          'images/elevations',
+          fileSlug(`${elev.name} ${optionTitleFor(options, opt.option)}`, 'elevation'),
+          '.jpg',
+        ),
+      })))
+    const rendered = await mapLimit(jobs, job => renderWall(supabase, job.opt, workById))
+    jobs.forEach((job, i) => {
+      const bytes = rendered[i]
+      if (!bytes) return
+      files.push({ path: job.path, bytes })
+      renderPaths.set(job.opt.id, job.path)
+    })
+  }
+
+  // ── The empty room, one per elevation ──
+  //
+  // Per elevation rather than per option: the options are alternative hangs
+  // of one wall, so with nothing on them they are the same picture. Drawn
+  // from the first included option, which is where that wall's photograph
+  // and scale live.
+  const bareWallPaths = new Map<string, string>()
+  if (choices.includeBareWalls) {
+    const jobs = chosen.map(({ elev, opts }) => ({
+      elevId: elev.id,
+      opt: opts[0],
+      path: uniquePath(taken, 'images/elevations', `${fileSlug(elev.name, 'elevation')}-empty`, '.jpg'),
+    }))
+    const rendered = await mapLimit(jobs, job => renderWall(supabase, job.opt, workById, true))
+    jobs.forEach((job, i) => {
+      const bytes = rendered[i]
+      if (!bytes) return
+      files.push({ path: job.path, bytes })
+      bareWallPaths.set(job.elevId, job.path)
+    })
   }
 
   // ── The cached option thumbnails, where they were asked for ──
   const thumbPaths = new Map<string, string>()
   if (choices.includeThumbnails) {
-    for (const { elev, opt } of chosen) {
-      if (!opt.thumbnail_path) continue
-      const bytes = await download(supabase, 'thumbnails', opt.thumbnail_path)
-      if (!bytes) continue
-      const path = uniquePath(taken, 'images/thumbnails', fileSlug(elev.name, 'elevation'), '.png')
-      files.push({ path, bytes })
-      thumbPaths.set(opt.id, path)
-    }
+    const jobs = chosen.flatMap(({ elev, opts }) => opts
+      .filter(opt => opt.thumbnail_path)
+      .map(opt => ({
+        opt,
+        path: uniquePath(taken, 'images/thumbnails', fileSlug(elev.name, 'elevation'), '.png'),
+      })))
+    const got = await mapLimit(jobs, job => download(supabase, 'thumbnails', job.opt.thumbnail_path as string))
+    jobs.forEach((job, i) => {
+      const bytes = got[i]
+      if (!bytes) return
+      files.push({ path: job.path, bytes })
+      thumbPaths.set(job.opt.id, job.path)
+    })
   }
 
   // ── The budget page, where one was taken ──
@@ -565,12 +714,18 @@ export async function assemblePack(
   }
 
   // ── Where each work hangs, within this export ──
+  //
+  // Named by elevation rather than by option: a work on three alternatives
+  // for one wall hangs on that wall, and listing it three times would read
+  // as three places it is going.
   const hangsOn = new Map<string, string[]>()
-  for (const { elev, opt } of chosen) {
-    for (const a of (opt.artworks ?? []).filter(p => p.visible)) {
-      const list = hangsOn.get(a.work_id) ?? []
-      if (!list.includes(elev.name)) list.push(elev.name)
-      hangsOn.set(a.work_id, list)
+  for (const { elev, opts } of chosen) {
+    for (const opt of opts) {
+      for (const a of (opt.artworks ?? []).filter(pl => pl.visible)) {
+        const list = hangsOn.get(a.work_id) ?? []
+        if (!list.includes(elev.name)) list.push(elev.name)
+        hangsOn.set(a.work_id, list)
+      }
     }
   }
 
@@ -597,28 +752,33 @@ export async function assemblePack(
     notes: notesMentioning(visible, w.id).map(n => toExportNote(n, nameOf)),
   }))
 
-  const exportElevations: ExportElevation[] = chosen.map(({ elev, opt, options }) => {
-    const placed = (opt.artworks ?? [])
-      .filter(p => p.visible && workById.has(p.work_id))
-      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
-    return {
-      id: elev.id,
-      name: elev.name,
-      notes: notesFor(visible, 'elevation', elev.id, nameOf),
-      option: {
+  const exportElevations: ExportElevation[] = chosen.map(({ elev, opts, options }) => ({
+    id: elev.id,
+    name: elev.name,
+    // The wall belongs to the elevation, not to any one arrangement of it.
+    // Taken from the first included option, which is where it is recorded.
+    wallWCm: opts[0]?.wall_w_cm ?? null,
+    wallHCm: opts[0]?.wall_h_cm ?? null,
+    bareWallFile: bareWallPaths.get(elev.id) ?? null,
+    notes: notesFor(visible, 'elevation', elev.id, nameOf),
+    options: opts.map(opt => {
+      const placed = (opt.artworks ?? [])
+        .filter(pl => pl.visible && workById.has(pl.work_id))
+        .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+      return {
         id: opt.id,
-        // The letter is a position, never the stored key — see options.ts.
+        // The letter is a position among *all* the siblings, never the
+        // stored key and never a position among the included ones — see
+        // options.ts. Exporting B and D must still call them B and D.
         title: optionTitleFor(options, opt.option),
         picked: elev.client_picked_option === opt.option,
-        wallWCm: opt.wall_w_cm,
-        wallHCm: opt.wall_h_cm,
         renderFile: renderPaths.get(opt.id) ?? null,
         thumbnailFile: thumbPaths.get(opt.id) ?? null,
-        workIds: placed.map(p => p.work_id),
+        workIds: placed.map(pl => pl.work_id),
         notes: notesFor(visible, 'option', opt.id, nameOf),
-      },
-    }
-  })
+      }
+    }),
+  }))
 
   const snapshot: ExportSnapshot = {
     projectName: project.name,
@@ -636,7 +796,8 @@ export async function assemblePack(
       notes: notesFor(visible, 'artist', a.id, nameOf),
     })),
     budget: buildBudget(
-      chosen.map(({ opt }) => ({ opt, works })),
+      chosen,
+      works,
       budget,
       project.budget ?? null,
       notesFor(visible, 'budget', null, nameOf),

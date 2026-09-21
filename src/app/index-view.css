@@ -264,6 +264,22 @@
 
 .export-hint--busy { margin-top: 12px; text-align: right; }
 
+/* The wait. There is no honest percentage — the pack is built in one request
+   — so this shows what is happening and a clock that is plainly still going. */
+.export-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+}
+
+.export-progress-stage { font-size: 13px; color: var(--charcoal); margin: 0; }
+.export-progress-elapsed { font-size: 12px; color: var(--mid); margin: 2px 0 0; }
+
 .export-error {
   font-size: 12px;
   line-height: 1.5;
