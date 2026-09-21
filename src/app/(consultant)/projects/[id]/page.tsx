@@ -65,12 +65,16 @@ export default async function ProjectPage({ params }: Props) {
 
   // Collect all image paths up-front, deduplicated. Every artwork image now
   // hangs off a work, so the project's works cover every placement too.
-  const allOptions = (elevations ?? []).flatMap(elev => elev.elevation_options ?? [])
-  const elevPaths = [...new Set(allOptions.map((o: any) => o.image_path).filter(Boolean))] as string[]
+  // Structural rather than `any`: these two reads are the only thing wanted
+  // from the row here, and naming them keeps a renamed column a type error
+  // instead of a silently empty list of paths.
+  type OptionPaths = { image_path: string | null; thumbnail_path: string | null }
+  const allOptions = (elevations ?? []).flatMap(elev => elev.elevation_options ?? []) as OptionPaths[]
+  const elevPaths = [...new Set(allOptions.map(o => o.image_path).filter(Boolean))] as string[]
   // The composited wall each option already caches for the dashboard. The
   // notes screen shows them so it is obvious which option is being written
   // about — an option letter on its own tells you nothing.
-  const thumbPaths = [...new Set(allOptions.map((o: any) => o.thumbnail_path).filter(Boolean))] as string[]
+  const thumbPaths = [...new Set(allOptions.map(o => o.thumbnail_path).filter(Boolean))] as string[]
   const artPaths = [...new Set((workRows ?? []).map(w => w.image_path as string | null).filter(Boolean))] as string[]
 
   // Two batched createSignedUrls calls in parallel — one per bucket.
