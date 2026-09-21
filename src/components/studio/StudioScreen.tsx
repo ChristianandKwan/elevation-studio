@@ -20,6 +20,7 @@ import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import { fmtGbp } from '@/components/budget/budgetCalc'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
 import { toWorkColumns, placementsOf, workFieldsOf } from '@/lib/works'
+import { createWriteQueue, enqueue } from '@/lib/writeQueue'
 import type { WorkPatch, IndexElevation } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import IndexScreen from '@/components/index/IndexScreen'
@@ -152,10 +153,22 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     return () => clearTimeout(t)
   }, [])
 
-  function onStatus(msg: string) {
+  /**
+   * Stable by design, and it matters far more than it looks.
+   *
+   * As a plain function this was a new value on every render, which made
+   * `flushWorkWrite` and `flushNoteWrite` new on every render, which made the
+   * flush-on-leave effect below re-run on every render — and *its cleanup*
+   * clears the debounce timers and writes immediately. So the 600ms debounce
+   * never survived a render, every keystroke became its own request, and two
+   * requests for one row could land out of order. A rename typed as
+   * "Street 2" → "Street " → "Street 1" could end up stored as "Street ",
+   * with the screen still showing "Street 1" because that half is optimistic.
+   */
+  const onStatus = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
-  }
+  }, [])
 
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
@@ -440,23 +453,35 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const notePending = useRef(new Map<string, { note: string; shownToClient: boolean }>())
   const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
+  /**
+   * One queue per row, so two writes to the same work cannot overtake each
+   * other. The debounce means this rarely has anything to wait for — type,
+   * pause, one request — but "rarely" is not "never": a flush already in
+   * flight when the next one is queued used to be a race, and the loser of
+   * that race was whichever reply happened to arrive last, not whichever was
+   * typed last.
+   */
+  const workWrites = useRef(createWriteQueue())
+
   const flushWorkWrite = useCallback(async (workId: string) => {
     const patch = workPending.current.get(workId)
     workPending.current.delete(workId)
     workTimers.current.delete(workId)
     if (!patch) return
 
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('works')
-      .update(toWorkColumns(patch))
-      .eq('id', workId)
-      .select('id')
+    await enqueue(workWrites.current, workId, async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('works')
+        .update(toWorkColumns(patch))
+        .eq('id', workId)
+        .select('id')
 
-    // `select` matters: without it an update that matches nothing, or that
-    // row-level security filters out, comes back with no error at all.
-    if (error) onStatus('Not saved: ' + error.message)
-    else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
+      // `select` matters: without it an update that matches nothing, or that
+      // row-level security filters out, comes back with no error at all.
+      if (error) onStatus('Not saved: ' + error.message)
+      else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
+    })
   }, [onStatus])
 
   // ─── NOTES ───────────────────────────────────────────────────────
@@ -690,24 +715,29 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     )
   }, [studio, flushWorkWrite, elevations])
 
+  /** Same queue, same reason, for the note an option carries. */
+  const noteWrites = useRef(createWriteQueue())
+
   const flushNoteWrite = useCallback(async (optionRowId: string) => {
     const pending = notePending.current.get(optionRowId)
     notePending.current.delete(optionRowId)
     noteTimers.current.delete(optionRowId)
     if (!pending) return
 
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('elevation_options')
-      .update({
-        consultant_note: pending.note,
-        consultant_note_shown_to_client: pending.shownToClient,
-      })
-      .eq('id', optionRowId)
-      .select('id')
+    await enqueue(noteWrites.current, optionRowId, async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('elevation_options')
+        .update({
+          consultant_note: pending.note,
+          consultant_note_shown_to_client: pending.shownToClient,
+        })
+        .eq('id', optionRowId)
+        .select('id')
 
-    if (error) onStatus('Note not saved: ' + error.message)
-    else if (!data || data.length === 0) onStatus('Note not saved: this option could not be found')
+      if (error) onStatus('Note not saved: ' + error.message)
+      else if (!data || data.length === 0) onStatus('Note not saved: this option could not be found')
+    })
   }, [onStatus])
 
   const handleOptionNoteChange = useCallback((
@@ -743,6 +773,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [elevations, flushNoteWrite])
 
   // Leaving the page with a write still queued would lose it.
+  //
+  // This must run on mount and unmount ONLY. Its cleanup clears the debounce
+  // timers and writes immediately, so if anything in the dependency array
+  // changes per render, the cleanup fires per render and the debounce above
+  // is dead — every keystroke becomes its own request and two of them can
+  // land out of order. That is exactly what happened while `onStatus` was a
+  // plain function. Both dependencies are `useCallback`s over a stable
+  // `onStatus`; keep them that way.
   useEffect(() => {
     const wTimers = workTimers.current
     const nTimers = noteTimers.current
