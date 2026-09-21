@@ -19,6 +19,16 @@ interface Props {
   /** Names a multi-work note's set, so it reads as more than a count. */
   workName?: (workId: string) => string | undefined
   /**
+   * The work this panel belongs to, where it belongs to one.
+   *
+   * A note covering several works is anchored to their artist (or to the
+   * project) and read on each work it covers. Without knowing which work it
+   * is being read on, the card cannot offer to take it off this one — and
+   * for a long time it could not offer to delete it either, which left those
+   * notes with no way out at all.
+   */
+  onWork?: string
+  /**
    * Show what this note is for on the card itself, beside its buttons, for
    * the places with no section heading above to carry it.
    */
@@ -35,7 +45,8 @@ interface Props {
  * and dropping it is most of what this panel is now.
  */
 export default function NotePanel({
-  notes, anchor, onAdd, onChange, onDelete, workName, promptInline = false, compact = false,
+  notes, anchor, onAdd, onChange, onDelete, workName, onWork,
+  promptInline = false, compact = false,
 }: Props) {
   return (
     <div className={`note-panel${compact ? ' compact' : ''}`}>
@@ -51,6 +62,7 @@ export default function NotePanel({
           // editing it here changes it everywhere; saying so is the
           // difference between a shortcut and a trap.
           borrowed={n.anchor !== anchor}
+          onWork={onWork}
           onChange={patch => onChange(n.id, patch)}
           onDelete={() => onDelete(n.id)}
         />
@@ -66,7 +78,8 @@ export default function NotePanel({
 }
 
 function NoteCard({
-  note, anchor, workName, promptInline = false, borrowed = false, onChange, onDelete,
+  note, anchor, workName, onWork, promptInline = false, borrowed = false,
+  onChange, onDelete,
 }: {
   note: Note
   anchor: NoteAnchor
@@ -74,6 +87,7 @@ function NoteCard({
   promptInline?: boolean
   /** Shown here but written elsewhere — editing it changes it there too. */
   borrowed?: boolean
+  onWork?: string
   onChange: (patch: NotePatch) => void
   onDelete: () => void
 }) {
@@ -111,6 +125,15 @@ function NoteCard({
     ? workSetLabel(note.workIds, workName)
     : ''
 
+  /**
+   * Whether taking this note off the work it is being read on would leave it
+   * covering anything. When it would not, there is only one sensible action
+   * and offering two would be a choice without a difference.
+   */
+  const coversOthers = !!onWork
+    && note.workIds.includes(onWork)
+    && note.workIds.length > 1
+
   return (
     <div className={`note-card${note.share === 'private' ? ' private' : ''}${borrowed ? ' borrowed' : ''}`}>
       <div className="note-card-head">
@@ -138,17 +161,36 @@ function NoteCard({
             {note.share === 'private' ? 'Private' : 'In proposal'}
           </button>
 
-          {/* No Remove on a borrowed note. "Remove" here would read as taking
-              it off this work and would in fact delete the shared note; it is
-              removed where it was written. */}
-          {!borrowed && (confirmDelete ? (
+          {/* A plain "Remove" on a note being read somewhere it is not
+              anchored would say one thing and do another: it looks like
+              taking it off this work and would in fact delete a note several
+              works share. So the covering case asks which is meant.
+
+              It used to show nothing at all, which was worse — the note was
+              filtered out of its own artist's panel as well, so there was no
+              screen anywhere that would delete it. */}
+          {confirmDelete ? (
             <>
-              <button type="button" className="note-del confirm" onClick={onDelete}>Delete</button>
+              {coversOthers && (
+                <button
+                  type="button"
+                  className="note-del"
+                  onClick={() => {
+                    onChange({ workIds: note.workIds.filter(id => id !== onWork) })
+                    setConfirmDelete(false)
+                  }}
+                >
+                  Just this work
+                </button>
+              )}
+              <button type="button" className="note-del confirm" onClick={onDelete}>
+                {coversOthers ? 'Delete for all' : 'Delete'}
+              </button>
               <button type="button" className="note-del" onClick={() => setConfirmDelete(false)}>Keep</button>
             </>
           ) : (
             <button type="button" className="note-del" onClick={() => setConfirmDelete(true)}>Remove</button>
-          ))}
+          )}
         </div>
       </div>
 

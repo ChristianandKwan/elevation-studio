@@ -7,7 +7,7 @@ import type { IndexElevation, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
 import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
 import ArtistStandingNote from '@/components/notes/ArtistStandingNote'
-import { ANCHOR_META, notesMentioning, notesOn, type Note, type NoteAnchor } from '@/lib/notes'
+import { ANCHOR_META, notesMentioning, notesOwnedBy, type Note, type NoteAnchor } from '@/lib/notes'
 import ArtistNameEditor from './ArtistNameEditor'
 import ExportModal from '@/components/export/ExportModal'
 import type { Artist } from '@/lib/artists'
@@ -212,9 +212,8 @@ function ArtistGroupSection({
     stop()
   }
 
-  const artistNotes = artistKeyValue ? notesOn(notes, 'artist', artistKeyValue) : []
   // A note covering a set is read on the works it covers, not again up here.
-  const aboutTheArtist = artistNotes.filter(n => n.workIds.length === 0)
+  const aboutTheArtist = artistKeyValue ? notesOwnedBy(notes, 'artist', artistKeyValue) : []
 
   return (
     <section className="index-group">
@@ -347,6 +346,7 @@ function ArtistGroupSection({
               one written on it directly. */}
           <WorkNotes
             notes={notesMentioning(notes, w.id)}
+            workId={w.id}
             nameOf={nameOf}
             onAdd={() => onAddNote('work', w.id)}
             onChange={onChangeNote}
@@ -364,9 +364,11 @@ function ArtistGroupSection({
  * stays a list to scan.
  */
 function WorkNotes({
-  notes, nameOf, onAdd, onChange, onDelete,
+  notes, workId, nameOf, onAdd, onChange, onDelete,
 }: {
   notes: Note[]
+  /** Which work these are being read on — see NotePanel's `onWork`. */
+  workId: string
   nameOf: (id: string) => string | undefined
   onAdd: () => void
   onChange: (noteId: string, patch: NotePatch) => void
@@ -387,6 +389,7 @@ function WorkNotes({
         onChange={onChange}
         onDelete={onDelete}
         workName={nameOf}
+        onWork={workId}
         // No section heading down here to carry the prompt, so each card
         // shows it on the line with its own buttons.
         promptInline
