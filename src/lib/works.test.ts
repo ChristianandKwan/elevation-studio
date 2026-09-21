@@ -9,9 +9,10 @@ import assert from 'node:assert/strict'
 
 import {
   placementRow, workRow, toWorkColumns, workStoragePath, workFieldsOf,
-  groupWorksByArtist, placementsOf, parseWorkStatus, UNATTRIBUTED,
+  groupWorksByArtist, placementsOf, parseSetAside, standingOf, UNATTRIBUTED,
 } from './works.ts'
 import type { Artwork, Work } from '@/types'
+import type { Placed } from './works.ts'
 
 /**
  * Every column the old single-table save wrote (useStudio's `artworkRow`
@@ -51,7 +52,7 @@ function work(partial: Partial<Work> = {}): Work {
     id: `w${seq++}`, projectId: 'proj', artist: '', artistId: null, name: 'Untitled', imagePath: null, imageUrl: null,
     wCm: 40, hCm: 60, price: 0, vatApplies: true, discountStatus: 'none', discountPercent: null,
     subLineItems: [], note: '', noteShownToClient: true, year: null, medium: null, edition: null,
-    source: null, status: 'proposed', consideredFor: null, displayOrder: 0,
+    source: null, setAside: null, consideredFor: null, displayOrder: 0,
     ...partial,
   }
 }
@@ -102,8 +103,8 @@ describe('the two halves of a save', () => {
 
 describe('toWorkColumns', () => {
   test('writes only the keys present, mapping names', () => {
-    assert.deepEqual(toWorkColumns({ price: 100, consideredFor: 'e1', status: 'declined' }),
-      { price: 100, considered_for: 'e1', status: 'declined' })
+    assert.deepEqual(toWorkColumns({ price: 100, consideredFor: 'e1', setAside: 'us' }),
+      { price: 100, considered_for: 'e1', set_aside: 'us' })
   })
   test('null is a value, undefined is absence', () => {
     assert.deepEqual(toWorkColumns({ consideredFor: null, year: undefined }), { considered_for: null })
@@ -201,56 +202,48 @@ describe('placementsOf', () => {
   })
 })
 
-describe('parseWorkStatus', () => {
-  test('falls back to proposed', () => {
-    assert.equal(parseWorkStatus('declined'), 'declined')
-    assert.equal(parseWorkStatus('nonsense'), 'proposed')
-    assert.equal(parseWorkStatus(null), 'proposed')
+describe('parseSetAside', () => {
+  test('anything unrecognised is live, not set aside', () => {
+    // A row read before 034 has no set_aside at all, and one read from an
+    // older deploy may still carry 'proposed'. Neither means somebody took
+    // the work out, so both have to come back null.
+    assert.equal(parseSetAside(undefined), null)
+    assert.equal(parseSetAside(null), null)
+    assert.equal(parseSetAside('proposed'), null)
+    assert.equal(parseSetAside('declined'), null)
+    assert.equal(parseSetAside(''), null)
+  })
+
+  test('the two real values survive', () => {
+    assert.equal(parseSetAside('us'), 'us')
+    assert.equal(parseSetAside('client'), 'client')
   })
 })
 
-/**
- * A merge re-points a placement at a different work, so every work-side field
- * the flat `Artwork` folds in has to be re-folded from the keeper. Miss one
- * and the wall keeps showing the merged-away work's price or picture — a bug
- * that looks like the merge silently failed.
- *
- * The guard is `workRow`, which is the same set expressed as columns: if a
- * field is added to one and not the other, the save and the merge disagree.
- */
-describe('workFieldsOf', () => {
-  const COLUMN_OF: Record<string, string> = {
-    name: 'name', artist: 'artist', wCm: 'w_cm', hCm: 'h_cm', price: 'price',
-    note: 'note', noteShownToClient: 'note_shown_to_client', vatApplies: 'vat_applies',
-    discountStatus: 'discount_status', discountPercent: 'discount_percent',
-    subLineItems: 'sub_line_items',
-  }
+describe('standingOf', () => {
+  const on = (n: number): Placed[] =>
+    Array.from({ length: n }, (_, i) => ({ elevationId: `e${i}`, elevationName: `Room ${i}`, labels: ['A'] }))
 
-  test('covers every column the work half of a save writes', () => {
-    const folded = Object.keys(workFieldsOf(work()))
-    const covered = folded.map(f => COLUMN_OF[f]).filter(Boolean).sort()
-    const written = Object.keys(workRow(art())).sort()
-    assert.deepEqual(covered, written,
-      'workFieldsOf and workRow disagree about what belongs to the work')
+  test('a live work is described by where it hangs, not by a stored word', () => {
+    assert.equal(standingOf(work(), on(1)), 'On a wall')
+    assert.equal(standingOf(work(), on(0)), 'Not placed')
   })
 
-  test('carries the image across, which the save has no column for', () => {
-    // imagePath and imageUrl are not in workRow — the studio never rewrites a
-    // work's file — but a merge must still hand them over or the placement
-    // renders the deleted work's picture.
-    const folded = workFieldsOf(work({ imagePath: 'p/art-1.png', imageUrl: 'https://signed' }))
-    assert.equal(folded.imagePath, 'p/art-1.png')
-    assert.equal(folded.imageUrl, 'https://signed')
+  test('a set-aside work says who set it aside', () => {
+    assert.equal(standingOf(work({ setAside: 'us' }), on(0)), 'Ruled out by us')
+    assert.equal(standingOf(work({ setAside: 'client' }), on(0)), 'Passed by the client')
   })
 
-  test('takes the keeper\'s values, not the placement\'s', () => {
-    const keeper = work({ name: 'Street 2', price: 14000, artist: 'Julian Opie' })
-    const repointed = { ...art({ name: 'Street 3', price: 99 }), workId: keeper.id, ...workFieldsOf(keeper) }
-    assert.equal(repointed.name, 'Street 2')
-    assert.equal(repointed.price, 14000)
-    assert.equal(repointed.workId, keeper.id)
-    // The placement's own half is untouched: where it hangs does not change.
-    assert.equal(repointed.xF, 0.2)
-    assert.equal(repointed.frameType, 'black')
+  test('being set aside outranks still hanging somewhere', () => {
+    // The old model let a work be "declined" and on a wall at once and never
+    // reconciled the two; both live declined rows were in exactly that state.
+    assert.equal(standingOf(work({ setAside: 'client' }), on(2)), 'Passed by the client')
+  })
+
+  test('a work on one option is not set aside by another option being picked', () => {
+    // Options are alternatives. Nothing about being on a wall, or not being
+    // on a particular wall, may imply anybody turned the work down.
+    assert.equal(standingOf(work(), on(1)), 'On a wall')
+    assert.equal(standingOf(work(), on(0)), 'Not placed')
   })
 })

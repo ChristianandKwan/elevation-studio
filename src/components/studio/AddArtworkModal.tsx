@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react'
 import { ArcSpinner } from '@/components/ui/Spinner'
 import { checkArtworkDetail } from '@/lib/utils'
 import type { Work } from '@/types'
+import { SET_ASIDE_BADGE } from '@/lib/works'
 
 export interface ArtMeta {
   name: string
@@ -257,7 +258,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
                   <span className="work-pick-title">{w.name}</span>
                   <span className="work-pick-meta">
                     {w.artist && <>{w.artist} · </>}{w.wCm} × {w.hCm} cm
-                    {w.status !== 'proposed' && <> · {w.status}</>}
+                    {w.setAside && <> · {SET_ASIDE_BADGE[w.setAside]}</>}
                   </span>
                 </div>
               </label>

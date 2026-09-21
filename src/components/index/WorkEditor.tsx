@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { MoneyFields } from '@/components/budget/ArtworkLineEditor'
-import { WORK_STATUSES, WORK_STATUS_LABEL, WORK_STATUS_HINT } from '@/lib/works'
+import { SET_ASIDE_VALUES, SET_ASIDE_LABEL, SET_ASIDE_HINT } from '@/lib/works'
 import type { IndexElevation, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
 
@@ -109,21 +109,36 @@ export default function WorkEditor({ work, elevations, onChange, onArtistChange,
             onChange={e => onChange({ source: text(e.target.value) })} />
         </div>
 
+        {/* Where a work stands with the client is not set here — it is where
+            the work hangs, which the row above works out for itself and
+            which cannot go stale. This is only the one thing that has to be
+            recorded by hand: somebody took it out, and which somebody. */}
         <div className="ble-field ble-field--wide">
-          <span className="ble-label">Status</span>
+          <span className="ble-label">Set aside</span>
           <div className="ble-seg">
-            {WORK_STATUSES.map(s => (
+            <button
+              type="button"
+              className={`ble-seg-btn${work.setAside === null ? ' active' : ''}`}
+              onClick={() => onChange({ setAside: null })}
+            >
+              Live
+            </button>
+            {SET_ASIDE_VALUES.map(s => (
               <button
                 key={s}
                 type="button"
-                className={`ble-seg-btn${work.status === s ? ' active' : ''}`}
-                onClick={() => onChange({ status: s })}
+                className={`ble-seg-btn${work.setAside === s ? ' active' : ''}`}
+                onClick={() => onChange({ setAside: s })}
               >
-                {WORK_STATUS_LABEL[s]}
+                {SET_ASIDE_LABEL[s]}
               </button>
             ))}
           </div>
-          <p className="ble-hint">{WORK_STATUS_HINT[work.status]}</p>
+          <p className="ble-hint">
+            {work.setAside
+              ? SET_ASIDE_HINT[work.setAside]
+              : 'In play. Where it stands with the client is shown above, from the walls it hangs on.'}
+          </p>
         </div>
 
         <div className="ble-field ble-field--wide">
@@ -137,7 +152,7 @@ export default function WorkEditor({ work, elevations, onChange, onArtistChange,
             <option value="">— No particular wall —</option>
             {elevations.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
-          <p className="ble-hint">The wall this is in mind for, whether or not it is hung there yet.</p>
+          <p className="ble-hint">The wall this is earmarked for. Only shown while it hangs nowhere.</p>
         </div>
       </div>
 
