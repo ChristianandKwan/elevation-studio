@@ -17,7 +17,7 @@ import {
   mountLipOpacity, SHADOW_PUSH,
 } from '@/lib/frameShadow'
 import { frameGrainElement, paintFrameGrain } from '@/lib/frameGrain'
-import { placementRow, workRow } from '@/lib/works'
+import { placementRow, workFieldsOf, workRow } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import { frameHex, mountHex, isWoodFrame, bandsPx } from '@/lib/frames'
 import { blankWallDataUrl, blankWallPixels, clampCm, wallHex } from '@/lib/wall'
@@ -2082,6 +2082,37 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     scheduleThumbnailRegen()
   }
 
+  /**
+   * The index merged works together. The database has already re-pointed the
+   * placements; this is the studio's copy catching up.
+   *
+   * Two placements of the merged-away works can land on this one option — the
+   * very duplicate the merge exists to remove — and the keeper can only hang
+   * here once. The first survives and the rest go, which mirrors what the
+   * `merge_works` function did in the database rather than guessing at it.
+   */
+  function repointPlacementsOfWork(dropIds: string[], keep: Work) {
+    const dropped = new Set(dropIds)
+    setState(s => {
+      if (!s.artworks.some(a => dropped.has(a.workId))) return s
+      const seen = new Set(s.artworks.filter(a => a.workId === keep.id).map(a => a.workId))
+      const newArts: Artwork[] = []
+      for (const a of s.artworks) {
+        if (!dropped.has(a.workId)) { newArts.push(a); continue }
+        if (seen.has(keep.id)) continue
+        seen.add(keep.id)
+        // The placement keeps where it hangs and how it is framed; everything
+        // about the work itself comes from the keeper.
+        newArts.push({ ...a, workId: keep.id, ...workFieldsOf(keep) })
+      }
+      const newSelIds = new Set([...s.selIds].filter(id => newArts.some(a => a.id === id)))
+      const newSelId = s.selId && newSelIds.has(s.selId) ? s.selId : null
+      renderArtworksDOM(newArts, s.elev, s.scale, newSelIds)
+      return { ...s, artworks: newArts, selId: newSelId, selIds: newSelIds }
+    })
+    scheduleThumbnailRegen()
+  }
+
   // ─── TOGGLE VISIBILITY ────────────────────────────────────────────
   async function toggleVisibility(artId: string) {
     setState(s => {
@@ -2633,6 +2664,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     placeExistingWorks,
     deleteArtwork,
     removePlacementsOfWork,
+    repointPlacementsOfWork,
     scheduleThumbnailRegen,
     toggleVisibility,
     updateArtworkDims,

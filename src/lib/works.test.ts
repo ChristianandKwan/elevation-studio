@@ -8,7 +8,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  placementRow, workRow, toWorkColumns, workStoragePath,
+  placementRow, workRow, toWorkColumns, workStoragePath, workFieldsOf,
   groupWorksByArtist, placementsOf, parseWorkStatus, UNATTRIBUTED,
 } from './works.ts'
 import type { Artwork, Work } from '@/types'
@@ -206,5 +206,51 @@ describe('parseWorkStatus', () => {
     assert.equal(parseWorkStatus('declined'), 'declined')
     assert.equal(parseWorkStatus('nonsense'), 'proposed')
     assert.equal(parseWorkStatus(null), 'proposed')
+  })
+})
+
+/**
+ * A merge re-points a placement at a different work, so every work-side field
+ * the flat `Artwork` folds in has to be re-folded from the keeper. Miss one
+ * and the wall keeps showing the merged-away work's price or picture — a bug
+ * that looks like the merge silently failed.
+ *
+ * The guard is `workRow`, which is the same set expressed as columns: if a
+ * field is added to one and not the other, the save and the merge disagree.
+ */
+describe('workFieldsOf', () => {
+  const COLUMN_OF: Record<string, string> = {
+    name: 'name', artist: 'artist', wCm: 'w_cm', hCm: 'h_cm', price: 'price',
+    note: 'note', noteShownToClient: 'note_shown_to_client', vatApplies: 'vat_applies',
+    discountStatus: 'discount_status', discountPercent: 'discount_percent',
+    subLineItems: 'sub_line_items',
+  }
+
+  test('covers every column the work half of a save writes', () => {
+    const folded = Object.keys(workFieldsOf(work()))
+    const covered = folded.map(f => COLUMN_OF[f]).filter(Boolean).sort()
+    const written = Object.keys(workRow(art())).sort()
+    assert.deepEqual(covered, written,
+      'workFieldsOf and workRow disagree about what belongs to the work')
+  })
+
+  test('carries the image across, which the save has no column for', () => {
+    // imagePath and imageUrl are not in workRow — the studio never rewrites a
+    // work's file — but a merge must still hand them over or the placement
+    // renders the deleted work's picture.
+    const folded = workFieldsOf(work({ imagePath: 'p/art-1.png', imageUrl: 'https://signed' }))
+    assert.equal(folded.imagePath, 'p/art-1.png')
+    assert.equal(folded.imageUrl, 'https://signed')
+  })
+
+  test('takes the keeper\'s values, not the placement\'s', () => {
+    const keeper = work({ name: 'Street 2', price: 14000, artist: 'Julian Opie' })
+    const repointed = { ...art({ name: 'Street 3', price: 99 }), workId: keeper.id, ...workFieldsOf(keeper) }
+    assert.equal(repointed.name, 'Street 2')
+    assert.equal(repointed.price, 14000)
+    assert.equal(repointed.workId, keeper.id)
+    // The placement's own half is untouched: where it hangs does not change.
+    assert.equal(repointed.xF, 0.2)
+    assert.equal(repointed.frameType, 'black')
   })
 })

@@ -133,3 +133,48 @@
   font-size: 10.5px; letter-spacing: 0; text-transform: none;
   color: var(--mid); font-weight: 400;
 }
+
+/* ── Merging duplicate records of one print ──────────────────────────────
+   The choice is which record survives, and it cannot be made from names
+   alone: two records can share a name and be different prints, which is
+   exactly what went wrong in the data this was built for. So the pictures
+   are the largest thing here and the radio sits beside them. */
+.modal--wide { max-width: 620px; }
+
+.merge-choices { display: flex; flex-direction: column; gap: 8px; }
+.merge-choice {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--cream); transition: border-color .12s, background .12s;
+}
+.merge-choice:hover { border-color: var(--mid); }
+.merge-choice--keep { border-color: var(--charcoal); background: var(--warm-white); }
+
+.merge-choice-thumb {
+  flex: 0 0 64px; height: 64px;
+  display: flex; align-items: center; justify-content: center;
+  background: white; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.merge-choice-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+
+.merge-choice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.merge-choice-name { font-size: 13px; }
+.merge-choice-meta { font-size: 11px; color: var(--mid); line-height: 1.45; }
+
+.merge-choice-tag {
+  flex: 0 0 auto; font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--mid); padding: 2px 7px;
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+}
+.merge-choice--keep .merge-choice-tag { color: var(--charcoal); border-color: var(--charcoal); }
+
+/* Each of these is a thing the consultant would otherwise discover after the
+   fact — a name that disagrees, a price that changes, a wall that loses a
+   picture. They stack, because a merge can raise all three at once. */
+.merge-warn {
+  margin: 12px 0 0; padding: 8px 10px;
+  background: var(--accent-light); border-radius: var(--radius-sm);
+  color: var(--charcoal);
+}
