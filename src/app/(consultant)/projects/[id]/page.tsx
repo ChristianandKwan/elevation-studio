@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import { firstLoadFailure, looksLikeSchemaDrift } from '@/lib/loadGuard'
+import LoadFailed from '@/components/ui/LoadFailed'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import StudioScreen from '@/components/studio/StudioScreen'
@@ -40,7 +42,7 @@ export default async function ProjectPage({ params }: Props) {
   // Elevations → options → placements, each placement with its work joined
   // in. Works themselves are fetched separately below, because the index
   // lists every work in the project whether or not it hangs anywhere.
-  const [{ data: elevations }, { data: workRows }, { data: artistRowsAll }] = await Promise.all([
+  const [elevationsRes, worksRes, artistsRes] = await Promise.all([
     supabase
       .from('elevations')
       .select(`
@@ -64,6 +66,23 @@ export default async function ProjectPage({ params }: Props) {
     // the spellings on works, which is how near-duplicates got in.
     supabase.from('artist_profiles').select('id, name, name_key, note').order('name', { ascending: true }),
   ])
+
+  // A screen may render empty only when the database said empty. A failed
+  // query leaves `data` null, and `?? []` below would turn that into a
+  // project with no works, no index and no notes — which is what migration
+  // 034 looked like before it had been run. See src/lib/loadGuard.ts.
+  const loadFailure = firstLoadFailure([
+    ['elevations', elevationsRes],
+    ['works', worksRes],
+    ['artists', artistsRes],
+  ])
+  if (loadFailure) {
+    return <LoadFailed {...loadFailure} schemaDrift={looksLikeSchemaDrift(loadFailure)} />
+  }
+
+  const elevations = elevationsRes.data
+  const workRows = worksRes.data
+  const artistRowsAll = artistsRes.data
 
   // Collect all image paths up-front, deduplicated. Every artwork image now
   // hangs off a work, so the project's works cover every placement too.
@@ -152,7 +171,7 @@ export default async function ProjectPage({ params }: Props) {
   // Notes, with the works an artist note is narrowed to. One query: they are
   // read on four different screens and threading four fetches through would
   // mean four chances to forget one.
-  const { data: noteRows } = await supabase
+  const notesRes = await supabase
     .from('notes')
     .select(`
       id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
@@ -161,6 +180,12 @@ export default async function ProjectPage({ params }: Props) {
     `)
     .eq('project_id', id)
     .order('display_order', { ascending: true })
+
+  const notesFailure = firstLoadFailure([['notes', notesRes]])
+  if (notesFailure) {
+    return <LoadFailed {...notesFailure} schemaDrift={looksLikeSchemaDrift(notesFailure)} />
+  }
+  const noteRows = notesRes.data
 
   const notes = (noteRows ?? []).map(r => rowToNote(r as unknown as NoteRow))
 

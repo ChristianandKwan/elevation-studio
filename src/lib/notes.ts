@@ -184,6 +184,29 @@ export function notesOn(
 }
 
 /**
+ * The notes a thing's own panel shows: the ones anchored to it, less any
+ * that were narrowed to a set of works.
+ *
+ * A note covering several works is anchored to their artist — or to the
+ * project, when the works have no artist between them — and read on each
+ * work it covers rather than again on the artist. This is that exclusion,
+ * named once. It used to be written out at both call sites, and the bug it
+ * caused was not that they disagreed but that they agreed: a set note was
+ * excluded from its own panel, and shown on its works as a borrowed note
+ * with no Remove, so no screen anywhere could delete it.
+ *
+ * Keep it paired with `notesMentioning`: between them every note has at
+ * least one panel that shows it and can delete it. A test pins that.
+ */
+export function notesOwnedBy(
+  notes: Note[],
+  anchor: NoteAnchor,
+  id: string | null = null,
+): Note[] {
+  return notesOn(notes, anchor, id).filter(n => n.workIds.length === 0)
+}
+
+/**
  * Notes that mention a work: the ones written on it, plus any note covering
  * a set it belongs to. A consignment note is about this work as much as one
  * written on it directly.

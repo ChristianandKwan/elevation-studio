@@ -8,6 +8,7 @@ import ConsultantFeeRow from './ConsultantFeeRow'
 import CustomLineItems from './CustomLineItems'
 import TotalsPanel from './TotalsPanel'
 import { useBudgetState } from './useBudgetState'
+import { rememberVatMode, storedVatMode } from './vatMode'
 import { computeProjectTotals } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 import type { ProjectBudget } from '@/types'
@@ -35,9 +36,14 @@ interface Props {
    */
   onArtworkChange?: (workId: string, patch: BudgetArtworkPatch) => void
   onOptionNoteChange?: (elevationId: string, optionKey: string, note: string, shownToClient: boolean) => void
+  /**
+   * Start in this VAT view instead of reading the stored one.
+   *
+   * Only the export's off-screen copy passes it. See src/components/budget/
+   * vatMode.ts for why it exists.
+   */
+  initialVatMode?: boolean
 }
-
-const VAT_STORAGE_KEY = (pid: string) => `elevation_budget_vat_mode_${pid}`
 
 /**
  * Whether the Additional Costs section would show the client anything.
@@ -66,21 +72,25 @@ export default function BudgetScreen({
   initialBudget,
   onArtworkChange,
   onOptionNoteChange,
+  initialVatMode,
 }: Props) {
-  // VAT toggle — persisted per project in localStorage
-  const [vatMode, setVatMode] = useState(false)
+  // VAT toggle — persisted per project in localStorage.
+  //
+  // The stored value is read in an effect rather than as the initial state so
+  // the server and the first client render agree. `initialVatMode` is the way
+  // past that for the export, which mounts this screen off-screen purely to
+  // photograph it: there is no server render to match, and waiting a frame
+  // for the effect would mean photographing the ex-VAT view of a budget the
+  // consultant is reading in inc-VAT.
+  const [vatMode, setVatMode] = useState(initialVatMode ?? false)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(VAT_STORAGE_KEY(projectId))
-      if (stored === 'incvat') setVatMode(true)
-    } catch { /* SSR guard */ }
-  }, [projectId])
+    if (initialVatMode !== undefined) return
+    setVatMode(storedVatMode(projectId))
+  }, [projectId, initialVatMode])
 
   function handleVatToggle(v: boolean) {
     setVatMode(v)
-    try {
-      localStorage.setItem(VAT_STORAGE_KEY(projectId), v ? 'incvat' : 'exvat')
-    } catch { /* storage unavailable */ }
+    rememberVatMode(projectId, v)
   }
 
   const {

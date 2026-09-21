@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ANCHOR_META, ARTIST_STANDING_PROMPT, NOTE_ANCHORS,
-  noteRow, notesForExport, notesMentioning, notesOn,
+  noteRow, notesForExport, notesMentioning, notesOn, notesOwnedBy,
   rowToNote, workSetLabel, writtenCount,
   type Note, type NoteRow,
 } from './notes.ts'
@@ -228,5 +228,73 @@ describe('what the export may see', () => {
 describe('counting what is actually written', () => {
   test('blank notes are not counted', () => {
     assert.equal(writtenCount([note({ body: 'x' }), note({ body: '  ' }), note({ body: '' })]), 1)
+  })
+})
+
+describe('every note has a way out', () => {
+  /**
+   * The bug this pins: a note covering several works is anchored to their
+   * artist and excluded from the artist's own panel, because it is read on
+   * the works instead. On each work it is "borrowed", and a borrowed note
+   * showed no Remove. So it was excluded from the one place that could
+   * delete it and shown only in places that would not — with no screen
+   * anywhere able to get rid of it.
+   *
+   * The rule that has to hold: every note is shown by at least one panel
+   * that owns it. `notesOwnedBy` is the anchor's own panel; `notesMentioning`
+   * is a work's panel, which can now delete a covering note.
+   */
+  const note = (over: Partial<Note>): Note => ({
+    id: 'n1', projectId: 'p1', anchor: 'artist',
+    elevationId: null, optionId: null, workId: null, artistId: 'a1',
+    body: 'text', share: 'proposal', workIds: [], displayOrder: 0,
+    updatedAt: null, ...over,
+  })
+
+  test("a set note is kept out of its artist's own panel", () => {
+    const n = note({ workIds: ['w1', 'w2'] })
+    assert.deepEqual(notesOwnedBy([n], 'artist', 'a1'), [])
+    // …but it is still anchored there, which is what made it invisible.
+    assert.equal(notesOn([n], 'artist', 'a1').length, 1)
+  })
+
+  test('and is reachable on every work it covers', () => {
+    const n = note({ workIds: ['w1', 'w2'] })
+    assert.equal(notesMentioning([n], 'w1').length, 1)
+    assert.equal(notesMentioning([n], 'w2').length, 1)
+  })
+
+  test('a plain artist note stays in the artist panel', () => {
+    const n = note({ workIds: [] })
+    assert.deepEqual(notesOwnedBy([n], 'artist', 'a1').map(x => x.id), ['n1'])
+  })
+
+  test('a project-anchored set note behaves the same way', () => {
+    // Works with no artist between them anchor their shared note to the
+    // project, and the Notes screen excludes it there for the same reason.
+    const n = note({ anchor: 'project', artistId: null, workIds: ['w1', 'w2'] })
+    assert.deepEqual(notesOwnedBy([n], 'project'), [])
+    assert.equal(notesMentioning([n], 'w1').length, 1)
+  })
+
+  test('no note is invisible to every panel at once', () => {
+    const notes: Note[] = [
+      note({ id: 'plain', workIds: [] }),
+      note({ id: 'set', workIds: ['w1', 'w2'] }),
+      note({ id: 'one', workIds: ['w1'] }),
+      note({ id: 'onwork', anchor: 'work', artistId: null, workId: 'w1', workIds: [] }),
+      note({ id: 'project', anchor: 'project', artistId: null, workIds: [] }),
+    ]
+    const seen = new Set<string>()
+    for (const n of notesOwnedBy(notes, 'artist', 'a1')) seen.add(n.id)
+    for (const n of notesOwnedBy(notes, 'project')) seen.add(n.id)
+    for (const w of ['w1', 'w2']) {
+      for (const n of notesMentioning(notes, w)) seen.add(n.id)
+    }
+    assert.deepEqual(
+      notes.map(n => n.id).filter(id => !seen.has(id)),
+      [],
+      'a note no panel shows cannot be deleted',
+    )
   })
 })

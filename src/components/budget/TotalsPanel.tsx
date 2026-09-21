@@ -249,7 +249,10 @@ export default function TotalsPanel({
       {/* Grand total */}
       <div className={`budget-grand-total${twoColumn ? ' budget-grand-total--split' : ''}`}>
         <span className="budget-grand-total-label">
-          {vatMode ? 'Total inc. VAT' : 'Total'}
+          {/* Both views name themselves. A bare "Total" beside figures that
+              might be either is the one thing a client cannot check, and the
+              exported budget page is read with no toggle beside it at all. */}
+          {vatMode ? 'Total inc. VAT' : 'Total ex. VAT'}
         </span>
         {twoColumn ? (
           <>
