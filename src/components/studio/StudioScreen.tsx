@@ -1355,11 +1355,21 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }
 
   // What the index needs to say where each work hangs.
-  const indexElevations: IndexElevation[] = elevations.map(e => ({
-    id: e.id,
-    name: e.name,
-    options: labelOptions(e.elevation_options).map(o => ({ label: o.label, workIds: o.artworks.map(a => a.workId) })),
-  }))
+  const indexElevations: IndexElevation[] = elevations.map(e => {
+    const labelled = labelOptions(e.elevation_options)
+    return {
+      id: e.id,
+      name: e.name,
+      options: labelled.map(o => ({
+        id: o.id,
+        label: o.label,
+        title: o.title,
+        workIds: o.artworks.map(a => a.workId),
+      })),
+      clientPickedOption: e.clientPickedOption ?? null,
+      optionKeys: labelled.map(o => o.option),
+    }
+  })
 
   const { state } = studio
 
@@ -1628,6 +1638,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       {/* Index view — every work in the project, placed or not. Mounted only when active. */}
       {view === 'index' && (
         <IndexScreen
+          projectId={project.id}
           projectName={project.name}
           clientName={project.client_name}
           works={works}

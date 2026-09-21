@@ -182,3 +182,95 @@
   background: var(--accent-light); border-radius: var(--radius-sm);
   color: var(--charcoal);
 }
+
+/* ── The export pack ─────────────────────────────────────────────────────
+   The button that opens this lives inside the index content, beside "Merge
+   duplicates", and deliberately not in the header's right-hand group — that
+   group's width is measured by hand against the wordmark breakpoints in
+   studio.css, and adding to it has broken the header twice.
+
+   Corners follow the concentric rule in globals.css: the modal is --radius,
+   so the rows inside it are --radius-sm and the option chips inside those
+   are --radius-xs. */
+
+.index-head-actions { display: flex; gap: 8px; align-items: center; }
+
+.export-modal { width: 520px; max-width: calc(100vw - 48px); }
+
+.export-elevations {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-elev {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--warm-white);
+}
+
+.export-elev.off { background: var(--cream); }
+.export-elev.off .export-elev-name { color: var(--mid); }
+
+.export-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.export-check input { margin-top: 2px; flex: 0 0 auto; }
+.export-check-note { color: var(--mid); }
+.export-elev-name { font-weight: 500; }
+.export-elev-note { font-size: 12px; color: var(--mid); margin-left: 24px; }
+
+.export-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px 24px;
+}
+
+.export-opt {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--warm-white);
+  color: var(--mid);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.export-opt:hover { border-color: var(--charcoal); color: var(--charcoal); }
+.export-opt.active {
+  border-color: var(--charcoal);
+  background: var(--charcoal);
+  color: var(--warm-white);
+}
+.export-opt-picked { opacity: 0.7; }
+
+.export-hint {
+  font-size: 12px;
+  color: var(--mid);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.export-hint--busy { margin-top: 12px; text-align: right; }
+
+.export-error {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--red);
+  background: var(--red-light);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-top: 12px;
+}

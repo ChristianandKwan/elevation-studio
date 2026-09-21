@@ -9,9 +9,11 @@ import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
 import ArtistStandingNote from '@/components/notes/ArtistStandingNote'
 import { ANCHOR_META, notesMentioning, notesOn, type Note, type NoteAnchor } from '@/lib/notes'
 import ArtistNameEditor from './ArtistNameEditor'
+import ExportModal from '@/components/export/ExportModal'
 import type { Artist } from '@/lib/artists'
 
 interface Props {
+  projectId: string
   projectName: string
   clientName: string
   works: Work[]
@@ -48,7 +50,7 @@ interface Props {
  * what it costs, this is the record of what was looked at.
  */
 export default function IndexScreen({
-  projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
+  projectId, projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
   notes, onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote,
   artists, onSetWorkArtist, onRenameArtist, onArtistNoteChange,
 }: Props) {
@@ -59,6 +61,7 @@ export default function IndexScreen({
   const groups = useMemo(() => groupWorksByArtist(works), [works])
   const placedCount = works.filter(w => placementsOf(w.id, elevations).length > 0).length
   const setAsideCount = works.filter(w => w.setAside).length
+  const [exporting, setExporting] = useState(false)
 
   return (
     <div className="index-view">
@@ -73,8 +76,24 @@ export default function IndexScreen({
               {setAsideCount > 0 && <> · {setAsideCount} set aside</>}
             </p>
           </div>
-          <button type="button" className="btn btn-sm btn-primary" onClick={onAddWork}>+ Add work</button>
+          <div className="index-head-actions">
+            {/* Inside the content, not the header group — see index-view.css. */}
+            <button type="button" className="btn btn-sm" onClick={() => setExporting(true)}>
+              Export pack
+            </button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={onAddWork}>+ Add work</button>
+          </div>
         </div>
+
+        {exporting && (
+          <ExportModal
+            projectId={projectId}
+            projectName={projectName}
+            elevations={elevations}
+            setAsideCount={setAsideCount}
+            onClose={() => setExporting(false)}
+          />
+        )}
 
         {/* The artist inputs in the editor and the add modal both read this
             list. It is the artist rows themselves now, not a list scraped
