@@ -180,3 +180,30 @@ export function placementsOf(workId: string, elevations: IndexElevation[]): Plac
   }
   return out
 }
+
+/**
+ * The work-side half of an `Artwork`, taken from the work itself.
+ *
+ * `Artwork` is a placement with its work's fields folded in, so anything that
+ * changes which work a placement points at has to re-fold them. Both the
+ * studio's live canvas and the elevations it was loaded from do that on a
+ * merge, and this is the one list they share — the bug it prevents is a wall
+ * still showing the merged-away work's price or picture.
+ */
+export function workFieldsOf(w: Work) {
+  return {
+    name: w.name,
+    artist: w.artist,
+    imageUrl: w.imageUrl,
+    imagePath: w.imagePath,
+    wCm: w.wCm,
+    hCm: w.hCm,
+    price: w.price,
+    note: w.note,
+    noteShownToClient: w.noteShownToClient,
+    vatApplies: w.vatApplies,
+    discountStatus: w.discountStatus,
+    discountPercent: w.discountPercent,
+    subLineItems: w.subLineItems,
+  }
+}
