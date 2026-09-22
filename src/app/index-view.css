@@ -101,6 +101,22 @@
 }
 .work-pick-meta { font-size: 11.5px; color: var(--mid); }
 
+/* What a batch of uploads has in common, typed once above the card per work.
+   Its inputs sit on warm white so they read as boxes against the panel. */
+.batch-fields {
+  padding: 12px 14px 0; margin-bottom: 14px;
+  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.batch-fields-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 11px;
+}
+.batch-fields-title {
+  font-size: 10.5px; font-weight: 500; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--charcoal);
+}
+.batch-fields-hint { font-size: 11px; color: var(--mid); }
+.batch-fields .field-input { background: var(--warm-white); }
+
 @media (max-width: 560px) {
   .index-main-row { flex-wrap: wrap; }
 }
