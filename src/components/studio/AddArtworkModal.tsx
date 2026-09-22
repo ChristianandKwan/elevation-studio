@@ -129,7 +129,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
     }
     setSizeErrors([])
     setFiles(selected)
-    if (selected.length === 1 && !name) {
+    if (selected.length === 1) {
       setName(selected[0].name.replace(/\.[^.]+$/, ''))
     }
     // Build per-row defaults for multi-file
@@ -208,6 +208,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
     }
   }
 
+  const isSingle = files.length === 1
   const isMulti = files.length > 1
   const pickingExisting = source === 'existing'
   const canConfirm = pickingExisting ? pickedIds.size > 0 : files.length > 0
@@ -289,8 +290,8 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
           </div>
         )}
 
-        {/* Single file: original layout plus the artist field */}
-        {!pickingExisting && !isMulti && (
+        {/* One file: the details form, shown only once there is a file to describe */}
+        {!pickingExisting && isSingle && (
           <>
             {previews.length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: -4, marginBottom: 12 }}>
