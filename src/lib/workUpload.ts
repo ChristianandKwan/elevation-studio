@@ -2,16 +2,11 @@ import { createClient } from '@/lib/supabase/client'
 import { STUDIO_SIGNED_URL_TTL } from '@/lib/utils'
 import { WORK_COLUMNS, workStoragePath } from '@/lib/works'
 import { rowToWork } from '@/lib/workRows'
+import type { WorkMeta } from '@/lib/workMeta'
 import type { Work } from '@/types'
 
-/** What the consultant types in when adding a work. */
-export interface WorkMeta {
-  name: string
-  wCm: number
-  hCm: number
-  price: number
-  artist: string
-}
+/** Re-exported so callers of `uploadWork` need only this module. */
+export type { WorkMeta }
 
 /**
  * Upload one image and create its work — without placing it anywhere. The
@@ -39,10 +34,18 @@ export async function uploadWork(
     project_id: projectId,
     name,
     artist: meta.artist.trim(),
+    // The spelling is what gets displayed; the id is the identity. Writing
+    // only the spelling leaves a work whose artist cannot be renamed or
+    // given a standing note, and which splits from its own artist's group.
+    artist_id: meta.artistId ?? null,
     image_path: path,
     w_cm: meta.wCm,
     h_cm: meta.hCm,
     price: meta.price,
+    year: meta.year,
+    medium: meta.medium,
+    edition: meta.edition,
+    source: meta.source,
   }).select(WORK_COLUMNS).single()
 
   if (error || !row) {

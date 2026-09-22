@@ -643,12 +643,35 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [artists, works]) // eslint-disable-line
 
   /**
+   * The artist row for a name, created if this is the first time the practice
+   * has seen them. Anything already known is reused whatever the capitals —
+   * which is the whole reason a name is not simply written onto a work.
+   *
+   * Returns null after reporting if the row could not be made.
+   */
+  const ensureArtist = useCallback(async (rawName: string): Promise<Artist | null> => {
+    const name = tidyArtistName(rawName)
+    if (!name) return null
+
+    const known = findArtistByName(artists, name)
+    if (known) return known
+
+    const { data, error } = await createClient().from('artist_profiles')
+      .insert({ name, name_key: artistKey(name) })
+      .select('id, name, name_key, note')
+      .single()
+    if (error || !data) { onStatus('Could not add that artist — please try again'); return null }
+
+    const artist: Artist = { id: data.id, name: data.name, nameKey: data.name_key, note: data.note ?? '' }
+    setArtists(prev => sortArtists([...prev, artist]))
+    return artist
+  }, [artists]) // eslint-disable-line
+
+  /**
    * Put a work with an artist, creating the artist if this is the first time
    * the practice has seen them.
    *
-   * Passing an empty name unattributes the work. Anything already known is
-   * reused whatever the capitals — which is the whole reason this does not
-   * simply write the text onto the work.
+   * Passing an empty name unattributes the work.
    */
   const setWorkArtist = useCallback(async (workId: string, rawName: string) => {
     const name = tidyArtistName(rawName)
@@ -660,16 +683,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       return
     }
 
-    let artist = findArtistByName(artists, name)
-    if (!artist) {
-      const { data, error } = await supabase.from('artist_profiles')
-        .insert({ name, name_key: artistKey(name) })
-        .select('id, name, name_key, note')
-        .single()
-      if (error || !data) { onStatus('Could not add that artist — please try again'); return }
-      artist = { id: data.id, name: data.name, nameKey: data.name_key, note: data.note ?? '' }
-      setArtists(prev => sortArtists([...prev, artist!]))
-    }
+    const artist = await ensureArtist(name)
+    if (!artist) return
 
     const before = works
     setWorks(prev => prev.map(w => (
@@ -680,6 +695,39 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       .eq('id', workId)
     if (error) { setWorks(before); onStatus('Could not save the artist — please try again') }
   }, [artists, works]) // eslint-disable-line
+
+  /**
+   * The artist rows behind a batch of typed names, folded into the metas the
+   * upload is about to write.
+   *
+   * Without this a new work arrives carrying its artist's spelling and no id.
+   * It then cannot be renamed or given a standing note, and it sits in its
+   * own group in the Index, apart from that artist's other works — the very
+   * split 032 and 033 were about. Distinct names only, keyed the way the
+   * unique constraint is, so two spellings in one batch cannot race each
+   * other into two rows.
+   */
+  const withArtistRows = useCallback(async (metas: WorkMeta[]): Promise<WorkMeta[]> => {
+    const spellings = new Map<string, string>()
+    for (const meta of metas) {
+      const name = tidyArtistName(meta.artist)
+      const key = artistKey(name)
+      if (key && !spellings.has(key)) spellings.set(key, name)
+    }
+    if (spellings.size === 0) return metas
+
+    const resolved = await Promise.all([...spellings].map(async ([key, name]) => (
+      [key, await ensureArtist(name)] as const
+    )))
+    const byKey = new Map(resolved)
+
+    return metas.map(meta => {
+      const artist = byKey.get(artistKey(meta.artist))
+      // A failed row still leaves a usable work: the spelling is kept, and
+      // naming the artist again in the Index attaches it.
+      return artist ? { ...meta, artist: artist.name, artistId: artist.id } : meta
+    })
+  }, [ensureArtist])
 
   const handleWorkChange = useCallback((workId: string, patch: WorkPatch) => {
     // Optimistic: the budget and the index read these, so they have to move now.
@@ -1241,7 +1289,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   /** Upload works into the project without hanging them anywhere. */
   async function addWorksToIndex(files: File[], metas: WorkMeta[]) {
-    const results = await Promise.all(files.map((f, i) => uploadWork(project.id, f, metas[i] ?? metas[0], onStatus)))
+    const withArtists = await withArtistRows(metas)
+    const results = await Promise.all(files.map((f, i) => uploadWork(project.id, f, withArtists[i] ?? withArtists[0], onStatus)))
     const added = results.filter((w): w is Work => w !== null)
     if (added.length === 0) return
     setWorks(prev => [...prev, ...added])
@@ -1254,6 +1303,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
    * Delete a work outright. Its placements go with it (the database
    * cascades), so every wall it hung on is re-rendered, and its file goes.
    */
+  /** The studio's uploader, which hangs what it adds on the open option. */
+  async function addArtworksToWall(files: File[], metas: WorkMeta[]) {
+    await studio.addArtworks(files, await withArtistRows(metas))
+  }
+
   async function deleteWork(workId: string) {
     const work = works.find(w => w.id === workId)
     if (!work) return
@@ -1751,7 +1805,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
       {studio.showArtModal && (
         <AddArtworkModal
-          onConfirm={studio.addArtworks}
+          onConfirm={addArtworksToWall}
           onCancel={() => studio.setShowArtModal(false)}
           wallPxPerCm={state.scale?.origPxPerCm ?? null}
           availableWorks={works.filter(w => !(activeOptData?.artworks ?? []).some(a => a.workId === w.id))}

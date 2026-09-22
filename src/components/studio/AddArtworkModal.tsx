@@ -3,29 +3,16 @@
 import { useRef, useState, useEffect } from 'react'
 import { ArcSpinner } from '@/components/ui/Spinner'
 import { checkArtworkDetail } from '@/lib/utils'
-import type { Work } from '@/types'
 import { SET_ASIDE_BADGE } from '@/lib/works'
-
-export interface ArtMeta {
-  name: string
-  wCm: number
-  hCm: number
-  price: number
-  artist: string
-}
-
-// Internal row type uses strings for numeric inputs to allow free editing
-interface RowMeta {
-  name: string
-  wStr: string
-  hStr: string
-  price: number
-  artist: string
-}
+import {
+  DEFAULT_W, EMPTY_BATCH, buildWorkMetas, fillArtistDown,
+  type BatchMeta, type TypedWork, type WorkMeta,
+} from '@/lib/workMeta'
+import type { Work } from '@/types'
 
 interface Props {
   /** Awaited so the modal can stay disabled until the upload finishes. */
-  onConfirm: (files: File[], metas: ArtMeta[]) => void | Promise<void>
+  onConfirm: (files: File[], metas: WorkMeta[]) => void | Promise<void>
   onCancel: () => void
   /**
    * Detail the calibrated wall photograph carries, per centimetre. Lets the
@@ -36,7 +23,9 @@ interface Props {
   /**
    * `place` (the default) hangs the upload on the open option. `index` only
    * adds it to the project — no wall, no scale needed — for works the
-   * consultant wants on hand before deciding where they go.
+   * consultant wants on hand before deciding where they go. The Index is also
+   * where the catalogue detail is asked for: there is room to read it off a
+   * gallery page, and nothing on a wall depends on it.
    */
   mode?: 'place' | 'index'
   /** Works the project already has that aren't on this option, offered under "From this project". */
@@ -63,8 +52,18 @@ function DetailNote({ filePx, wCm, wallPxPerCm }: { filePx: number | undefined; 
   )
 }
 
-const DEFAULT_W = 40
-const DEFAULT_H = 60
+/** A row of typed fields for a file, with nothing filled in but its name. */
+function rowFor(file: File, artist: string): TypedWork {
+  return {
+    name: file.name.replace(/\.[^.]+$/, ''),
+    // Left empty on purpose: the boxes show 40 and 60 as placeholders and
+    // fall back to them, rather than filling in a guess that reads as typed.
+    wStr: '',
+    hStr: '',
+    priceStr: '',
+    artist,
+  }
+}
 
 export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode = 'place', availableWorks = [], onPlaceExisting }: Props) {
   const [files, setFiles] = useState<File[]>([])
@@ -76,20 +75,18 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
   // The modal stays mounted while addArtworks uploads, so without this a
   // second click fires a whole second batch — three clicks, three copies.
   const [submitting, setSubmitting] = useState(false)
-  // Single-file fields
-  const [name, setName] = useState('')
-  const [wCm, setWCm] = useState('')
-  const [hCm, setHCm] = useState('')
-  const [price, setPrice] = useState('')
-  const [artist, setArtist] = useState('')
-  // Multi-file per-row metas
-  const [rowMetas, setRowMetas] = useState<RowMeta[]>([])
+  /** One row per chosen file; empty until something is chosen. */
+  const [rows, setRows] = useState<TypedWork[]>([])
+  /** Typed once for the whole batch. */
+  const [batch, setBatch] = useState<BatchMeta>(EMPTY_BATCH)
+  /** Rows whose artist was typed over by hand, which the batch leaves alone. */
+  const [ownArtist, setOwnArtist] = useState<Set<number>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
   // "From this project": only offered when placing, and only when there is
   // something to offer. Starts on Upload so the familiar path is unchanged.
   const canPickExisting = mode === 'place' && !!onPlaceExisting && availableWorks.length > 0
-  const [source, setSource] = useState<'upload' | 'existing'>('upload')
+  const [pickFrom, setPickFrom] = useState<'upload' | 'existing'>('upload')
   const [pickedIds, setPickedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -129,17 +126,11 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
     }
     setSizeErrors([])
     setFiles(selected)
-    if (selected.length === 1) {
-      setName(selected[0].name.replace(/\.[^.]+$/, ''))
-    }
-    // Build per-row defaults for multi-file
-    setRowMetas(selected.map(f => ({
-      name: f.name.replace(/\.[^.]+$/, ''),
-      wStr: String(DEFAULT_W),
-      hStr: String(DEFAULT_H),
-      price: 0,
-      artist: '',
-    })))
+    // A fresh selection replaces the last one, so the rows are rebuilt and
+    // the hand-typed artists go with the works they belonged to. The batch
+    // fields are typed about the batch, so they carry over.
+    setRows(selected.map(f => rowFor(f, batch.artist)))
+    setOwnArtist(new Set())
     const readers = selected.map(f => new Promise<string>((resolve, reject) => {
       const r = new FileReader()
       r.onload = ev => resolve(ev.target?.result as string)
@@ -153,13 +144,26 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
     }).catch(() => {
       setSizeErrors(['One or more files could not be read. Please try again.'])
       setFiles([])
+      setRows([])
       setReading(false)
     })
     e.target.value = ''
   }
 
-  function updateRow(i: number, patch: Partial<RowMeta>) {
-    setRowMetas(prev => prev.map((m, idx) => idx === i ? { ...m, ...patch } : m))
+  function updateRow(i: number, patch: Partial<TypedWork>) {
+    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r))
+  }
+
+  /** Typing a work's own artist takes it out of the batch's reach. */
+  function setRowArtist(i: number, artist: string) {
+    updateRow(i, { artist })
+    setOwnArtist(prev => new Set(prev).add(i))
+  }
+
+  /** The batch's artist, copied down onto every work not typed over by hand. */
+  function setBatchArtist(artist: string) {
+    setBatch(prev => ({ ...prev, artist }))
+    setRows(prev => fillArtistDown(prev, artist, ownArtist))
   }
 
   function togglePicked(id: string) {
@@ -173,7 +177,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
   async function handleConfirm() {
     if (submitting) return
 
-    if (source === 'existing') {
+    if (pickFrom === 'existing') {
       const picked = availableWorks.filter(w => pickedIds.has(w.id))
       if (!picked.length || !onPlaceExisting) return
       setSubmitting(true)
@@ -182,21 +186,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
     }
 
     if (!files.length) return
-    const metas: ArtMeta[] = files.length === 1
-      ? [{
-          name: name.trim() || 'Untitled',
-          wCm: parseFloat(wCm) || DEFAULT_W,
-          hCm: parseFloat(hCm) || DEFAULT_H,
-          price: parseFloat(price) || 0,
-          artist: artist.trim(),
-        }]
-      : rowMetas.map(m => ({
-          name: m.name,
-          wCm: parseFloat(m.wStr) || DEFAULT_W,
-          hCm: parseFloat(m.hStr) || DEFAULT_H,
-          price: m.price,
-          artist: m.artist.trim(),
-        }))
+    const metas = buildWorkMetas(rows, batch, { withCatalogue: mode === 'index' })
 
     setSubmitting(true)
     try {
@@ -210,14 +200,20 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
 
   const isSingle = files.length === 1
   const isMulti = files.length > 1
-  const pickingExisting = source === 'existing'
+  const pickingExisting = pickFrom === 'existing'
   const canConfirm = pickingExisting ? pickedIds.size > 0 : files.length > 0
+  /** The catalogue detail is asked for in the Index and nowhere else. */
+  const withCatalogue = mode === 'index'
+  /** Several works at once share one set of catalogue fields, typed once. */
+  const showBatchFields = withCatalogue && isMulti
 
   const title = mode === 'index' ? 'Add a work to the project' : 'Add Artwork'
   const subtitle = pickingExisting
     ? 'Hang works the project already holds on this wall.'
     : mode === 'index'
-      ? 'Upload the image and enter its details. It goes in the Index, ready to hang later.'
+      ? isMulti
+        ? 'What they have in common, typed once — then each one’s title, size and price.'
+        : 'Upload the image and enter its details. It goes in the Index, ready to hang later.'
       : isMulti
         ? 'Set details individually for each artwork.'
         : 'Upload the artwork image and enter its details.'
@@ -229,6 +225,34 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
         ? 'Add to project'
         : 'Place on Elevation'
 
+  /** Year, medium, edition and source, laid out the same way wherever they appear. */
+  const catalogueFields = (
+    <>
+      <div className="field-row">
+        <div className="field">
+          <label className="field-label">Year</label>
+          <input type="text" className="field-input" value={batch.year} placeholder="2018"
+            onChange={e => setBatch(prev => ({ ...prev, year: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label className="field-label">Medium</label>
+          <input type="text" className="field-input" value={batch.medium} placeholder="Screenprint"
+            onChange={e => setBatch(prev => ({ ...prev, medium: e.target.value }))} />
+        </div>
+      </div>
+      <div className="field">
+        <label className="field-label">Edition</label>
+        <input type="text" className="field-input" value={batch.edition} placeholder="Edition of 150"
+          onChange={e => setBatch(prev => ({ ...prev, edition: e.target.value }))} />
+      </div>
+      <div className="field">
+        <label className="field-label">Source</label>
+        <input type="text" className="field-input" value={batch.source} placeholder="Cristea Roberts Gallery, London"
+          onChange={e => setBatch(prev => ({ ...prev, source: e.target.value }))} />
+      </div>
+    </>
+  )
+
   return (
     <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
       <div className="modal" style={{ maxWidth: isMulti || pickingExisting ? 600 : undefined }}>
@@ -237,10 +261,10 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
 
         {canPickExisting && (
           <div className="ble-seg work-pick-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={!pickingExisting} className={`ble-seg-btn${!pickingExisting ? ' active' : ''}`} onClick={() => setSource('upload')}>
+            <button type="button" role="tab" aria-selected={!pickingExisting} className={`ble-seg-btn${!pickingExisting ? ' active' : ''}`} onClick={() => setPickFrom('upload')}>
               Upload new
             </button>
-            <button type="button" role="tab" aria-selected={pickingExisting} className={`ble-seg-btn${pickingExisting ? ' active' : ''}`} onClick={() => setSource('existing')}>
+            <button type="button" role="tab" aria-selected={pickingExisting} className={`ble-seg-btn${pickingExisting ? ' active' : ''}`} onClick={() => setPickFrom('existing')}>
               From this project ({availableWorks.length})
             </button>
           </div>
@@ -273,8 +297,8 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
             <div style={{ position: 'relative' }}>
               <div className={`upload-zone${files.length ? ' has-file' : ''}`} onClick={pickImages}>
                 {files.length === 0 && 'Click to upload up to 5 artwork images'}
-                {files.length === 1 && files[0].name}
-                {files.length > 1 && `${files.length} artworks selected`}
+                {isSingle && files[0].name}
+                {isMulti && `${files.length} artworks selected`}
               </div>
               {reading && <ArcSpinner size={36} />}
             </div>
@@ -291,99 +315,113 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
         )}
 
         {/* One file: the details form, shown only once there is a file to describe */}
-        {!pickingExisting && isSingle && (
+        {!pickingExisting && isSingle && rows[0] && (
           <>
-            {previews.length > 0 && (
+            {previews[0] && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: -4, marginBottom: 12 }}>
-                {previews.map((src, i) => (
-                  <div key={i} style={{ width: 52, height: 52, background: 'var(--cream)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                  </div>
-                ))}
+                <div style={{ width: 52, height: 52, background: 'var(--cream)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={previews[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
               </div>
             )}
             <div className="field">
               <label className="field-label">Name / Title</label>
-              <input type="text" className="field-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Abstract No. 3" />
+              <input type="text" className="field-input" value={rows[0].name} onChange={e => updateRow(0, { name: e.target.value })} placeholder="e.g. Abstract No. 3" />
             </div>
             <div className="field">
               <label className="field-label">Artist</label>
-              <input type="text" className="field-input" list="index-artists" value={artist} onChange={e => setArtist(e.target.value)} placeholder="e.g. Sarah Chen" />
+              <input type="text" className="field-input" list="index-artists" value={batch.artist} onChange={e => setBatchArtist(e.target.value)} placeholder="e.g. Sarah Chen" />
             </div>
             <div className="field-row">
               <div className="field">
                 <label className="field-label">Width (cm)</label>
-                <input type="number" className="field-input" value={wCm} onChange={e => setWCm(e.target.value)} placeholder="40" min={1} step={0.5} />
+                <input type="number" className="field-input" value={rows[0].wStr} onChange={e => updateRow(0, { wStr: e.target.value })} placeholder="40" min={1} step={0.5} />
               </div>
               <div className="field">
                 <label className="field-label">Height (cm)</label>
-                <input type="number" className="field-input" value={hCm} onChange={e => setHCm(e.target.value)} placeholder="60" min={1} step={0.5} />
+                <input type="number" className="field-input" value={rows[0].hStr} onChange={e => updateRow(0, { hStr: e.target.value })} placeholder="60" min={1} step={0.5} />
               </div>
             </div>
-            {mode === 'place' && <DetailNote filePx={naturalWidths[0]} wCm={parseFloat(wCm) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />}
+            {mode === 'place' && <DetailNote filePx={naturalWidths[0]} wCm={parseFloat(rows[0].wStr) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />}
             <div className="field">
               <label className="field-label">
                 Price (£)
                 <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--mid)', marginLeft: 5 }}>ex-VAT</span>
               </label>
-              <input type="number" className="field-input" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 4500" min={0} step={50} />
+              <input type="number" className="field-input" value={rows[0].priceStr} onChange={e => updateRow(0, { priceStr: e.target.value })} placeholder="e.g. 4500" min={0} step={50} />
             </div>
+            {withCatalogue && catalogueFields}
           </>
         )}
 
-        {/* Multi-file: per-card layout */}
-        {!pickingExisting && isMulti && rowMetas.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-            {rowMetas.map((meta, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, padding: 10, background: 'var(--cream)', borderRadius: 6, border: '1px solid var(--border)' }}>
-                {/* Thumbnail */}
-                <div style={{ width: 52, height: 52, background: 'white', border: '1px solid var(--border)', overflow: 'hidden', flexShrink: 0, alignSelf: 'flex-start' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {previews[i] && <img src={previews[i]} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+        {/* Several files: what they share, then a card each */}
+        {!pickingExisting && isMulti && (
+          <>
+            {showBatchFields && (
+              <div className="batch-fields">
+                <div className="batch-fields-head">
+                  <span className="batch-fields-title">All {files.length} works</span>
+                  <span className="batch-fields-hint">Typed once. Change any of it per work in the Index.</span>
                 </div>
-                {/* Fields */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {/* Name + Artist */}
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      type="text"
-                      className="field-input"
-                      value={meta.name}
-                      onChange={e => updateRow(i, { name: e.target.value })}
-                      placeholder="Title"
-                      style={{ flex: 1, fontSize: 12 }}
-                    />
-                    <input
-                      type="text"
-                      className="field-input"
-                      list="index-artists"
-                      value={meta.artist}
-                      onChange={e => updateRow(i, { artist: e.target.value })}
-                      placeholder="Artist"
-                      style={{ flex: 1, fontSize: 12 }}
-                    />
-                  </div>
-                  {/* Dimensions + Price */}
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>W (cm)</div>
-                      <input type="text" inputMode="decimal" className="field-input" value={meta.wStr} onChange={e => updateRow(i, { wStr: e.target.value })} style={{ fontSize: 12, width: 60 }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>H (cm)</div>
-                      <input type="text" inputMode="decimal" className="field-input" value={meta.hStr} onChange={e => updateRow(i, { hStr: e.target.value })} style={{ fontSize: 12, width: 60 }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>Price (£) <span style={{ opacity: 0.7 }}>ex-VAT</span></div>
-                      <input type="number" className="field-input" value={meta.price || ''} onChange={e => updateRow(i, { price: parseFloat(e.target.value) || 0 })} min={0} step={50} placeholder="0" style={{ fontSize: 12, width: 80 }} />
-                    </div>
-                  </div>
-                  {mode === 'place' && <DetailNote filePx={naturalWidths[i]} wCm={parseFloat(meta.wStr) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />}
+                <div className="field">
+                  <label className="field-label">Artist</label>
+                  <input type="text" className="field-input" list="index-artists" value={batch.artist} onChange={e => setBatchArtist(e.target.value)} placeholder="e.g. Sarah Chen" />
                 </div>
+                {catalogueFields}
               </div>
-            ))}
-          </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+              {rows.map((row, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: 10, background: 'var(--cream)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                  {/* Thumbnail */}
+                  <div style={{ width: 52, height: 52, background: 'white', border: '1px solid var(--border)', overflow: 'hidden', flexShrink: 0, alignSelf: 'flex-start' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {previews[i] && <img src={previews[i]} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+                  </div>
+                  {/* Fields */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* Title + Artist */}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        type="text"
+                        className="field-input"
+                        value={row.name}
+                        onChange={e => updateRow(i, { name: e.target.value })}
+                        placeholder="Title"
+                        style={{ flex: 1, fontSize: 12 }}
+                      />
+                      <input
+                        type="text"
+                        className="field-input"
+                        list="index-artists"
+                        value={row.artist}
+                        onChange={e => setRowArtist(i, e.target.value)}
+                        placeholder="Artist"
+                        style={{ flex: 1, fontSize: 12 }}
+                      />
+                    </div>
+                    {/* Dimensions + Price */}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>W (cm)</div>
+                        <input type="text" inputMode="decimal" className="field-input" value={row.wStr} onChange={e => updateRow(i, { wStr: e.target.value })} placeholder="40" style={{ fontSize: 12, width: 60 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>H (cm)</div>
+                        <input type="text" inputMode="decimal" className="field-input" value={row.hStr} onChange={e => updateRow(i, { hStr: e.target.value })} placeholder="60" style={{ fontSize: 12, width: 60 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--mid)', marginBottom: 2 }}>Price (£) <span style={{ opacity: 0.7 }}>ex-VAT</span></div>
+                        <input type="number" className="field-input" value={row.priceStr} onChange={e => updateRow(i, { priceStr: e.target.value })} min={0} step={50} placeholder="0" style={{ fontSize: 12, width: 80 }} />
+                      </div>
+                    </div>
+                    {mode === 'place' && <DetailNote filePx={naturalWidths[i]} wCm={parseFloat(row.wStr) || DEFAULT_W} wallPxPerCm={wallPxPerCm} />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         <div className="modal-footer">
