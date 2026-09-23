@@ -175,6 +175,24 @@ async function allElevationsApproved(svc: Svc, projectId: string): Promise<boole
   })
 }
 
+/**
+ * Note a pick, approval or note for the practice's email (migration 037).
+ * Best-effort like the activity log: a client's action never fails because
+ * the email about it could not be queued.
+ */
+async function recordForEmail(
+  svc: Svc, projectId: string, kind: 'pick' | 'approve' | 'note',
+  ids: { elevationId?: string; optionId?: string },
+) {
+  const { error } = await svc.from('client_activity').insert({
+    project_id: projectId,
+    kind,
+    elevation_id: ids.elevationId ?? null,
+    option_id: ids.optionId ?? null,
+  })
+  if (error) console.warn(`client_activity insert failed (${kind}):`, error.message)
+}
+
 function bad(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })
 }
@@ -239,11 +257,22 @@ export async function POST(
       const owned = await optionInProject(svc, optionId, projectId)
       if (!owned) return bad('Forbidden', 403)
 
+      // Read first, so a save that changes nothing is not an action to email.
+      const { data: before } = await svc
+        .from('elevation_options')
+        .select('client_notes')
+        .eq('id', optionId)
+        .maybeSingle()
+
       const { error } = await svc
         .from('elevation_options')
         .update({ client_notes: notes })
         .eq('id', optionId)
       if (error) return bad('Update failed', 500)
+
+      if ((before?.client_notes ?? '') !== notes) {
+        await recordForEmail(svc, projectId, 'note', { elevationId: owned.elevationId, optionId })
+      }
       return NextResponse.json({ ok: true })
     }
 
@@ -300,6 +329,7 @@ export async function POST(
       if (error) return bad('Update failed', 500)
 
       await logActivity(svc, projectId, 'pick', `Client picked ${title} for ${elev.name}`)
+      await recordForEmail(svc, projectId, 'pick', { elevationId })
       return NextResponse.json({ ok: true })
     }
 
@@ -340,6 +370,8 @@ export async function POST(
         svc, projectId, 'approved',
         `Client approved ${(await optionTitleIn(svc, opt.elevationId, opt.option)) ?? `Option ${opt.option}`} of ${opt.elevationName}`
       )
+
+      await recordForEmail(svc, projectId, 'approve', { elevationId: opt.elevationId, optionId })
 
       // Whole project signed off once every elevation's resolved option is approved.
       const projectApproved = await allElevationsApproved(svc, projectId)
