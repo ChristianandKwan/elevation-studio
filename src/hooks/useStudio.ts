@@ -21,6 +21,7 @@ import { placementRow, workFieldsOf, workRow } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import { frameHex, mountHex, isWoodFrame, bandsPx } from '@/lib/frames'
 import { blankWallDataUrl, blankWallPixels, clampCm, wallHex } from '@/lib/wall'
+import { setPreloadPaused } from '@/lib/imagePreload'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -256,6 +257,16 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   const [showArtModal, setShowArtModal] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [busy, setBusy] = useState(false)
+  // The wall is up and its artworks are still arriving. The artwork layer is
+  // held invisible meanwhile, then faded in with every artwork at once.
+  const [artworksPending, setArtworksPending] = useState(false)
+  // Which call to loadOption is the newest — see there.
+  const loadSeq = useRef(0)
+  // Background image downloads resume once the canvas has everything it
+  // asked for. loadOption does the pausing.
+  useEffect(() => {
+    if (!busy && !artworksPending) setPreloadPaused(false)
+  }, [busy, artworksPending])
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -856,6 +867,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         div.appendChild(placeholder)
       } else {
         const img = document.createElement('img')
+        // Asked for the same way loadOption fetched it, so this is the copy
+        // already in the browser rather than a second download.
+        img.crossOrigin = 'anonymous'
         img.src = art.imageUrl ?? ''
         img.draggable = false
 
@@ -1203,15 +1217,23 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     skewCorners?: SkewCorners | null;
     skewActive?: boolean;
   }) {
+    // Every load takes a ticket, and only the newest may touch the canvas.
+    // Clicking B while A is still arriving used to let A land on top of B.
+    const seq = ++loadSeq.current
+    const current = () => seq === loadSeq.current
+
     // Empty canvas: the option has no image, or the one it has cannot be
     // loaded. Bailing out without clearing left the *previous* option on
     // screen, which made switching options look like it had done nothing.
     const showEmptyCanvas = () => {
+      if (!current()) return
       setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
       rememberSaved([], [])
+      setArtworksPending(false)
       setBusy(false)
+      setPreloadPaused(false)
     }
 
     // A wall entered as a measurement has no file to fetch. It is turned into
@@ -1231,17 +1253,120 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     }
 
     setBusy(true)
+    // Background downloads wait for this option. Paused here rather than by
+    // the screen, because this runs first — see the effect beside `busy`.
+    setPreloadPaused(true)
+
+    // ── How an option arrives ──
+    // The wall and its artworks are fetched side by side, not one after the
+    // other. The wall goes up the moment it is ready, and the spinner with it.
+    // The artworks appear together once every one of them is ready, fading in
+    // if the wall got there first — never one at a time, which reads as
+    // broken. When everything is already in the browser (the usual case once
+    // the background preload has run) the whole option appears at once.
+    const newArts = opts.artworks.map(a => ({ ...a }))
+    let artsLeft = newArts.length
+    let wallPlaced = false
+    let revealed = false
+    // True once the wall is up with its artworks still to come.
+    let heldBack = false
+
+    const reportFailures = () => {
+      const failed = newArts.filter(a => a.loadFailed)
+      if (failed.length > 0) {
+        const names = failed.map(a => a.name).join(', ')
+        onStatus(`Could not load image${failed.length > 1 ? 's' : ''}: ${names}`)
+      }
+    }
+
+    const maybeReveal = () => {
+      if (revealed || !wallPlaced || artsLeft > 0 || !current()) return
+      revealed = true
+      if (heldBack) {
+        // Anything done to the artworks in the meantime copied them, so the
+        // results are written onto whatever the canvas holds now, by id.
+        const results = new Map(newArts.map(a => [a.id, a]))
+        const merge = (a: Artwork) => {
+          const r = results.get(a.id)
+          return r ? { ...a, img: r.img, loadFailed: r.loadFailed, imageUrl: r.imageUrl } : a
+        }
+        const s = stateRef.current
+        const arts = s.artworks.map(merge)
+        setState(prev => ({ ...prev, artworks: prev.artworks.map(merge) }))
+        renderArtworksDOM(arts, s.elev, s.scale, s.selIds)
+        requestAnimationFrame(() => applySkewTransform())
+        setArtworksPending(false)
+      }
+      reportFailures()
+    }
+
+    const artSettled = () => {
+      artsLeft--
+      maybeReveal()
+    }
+
+    newArts.forEach((a, i) => {
+      if (!a.imageUrl) { artSettled(); return }
+      const ai = new Image()
+      ai.crossOrigin = 'anonymous'
+      let finished = false
+      const fail = () => {
+        finished = true
+        clearTimeout(imgTimer)
+        newArts[i].loadFailed = true
+        artSettled()
+      }
+      const imgTimer = setTimeout(() => {
+        if (finished) return
+        newArts[i].loadFailed = true
+        finished = true
+        artSettled()
+      }, 10_000)
+      ai.onload = () => {
+        if (finished) return
+        // Unpacked before it counts as ready, so the tile shows the moment it
+        // is revealed instead of being decoded then, one by one.
+        ai.decode().catch(() => { /* drawn regardless */ }).then(() => {
+          if (finished) return
+          finished = true
+          clearTimeout(imgTimer)
+          newArts[i].img = ai
+          artSettled()
+        })
+      }
+      let retriedSignature = false
+      ai.onerror = () => {
+        if (finished) return
+        // An expired signature is the likeliest reason a stored artwork
+        // stops loading, so re-sign once before calling it broken. The 10 s
+        // timer above still bounds the retry.
+        if (!retriedSignature && a.imagePath) {
+          retriedSignature = true
+          resignStorageUrl('artwork-images', a.imagePath).then(fresh => {
+            if (finished) return
+            if (!fresh) { fail(); return }
+            newArts[i].imageUrl = fresh
+            ai.src = fresh
+          })
+          return
+        }
+        fail()
+      }
+      ai.src = a.imageUrl
+    })
+
     // Reassigned if the signature on the URL we were handed has expired.
     let elevUrl = sourceUrl
     const img = new Image()
     img.crossOrigin = 'anonymous'
     let retriedSignature = false
     img.onerror = () => {
+      if (!current()) return
       if (!retriedSignature && opts.imagePath) {
         retriedSignature = true
         resignStorageUrl('elevation-images', opts.imagePath).then(fresh => {
           if (!fresh) {
-            onStatus('Could not load this elevation image — please reload the page')
+            if (current()) onStatus('Could not load this elevation image — please reload the page')
             showEmptyCanvas()
             return
           }
@@ -1254,6 +1379,11 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       showEmptyCanvas()
     }
     img.onload = () => {
+      img.decode().catch(() => { /* drawn regardless */ }).then(showWall)
+    }
+
+    const showWall = () => {
+      if (!current()) return
       const origW = opts.origW || img.naturalWidth
       const origH = opts.origH || img.naturalHeight
       const elev: StudioElev = {
@@ -1273,127 +1403,52 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       if (elevImg) elevImg.src = elevUrl
 
       const masks = opts.foregroundMasks ?? []
-      const newArts = opts.artworks.map(a => ({ ...a }))
       rememberSaved(masks, newArts)
 
       const skewCorners = opts.skewCorners ?? null
       const skewActive = opts.skewActive ?? false
 
-      // computeFitZoom reads canvas-area (always mounted). commit() sets state.elev,
-      // which is what causes elev-wrap to render and elevWrapRef to attach — so we
-      // must commit *before* waiting for the ref, then run applyZoom once it's live.
-      const finalize = (arts: typeof newArts, commit: (fit: number, zoom: number, scale: Scale | null) => void) => {
-        const fit = computeFitZoom(origW, origH)
-        const rel = loadRelativeZoom(optionId)
-        const zoom = Math.max(MIN_REL_ZOOM * fit, Math.min(MAX_REL_ZOOM * fit, rel * fit))
-        const scale: Scale | null = opts.scalePxPerCm
-          ? { origPxPerCm: opts.scalePxPerCm, dispPxPerCm: opts.scalePxPerCm * zoom }
-          : null
-        commit(fit, zoom, scale)
+      heldBack = artsLeft > 0
+      setArtworksPending(heldBack)
 
-        let frames = 0
-        const run = () => {
-          if (!elevWrapRef.current) {
-            if (++frames > 60) {
-              console.warn('[useStudio] finalize: elevWrapRef never set, bailing')
-              return
-            }
-            requestAnimationFrame(run)
-            return
-          }
-          applyZoom(zoom, elev, scale, arts, masks, fit)
-          applySkewTransform()
-          if (skewCorners) renderSkewHandles([...skewCorners], elev)
-          else renderSkewHandles([], elev)
-        }
-        requestAnimationFrame(run)
-      }
-
-      // Load artwork images
-      let loaded = 0
-      function tryFinish() {
-        if (++loaded >= newArts.length) {
-          finalize(newArts, (fit, zoom, scale) => {
-            setState({
-              elev, scale, artworks: newArts, selId: null, selIds: new Set(), zoom, fitZoom: fit,
-              calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
-              skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
-            })
-          })
-          // Surface a warning if any artwork images failed to load
-          const failed = newArts.filter(a => a.loadFailed)
-          if (failed.length > 0) {
-            const names = failed.map(a => a.name).join(', ')
-            onStatus(`Could not load image${failed.length > 1 ? 's' : ''}: ${names}`)
-          }
-          setBusy(false)
-        }
-      }
-
-      if (newArts.length === 0) {
-        finalize([], (fit, zoom, scale) => {
-          setState({
-            elev, scale, artworks: [], selId: null, selIds: new Set(), zoom, fitZoom: fit,
-            calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
-            skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
-          })
-        })
-        setBusy(false)
-        return
-      }
-
-      newArts.forEach((a, i) => {
-        const ai = new Image()
-        ai.crossOrigin = 'anonymous'
-        let finished = false
-        const imgTimer = setTimeout(() => {
-          if (finished) return
-          finished = true
-          newArts[i].loadFailed = true
-          tryFinish()
-        }, 10_000)
-        ai.onload = () => {
-          if (finished) return
-          finished = true
-          clearTimeout(imgTimer)
-          newArts[i].img = ai
-          tryFinish()
-        }
-        let retriedSignature = false
-        ai.onerror = () => {
-          if (finished) return
-          // An expired signature is the likeliest reason a stored artwork
-          // stops loading, so re-sign once before calling it broken. The 10 s
-          // timer above still bounds the retry.
-          if (!retriedSignature && a.imagePath) {
-            retriedSignature = true
-            resignStorageUrl('artwork-images', a.imagePath).then(fresh => {
-              if (finished) return
-              if (!fresh) {
-                finished = true
-                clearTimeout(imgTimer)
-                newArts[i].loadFailed = true
-                tryFinish()
-                return
-              }
-              newArts[i].imageUrl = fresh
-              ai.src = fresh
-            })
-            return
-          }
-          finished = true
-          clearTimeout(imgTimer)
-          newArts[i].loadFailed = true
-          tryFinish()
-        }
-        if (a.imageUrl) ai.src = a.imageUrl
-        else {
-          clearTimeout(imgTimer)
-          finished = true
-          tryFinish()
-        }
+      // computeFitZoom reads canvas-area (always mounted). setState sets
+      // state.elev, which is what causes elev-wrap to render and elevWrapRef
+      // to attach — so we must commit *before* waiting for the ref, then run
+      // applyZoom once it's live.
+      const fit = computeFitZoom(origW, origH)
+      const rel = loadRelativeZoom(optionId)
+      const zoom = Math.max(MIN_REL_ZOOM * fit, Math.min(MAX_REL_ZOOM * fit, rel * fit))
+      const scale: Scale | null = opts.scalePxPerCm
+        ? { origPxPerCm: opts.scalePxPerCm, dispPxPerCm: opts.scalePxPerCm * zoom }
+        : null
+      setState({
+        elev, scale, artworks: newArts, selId: null, selIds: new Set(), zoom, fitZoom: fit,
+        calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
+        skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
       })
+      setBusy(false)
+
+      let frames = 0
+      const run = () => {
+        if (!current()) return
+        if (!elevWrapRef.current) {
+          if (++frames > 60) {
+            console.warn('[useStudio] loadOption: elevWrapRef never set, bailing')
+            return
+          }
+          requestAnimationFrame(run)
+          return
+        }
+        applyZoom(zoom, elev, scale, newArts, masks, fit)
+        applySkewTransform()
+        if (skewCorners) renderSkewHandles([...skewCorners], elev)
+        else renderSkewHandles([], elev)
+        wallPlaced = true
+        maybeReveal()
+      }
+      requestAnimationFrame(run)
     }
+
     img.src = sourceUrl
   }
 
@@ -1421,6 +1476,9 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   async function uploadElevation(file: File) {
+    // Whatever was still loading onto this canvas is superseded.
+    loadSeq.current++
+    setArtworksPending(false)
     setBusy(true)
     const supabase = createClient()
     // Captured before the state swap below so the replaced file can be cleaned up.
@@ -1508,6 +1566,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     // plain wall still gets its file cleaned up.
     const previousPath = stateRef.current.elev?.imagePath || null
 
+    loadSeq.current++
+    setArtworksPending(false)
     setBusy(true)
     const img = new Image()
     img.onerror = () => { setBusy(false); onStatus('Could not draw the wall') }
@@ -2291,6 +2351,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   async function exportPng() {
     const s = state
     if (!s.elev || !s.scale) { onStatus('Please complete calibration first'); return }
+    // An artwork that has not arrived yet would be missing from the picture.
+    if (artworksPending) { onStatus('Still loading the artworks — try again in a moment'); return }
     onStatus('Rendering…')
     setBusy(true)
 
@@ -2697,6 +2759,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     highlightMask,
     saveStatus,
     busy,
+    artworksPending,
     onWrapMouseDown,
     onWrapMouseMove,
     boxSelectedRef,
