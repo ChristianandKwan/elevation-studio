@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -34,6 +34,35 @@ interface DashProject {
 interface Props {
   profile: DashProfile
   projects: DashProject[]
+}
+
+/**
+ * A project card's picture, faded in when it arrives. Each card goes on its
+ * own — they are separate projects, and holding every card for the slowest
+ * would be slower for no reason — so the grid fills in as a soft ripple
+ * rather than popping up like dominoes. One that fails to load stays as the
+ * card's plain dotted background.
+ */
+function CardThumb({ src, alt }: { src: string; alt: string }) {
+  const [shown, setShown] = useState(false)
+  // A picture the browser already had can finish before this page's
+  // JavaScript is running, and then no load event arrives. Checking on mount
+  // catches it, so it is never left invisible.
+  const seen = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) setShown(true)
+  }, [])
+  return (
+    <Image
+      ref={seen}
+      src={src}
+      alt={alt}
+      fill
+      unoptimized
+      className={`project-card-img${shown ? ' shown' : ''}`}
+      style={{ objectFit: 'cover' }}
+      onLoad={() => setShown(true)}
+    />
+  )
 }
 
 export default function DashboardClient({ profile, projects: initialProjects }: Props) {
@@ -324,7 +353,7 @@ export default function DashboardClient({ profile, projects: initialProjects }: 
               >
                 <div className="project-card-thumb">
                   {p.thumbnailUrl
-                    ? <Image src={p.thumbnailUrl} alt={p.name} fill unoptimized style={{ objectFit: 'cover' }} />
+                    ? <CardThumb src={p.thumbnailUrl} alt={p.name} />
                     : <div className="project-card-thumb-placeholder"><span>{p.name.charAt(0)}</span></div>
                   }
                 </div>
