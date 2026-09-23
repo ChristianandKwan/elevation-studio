@@ -1497,12 +1497,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [exportingPack, setExportingPack] = useState(false)
 
   /**
-   * The pack is built on the server from what is saved, so anything still
-   * waiting to save — the last artwork moved, a price typed a moment ago —
-   * is written first, or the pack would come out one edit behind the screen.
+   * Write everything still waiting to save — the last artwork moved, a price
+   * typed a moment ago — now rather than when its timer runs out.
    */
-  async function openPackExport() {
-    syncStudioIntoElevations()
+  async function flushAllPending() {
     await Promise.all([
       studio.flushPendingSave(),
       ...[...workPending.current.keys()].map(id => {
@@ -1516,8 +1514,51 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         return flushNoteWrite(id)
       }),
     ])
+  }
+
+  /**
+   * The pack is built on the server from what is saved, so pending edits are
+   * written first, or the pack would come out one edit behind the screen.
+   */
+  async function openPackExport() {
+    syncStudioIntoElevations()
+    await flushAllPending()
     setExportingPack(true)
   }
+
+  // ─── WHILE THE CLIENT IS IN THE PORTAL ───────────────────────────
+  // A pick or approval made while this project is open would otherwise go
+  // unseen until the next visit. Every 30 seconds, while the tab is on
+  // screen, the project's history is checked for anything the client did
+  // since the newest entry this page loaded with. It is shown as a notice
+  // with a Refresh button rather than applied: nothing changes under the
+  // consultant's hands mid-edit.
+  const [clientNews, setClientNews] = useState<string[]>([])
+  const clientNewsSince = useRef(activityLogs[0]?.createdAt ?? new Date().toISOString())
+  useEffect(() => {
+    let stopped = false
+    async function check() {
+      if (document.visibilityState !== 'visible') return
+      const { data, error } = await createClient()
+        .from('activity_logs')
+        .select('text, created_at')
+        .eq('project_id', project.id)
+        .in('type', ['pick', 'pick_cleared', 'approved'])
+        .gt('created_at', clientNewsSince.current)
+        .order('created_at', { ascending: true })
+      if (stopped || error || !data?.length) return
+      clientNewsSince.current = data[data.length - 1].created_at
+      setClientNews(prev => [...prev, ...data.map(r => r.text as string)])
+    }
+    const timer = setInterval(check, 30_000)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [project.id])
+  const [refreshingForClient, setRefreshingForClient] = useState(false)
 
   const captureBudgetForExport = useCallback((): Promise<string | null> => {
     // A second request while one is in flight would strand the first promise.
@@ -1715,6 +1756,37 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           <button
             className="studio-notice-close"
             onClick={() => setExpiryNoticeOpen(false)}
+            aria-label="Dismiss"
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* The client acted in the portal while this project was open. */}
+      {clientNews.length > 0 && (
+        <div className="studio-notice" role="status">
+          <span className="studio-notice-text">
+            {clientNews.length === 1
+              ? <>{clientNews[0]}.</>
+              : <>The client made {clientNews.length} changes while you were here — most recently: {clientNews[clientNews.length - 1]}.</>}
+            {' '}Refresh to see {clientNews.length === 1 ? 'it' : 'them'}.
+          </span>
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={refreshingForClient}
+            onClick={async () => {
+              setRefreshingForClient(true)
+              await flushAllPending().catch(() => { /* reload regardless */ })
+              window.location.reload()
+            }}
+          >
+            {refreshingForClient ? 'Saving…' : 'Refresh'}
+          </button>
+          <button
+            className="studio-notice-close"
+            onClick={() => setClientNews([])}
             aria-label="Dismiss"
             title="Dismiss"
           >

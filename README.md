@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Elevation Studio
 
-## Getting Started
+Christian & Kwan's tool for proposing art for a client's walls. A consultant
+photographs a wall (or types its size), scales it, hangs artworks on it at
+their real size, and shares a link with the client, who picks between
+options, leaves notes and approves. The same project produces the budget and
+an export pack for the written proposal.
 
-First, run the development server:
+Live at **studio.christianandkwan.com**.
+
+## What is where
+
+| | |
+|---|---|
+| Consultant screens | `src/app/(consultant)` — the dashboard and a project (Studio, Index, Notes, Budget) |
+| Client portal | `src/app/client/[token]` — the magic link; all its writes go through `src/app/api/client/[token]/action` |
+| The studio | `src/hooks/useStudio.ts` and `src/components/studio/` |
+| Database | Supabase. `supabase/migrations/` is the record of every schema change, numbered and append-only |
+| Hosting | Vercel, pinned to Dublin next to the database (`vercel.json`) |
+
+## Working on it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev     # local server on http://localhost:3000
+npm test        # unit tests
+npm run build   # the full production build — run before merging; nothing in CI does
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This is Next.js 16, which differs from older versions — see `AGENTS.md`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Before touching a migration, read `docs/DEPLOYING.md`.** App code and the
+database deploy separately, and the order depends on whether a migration adds
+or removes something.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Work goes feature branch → `dev` (every branch gets a Vercel preview) → a
+pull request from `dev` into `main`, which deploys production.
 
-## Learn More
+## Other documents
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `docs/DEPLOYING.md` — deploy order, storage buckets, how to check what has run
+- `docs/handover-*.md` — what each piece of work decided and why, and the traps it found
+- `docs/mockups/` — the design sketches features were agreed from
