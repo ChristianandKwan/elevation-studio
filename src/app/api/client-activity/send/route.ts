@@ -19,13 +19,11 @@ import { buildDigest, type DigestAction, type DigestElevation } from '@/lib/clie
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// Resend can only send from a domain it has verified. Until christianandkwan.com
-// is, its shared sender is used, and that delivers only to the Resend account's
-// own address — the one feedback already goes to. Once the domain is verified:
-//   FROM → 'Elevation Studio <studio@christianandkwan.com>'
-//   TO   → 'info@christianandkwan.com'
-const FROM = 'Elevation Studio <onboarding@resend.dev>'
-const TO = process.env.FEEDBACK_TO_EMAIL
+// christianandkwan.com is verified in Resend (records added at Hostinger,
+// 2026-09-23), so the email can come from the practice's own domain. Nothing
+// receives mail at studio@ — replies go to info@, which is where it is sent.
+const FROM = 'Elevation Studio <studio@christianandkwan.com>'
+const TO = 'info@christianandkwan.com'
 
 interface ClaimedRow {
   id: string
@@ -45,7 +43,7 @@ interface OptionRow {
 
 export async function POST(request: Request) {
   const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey || !TO) {
+  if (!apiKey) {
     return NextResponse.json({ error: 'Email is not configured on the server.' }, { status: 500 })
   }
 
@@ -109,7 +107,7 @@ export async function POST(request: Request) {
       if (!digest) continue
 
       const { error } = await resend.emails.send({
-        from: FROM, to: TO, subject: digest.subject, html: digest.html, text: digest.text,
+        from: FROM, to: TO, replyTo: TO, subject: digest.subject, html: digest.html, text: digest.text,
       })
       if (error) { await release(error); continue }
       sent++
