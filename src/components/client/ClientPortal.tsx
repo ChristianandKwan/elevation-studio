@@ -574,7 +574,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         />
         <div className="client-header-brand">Elevation Studio</div>
         <div className="client-project-label">
-          {project.name}
+          <span className="client-project-name">{project.name}</span>
           {/* The consultants share one login (info@), so the profile name read
               "Prepared by info". The studio is single-tenant, so the practice
               name is both accurate and what the client should see. */}
