@@ -31,17 +31,16 @@
   white-space: nowrap;
 }
 /* The title is centred on the header, while .studio-header-right never
-   shrinks, so past a certain narrowness the two collide. The width of the
-   right-hand group depends on which view is open and whether the option is
-   approved, so there is a threshold for each.
+   shrinks, so past a certain narrowness the two collide. The right-hand group
+   is the same on every view — the view tabs, Share, Export and feedback — so
+   there is one threshold. (There used to be three: Share and Export showed on
+   the studio view only, and an approved option added a chip and an Unapprove
+   button that the sidebar already had.)
 
    ┌────────────────────────────────┬────────┬──────────┬────────┐
    │ right-hand group               │ width  │ collides │ used   │
    ├────────────────────────────────┼────────┼──────────┼────────┤
-   │ tabs + feedback (index/notes/  │  286px │   805px  │  820px │
-   │   budget views)                │        │          │        │
-   │ + Share + Export (studio)      │  411px │  1055px  │ 1080px │
-   │ + ✓ Approved + Unapprove       │  565px │  1363px  │ 1390px │
+   │ tabs + Share + Export + feedback│  411px │  1055px  │ 1080px │
    └────────────────────────────────┴────────┴──────────┴────────┘
 
    Title is 185px. Collision point is 2 × (title/2 + 4 + 20 + group), where 20
@@ -49,20 +48,14 @@
    table used. The "used" column rounds that up again.
 
    ── RE-MEASURE WHENEVER A BUTTON JOINS OR A LABEL CHANGES ──
-   This has now silently broken twice: the Index tab added ~59px against
+   This has silently broken twice: the Index tab added ~59px against
    thresholds of 939/1309, and the Notes tab added another ~60px against
    1103/1434. Both times the toggle rode over the wordmark across a ~160px
    band of window widths, and both times nothing failed — it just looked
    wrong at one size. There is no test that can catch it; measure in a
    browser with the real fonts loaded and update the table above. */
-@media (max-width: 820px) {
-  .header-app-title { display: none; }
-}
 @media (max-width: 1080px) {
-  .studio-header--studio-actions .header-app-title { display: none; }
-}
-@media (max-width: 1390px) {
-  .studio-header--wide-actions .header-app-title { display: none; }
+  .header-app-title { display: none; }
 }
 .save-status--error  { color: var(--red); }
 .studio-tab-bar {
@@ -104,6 +97,10 @@
 .studio-tab-menu button:disabled { color: var(--mid); opacity: .5; cursor: default; }
 .studio-tab-menu button.danger { color: var(--red); }
 .studio-tab-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+/* The header's Export menu: each choice says what it will make underneath. */
+.export-menu { min-width: 240px; }
+.export-menu button { padding: 8px 14px; }
+.export-menu-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--mid); }
 .studio-tab-divider { width: 1px; height: 16px; background: var(--border); margin: 0 6px; flex-shrink: 0; }
 .studio-tab-add {
   padding: 8px 12px; font-size: 11px; cursor: pointer;
