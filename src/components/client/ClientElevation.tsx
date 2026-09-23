@@ -104,6 +104,22 @@ export default function ClientElevation({
   // (parity with consultant `setZoomFit`, which recomputes fit on every click).
   const [refitKey, setRefitKey] = useState(0)
 
+  // A phone turned on its side, or a window resized, re-fits the wall. Only a
+  // change of width counts: a phone's height changes every time its address
+  // bar slides in or out while scrolling.
+  useEffect(() => {
+    let width = window.innerWidth
+    let timer: number | undefined
+    const onResize = () => {
+      if (window.innerWidth === width) return
+      width = window.innerWidth
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => setRefitKey(k => k + 1), 200)
+    }
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); window.clearTimeout(timer) }
+  }, [])
+
   const visibleArts = optData.artworks.filter(a => a.visible)
   const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
   const budgetPct = clientBudget && clientBudget > 0 && totalCost > 0
@@ -372,6 +388,13 @@ export default function ClientElevation({
   )
 }
 
+/** Must match the phone breakpoint in client-portal.css. */
+const PHONE_QUERY = '(max-width: 640px)'
+/** How long a finger rests on an artwork before it can be dragged. */
+const TOUCH_HOLD_MS = 280
+/** How far a finger may wander during that hold before it counts as a scroll. */
+const TOUCH_SLOP_PX = 8
+
 // ── Canvas (imperative DOM, artwork drag, foreground masks) ───────────
 function ClientCanvas({
   optData,
@@ -392,6 +415,12 @@ function ClientCanvas({
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const elevWrapRef = useRef<HTMLDivElement>(null)
+  // Read by the drag handlers, which are built once per draw: the wall is
+  // shown at scale(zoom), so a finger's movement on screen is zoom times the
+  // movement on the wall. Ignoring it made artworks run ahead of the pointer
+  // when zoomed in and lag behind it when zoomed out.
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
   const elevImgRef = useRef<HTMLImageElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   // Decoded images — walls and artworks — kept across rebuilds. Every
@@ -429,10 +458,25 @@ function ClientCanvas({
       // No upper cap: small elevation images are upscaled to fit, large ones are
       // downscaled. The `zoom` prop is a relative multiplier on top (1.0 = fit).
       const area = canvasRef.current?.closest('.client-canvas-area') as HTMLElement | null
+      // The padding is the stylesheet's, so a phone's narrower margin is
+      // honoured here rather than a second number that has to agree with it.
+      const inner = canvasRef.current ? getComputedStyle(canvasRef.current) : null
+      const padX = inner ? parseFloat(inner.paddingLeft) + parseFloat(inner.paddingRight) : 64
+      const padY = inner ? parseFloat(inner.paddingTop) + parseFloat(inner.paddingBottom) : 64
       const areaW = area?.clientWidth ?? canvasRef.current?.clientWidth ?? 900
+      // On a phone the wall sits above the panel instead of beside it, and is
+      // given the height its own shape needs at full width — a landscape wall
+      // is not stranded in a tall grey box — within limits, so a portrait
+      // wall leaves the panel something of the screen. See client-portal.css.
+      const canvasWrap = area?.closest('.client-canvas-wrap') as HTMLElement | null
+      if (canvasWrap && window.matchMedia(PHONE_QUERY).matches) {
+        const natural = (areaW - padX) * (img.naturalHeight / img.naturalWidth) + padY
+        const h = Math.round(Math.max(220, Math.min(natural, window.innerHeight * 0.62)))
+        canvasWrap.style.setProperty('--phone-wall-h', h + 'px')
+      }
       const areaH = area?.clientHeight ?? canvasRef.current?.clientHeight ?? 600
-      const availW = Math.max(1, areaW - 64)
-      const availH = Math.max(1, areaH - 64)
+      const availW = Math.max(1, areaW - padX)
+      const availH = Math.max(1, areaH - padY)
       const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight)
 
       const wrap = elevWrapRef.current!
@@ -592,8 +636,9 @@ function ClientCanvas({
             const wW = parseFloat(aw.style.width), wH = parseFloat(aw.style.height)
 
             function mv(ev: MouseEvent) {
-              let rawLeft = Math.max(0, Math.min(eW - wW, sl.val + (ev.clientX - sx.val)))
-              let rawTop = Math.max(0, Math.min(eH - wH, st.val + (ev.clientY - sy.val)))
+              const z = zoomRef.current || 1
+              let rawLeft = Math.max(0, Math.min(eW - wW, sl.val + (ev.clientX - sx.val) / z))
+              let rawTop = Math.max(0, Math.min(eH - wH, st.val + (ev.clientY - sy.val) / z))
               const snapXLines: number[] = [], snapYLines: number[] = []
 
               wrap.querySelectorAll('.client-aw-overlay').forEach(other => {
@@ -651,30 +696,53 @@ function ClientCanvas({
             document.addEventListener('mouseup', up)
           })
 
+          // By touch, an artwork is moved by holding it for a moment, then
+          // dragging. A finger that lands on an artwork and sets straight off
+          // is scrolling the page — on a phone the wall is the full width of
+          // the screen, so grabbing on contact made the page impossible to
+          // scroll past it without shoving pictures about.
           aw.addEventListener('touchstart', e => {
+            if (e.touches.length !== 1) return
             e.stopPropagation()
             const t0 = e.touches[0]
             sx.val = t0.clientX; sy.val = t0.clientY
             sl.val = parseFloat(aw.style.left); st.val = parseFloat(aw.style.top)
             const eW = img.naturalWidth * s, eH = img.naturalHeight * s
             const wW = parseFloat(aw.style.width), wH = parseFloat(aw.style.height)
+            let dragging = false
+            const hold = window.setTimeout(() => {
+              dragging = true
+              aw.classList.add('touch-dragging')
+              navigator.vibrate?.(10)
+            }, TOUCH_HOLD_MS)
 
             function mv(ev: TouchEvent) {
-              ev.preventDefault()
               const t = ev.touches[0]
-              const nl = Math.max(0, Math.min(eW - wW, sl.val + (t.clientX - sx.val)))
-              const nt = Math.max(0, Math.min(eH - wH, st.val + (t.clientY - sy.val)))
+              if (!dragging) {
+                // Moved before the hold completed: a scroll, not a drag.
+                if (Math.hypot(t.clientX - sx.val, t.clientY - sy.val) > TOUCH_SLOP_PX) end(false)
+                return
+              }
+              ev.preventDefault()
+              const z = zoomRef.current || 1
+              const nl = Math.max(0, Math.min(eW - wW, sl.val + (t.clientX - sx.val) / z))
+              const nt = Math.max(0, Math.min(eH - wH, st.val + (t.clientY - sy.val) / z))
               aw.style.left = nl + 'px'
               aw.style.top = nt + 'px'
               onArtworkMove(art.id, nl / eW, nt / eH)
             }
-            function up() {
+            function end(moved: boolean) {
+              window.clearTimeout(hold)
               document.removeEventListener('touchmove', mv)
               document.removeEventListener('touchend', up)
-              onArtworkMoveEnd()
+              document.removeEventListener('touchcancel', up)
+              aw.classList.remove('touch-dragging')
+              if (moved) onArtworkMoveEnd()
             }
+            function up() { end(dragging) }
             document.addEventListener('touchmove', mv, { passive: false })
             document.addEventListener('touchend', up)
+            document.addEventListener('touchcancel', up)
           }, { passive: true })
         }
 

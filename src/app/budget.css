@@ -535,9 +535,17 @@
 .budget-totals-row--split,
 .budget-grand-total--split {
   display: grid;
-  grid-template-columns: 1fr minmax(84px, auto) minmax(84px, auto);
+  /* minmax(0, …): a label carrying a badge ("Installation · Indicative")
+     otherwise sets the first column's minimum at its full width, and on a
+     phone that pushed the figures off the side of the card. */
+  grid-template-columns: minmax(0, 1fr) minmax(84px, auto) minmax(84px, auto);
   column-gap: 18px;
 }
+/* The badge drops under its label rather than squeezing the figures. The
+   gap spaces it on either line, where a left margin would indent it when
+   it wraps. */
+.budget-totals-row--split .budget-totals-label { flex-wrap: wrap; gap: 4px 6px; }
+.budget-totals-row--split .budget-badge--inline { margin-left: 0; }
 .budget-totals-row--split .budget-totals-value,
 .budget-grand-total--split .budget-grand-total-value { text-align: right; }
 
