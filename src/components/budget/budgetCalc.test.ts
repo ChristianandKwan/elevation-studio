@@ -549,7 +549,7 @@ describe('customItemsSubtotal', () => {
 })
 
 // ── The Nepean worked example ────────────────────────────────────────────────
-// The figures drawn in line-item-notes-mockup.html, computed by the real code,
+// The figures drawn in docs/mockups/line-item-notes-mockup.html, computed by the real code,
 // so that the picture and the app cannot drift apart.
 
 describe('the Nepean worked example', () => {

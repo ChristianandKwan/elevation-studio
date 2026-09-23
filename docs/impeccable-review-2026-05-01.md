@@ -35,7 +35,7 @@ This document is the full output of an impeccable review against `MEMORY.md` + `
 
 ## Settled / out of scope (do not re-suggest)
 
-- **Fonts: keep Cormorant Garamond + Karla.** I noted Cormorant is on impeccable's 2026 reflex-reject list and prepared a comparison sheet (`font-comparison.html` at the repo root). User reviewed it and confirmed they want to stay with the current pairing. **Do not propose font changes again** unless the user reopens the question. The font-weight loading bug (P1 below) is still in scope — fix the loading, keep the faces.
+- **Fonts: keep Cormorant Garamond + Karla.** I noted Cormorant is on impeccable's 2026 reflex-reject list and prepared a comparison sheet (`docs/mockups/font-comparison.html`). User reviewed it and confirmed they want to stay with the current pairing. **Do not propose font changes again** unless the user reopens the question. The font-weight loading bug (P1 below) is still in scope — fix the loading, keep the faces.
 
 ---
 
