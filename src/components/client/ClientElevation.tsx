@@ -103,6 +103,14 @@ export default function ClientElevation({
   // Bumped on Fit click to re-measure the viewport and re-fit the elevation
   // (parity with consultant `setZoomFit`, which recomputes fit on every click).
   const [refitKey, setRefitKey] = useState(0)
+  // Read after mount: the server has no storage, and a note that flashed in
+  // and out on every visit would be worse than one that waits a moment.
+  const [phoneNoteDismissed, setPhoneNoteDismissed] = useState(true)
+  useEffect(() => {
+    let dismissed = false
+    try { dismissed = localStorage.getItem(PHONE_NOTE_KEY) === '1' } catch { /* storage blocked: show it */ }
+    setPhoneNoteDismissed(dismissed) // eslint-disable-line react-hooks/set-state-in-effect
+  }, [])
 
   // A phone turned on its side, or a window resized, re-fits the wall. Only a
   // change of width counts: a phone's height changes every time its address
@@ -175,6 +183,23 @@ export default function ClientElevation({
       {/* Sidebar */}
       <div className="client-sidebar">
         <div className="client-sidebar-scroll">
+          {/* Phones only (the stylesheet hides it elsewhere): a phone cannot
+              move artworks, so it says where that can be done. Not once the
+              wall is picked or approved — nothing moves then on any screen. */}
+          {!artworksLocked && !phoneNoteDismissed && (
+            <div className="client-phone-note" role="note">
+              <span>For the best view, and to move artworks on the wall, open this link on a computer.</span>
+              <button
+                className="client-phone-note-close"
+                onClick={() => {
+                  setPhoneNoteDismissed(true)
+                  try { localStorage.setItem(PHONE_NOTE_KEY, '1') } catch { /* private mode: dismissed for this visit */ }
+                }}
+                aria-label="Dismiss"
+              >×</button>
+            </div>
+          )}
+
           {/* Option / elevation label */}
           <div className="client-sidebar-section">
             <div className="client-sidebar-kicker">{optionTitle}</div>
@@ -388,6 +413,9 @@ export default function ClientElevation({
   )
 }
 
+/** Remembers, on this device, that the client closed the "open it on a computer" note. */
+const PHONE_NOTE_KEY = 'es-client-phone-note-dismissed'
+
 /** Must match the phone breakpoint in client-portal.css. */
 const PHONE_QUERY = '(max-width: 640px)'
 /** How long a finger rests on an artwork before it can be dragged. */
@@ -478,6 +506,12 @@ function ClientCanvas({
       const availW = Math.max(1, areaW - padX)
       const availH = Math.max(1, areaH - padY)
       const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight)
+      // On a phone the client looks, reads and writes notes, but does not
+      // rearrange the wall — at that size placing work is fiddly, and the
+      // snap guides a mouse gets were never there for a finger (Tom). Checked
+      // at each draw, so a phone turned on its side (see the resize re-fit)
+      // is judged at its new width.
+      const movable = !locked && !window.matchMedia(PHONE_QUERY).matches
 
       const wrap = elevWrapRef.current!
       if (!wrap) return
@@ -512,7 +546,7 @@ function ClientCanvas({
       optData.artworks.forEach(art => {
         if (!art.visible || !art.imageUrl) return
         const aw = document.createElement('div')
-        aw.className = 'client-aw-overlay' + (locked ? ' locked' : '')
+        aw.className = 'client-aw-overlay' + (movable ? '' : ' locked')
         aw.dataset.id = art.id
         aw.style.left = art.xF * img.naturalWidth * s + 'px'
         aw.style.top = art.yF * img.naturalHeight * s + 'px'
@@ -599,7 +633,7 @@ function ClientCanvas({
         tag.textContent = art.name + (art.price ? ' · ' + formatPrice(art.price) : '')
         aw.appendChild(tag)
 
-        if (!locked) {
+        if (movable) {
           aw.style.cursor = 'grab'
           const sx = { val: 0 }, sy = { val: 0 }, sl = { val: 0 }, st = { val: 0 }
           const SNAP_PX = 8
@@ -696,11 +730,11 @@ function ClientCanvas({
             document.addEventListener('mouseup', up)
           })
 
-          // By touch, an artwork is moved by holding it for a moment, then
+          // By touch (a tablet — phones do not move artworks at all, see
+          // `movable`), an artwork is moved by holding it for a moment, then
           // dragging. A finger that lands on an artwork and sets straight off
-          // is scrolling the page — on a phone the wall is the full width of
-          // the screen, so grabbing on contact made the page impossible to
-          // scroll past it without shoving pictures about.
+          // is scrolling or panning; grabbing on contact shoved pictures about
+          // whenever someone meant to scroll past them.
           aw.addEventListener('touchstart', e => {
             if (e.touches.length !== 1) return
             e.stopPropagation()

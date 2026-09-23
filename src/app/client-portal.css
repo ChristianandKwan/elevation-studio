@@ -228,7 +228,21 @@
    wall's own shape (--phone-wall-h). The breakpoint must match PHONE_QUERY
    there. Tablets and computers are untouched.
 ══════════════════════════════════════════════════════════ */
+/* Shown on phones only — see the rule below. */
+.client-phone-note {
+  display: none; align-items: flex-start; gap: 10px;
+  padding: 10px 12px 10px 16px; background: var(--cream); border-bottom: 1px solid var(--border);
+  font-size: 12.5px; line-height: 1.45; color: var(--charcoal);
+}
+.client-phone-note span { flex: 1; }
+.client-phone-note-close {
+  flex-shrink: 0; width: 28px; height: 28px; margin: -4px -4px 0 0;
+  border: none; background: none; color: var(--mid); font-size: 18px; line-height: 1; cursor: pointer;
+}
+
 @media (max-width: 640px) {
+  .client-phone-note { display: flex; }
+
   /* dvh follows the phone's address bar as it comes and goes. */
   .client-layout { height: 100vh; height: 100dvh; }
 
