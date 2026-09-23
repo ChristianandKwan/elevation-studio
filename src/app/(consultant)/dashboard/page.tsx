@@ -22,7 +22,12 @@ import LoadFailed from '@/components/ui/LoadFailed'
  * plain signed URL for the elevation image — never the expensive
  * composite.
  */
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string | string[] }>
+}) {
+  const view = (await searchParams).view === 'archived' ? 'archived' : 'active'
   const supabase = await createClient()
   const supabaseService = createServiceClient()
 
@@ -43,14 +48,14 @@ export default async function DashboardPage() {
     .select(`
       id, name, client_name, status, created_at,
       elevations(
-        id, client_picked_option, display_order,
+        id, client_picked_option, display_order, visible_to_client,
         elevation_options(
           id, option, sort_order, created_at, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved
         )
       )
     `)
     .eq('consultant_id', user!.id)
-    .eq('archived', false)
+    .eq('archived', view === 'archived')
     .order('created_at', { ascending: false })
 
   // An empty dashboard and a dashboard that could not load look identical,
@@ -66,11 +71,16 @@ export default async function DashboardPage() {
     const sortedElevations = [...(p.elevations ?? [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
     const firstOption = sortOptions(sortedElevations[0]?.elevation_options ?? [])[0]
     const elevCount = p.elevations?.length ?? 0
-    const pickedCount = (p.elevations ?? []).filter((e: { client_picked_option: string | null }) => e.client_picked_option != null).length
-    const approvedCount = (p.elevations ?? []).filter((e: { elevation_options: Array<{ approved: boolean }> }) =>
+    // Progress is out of what the client can see. A hidden elevation cannot be
+    // picked or approved, so counting it kept a finished project at "2/3
+    // approved" for good — the same rule the approval itself already follows.
+    const shown = (p.elevations ?? []).filter((e: { visible_to_client: boolean | null }) => e.visible_to_client !== false)
+    const shownCount = shown.length
+    const pickedCount = shown.filter((e: { client_picked_option: string | null }) => e.client_picked_option != null).length
+    const approvedCount = shown.filter((e: { elevation_options: Array<{ approved: boolean }> }) =>
       e.elevation_options?.some(o => o.approved)
     ).length
-    return { p, firstOption, elevCount, pickedCount, approvedCount }
+    return { p, firstOption, elevCount, shownCount, pickedCount, approvedCount }
   })
 
   // Collect paths for batch signing — two RPCs instead of N
@@ -93,7 +103,7 @@ export default async function DashboardPage() {
   const thumbMap = new Map((thumbResult.data ?? []).map(r => [r.path, r.signedUrl]))
   const fallbackMap = new Map((fallbackResult.data ?? []).map(r => [r.path, r.signedUrl]))
 
-  const projectsWithThumbs = projectMeta.map(({ p, firstOption, elevCount, pickedCount, approvedCount }) => {
+  const projectsWithThumbs = projectMeta.map(({ p, firstOption, elevCount, shownCount, pickedCount, approvedCount }) => {
     let thumbnailUrl: string | null = null
     if (firstOption?.thumbnail_path) {
       thumbnailUrl = thumbMap.get(firstOption.thumbnail_path) ?? null
@@ -111,6 +121,7 @@ export default async function DashboardPage() {
       ...p,
       thumbnailUrl,
       elevCount,
+      shownCount,
       origW: firstOption?.orig_w ?? 0,
       origH: firstOption?.orig_h ?? 0,
       scalePxPerCm: firstOption?.scale_px_per_cm ?? null,
@@ -123,6 +134,7 @@ export default async function DashboardPage() {
     <DashboardClient
       profile={profile ?? { id: user!.id, name: user!.email ?? 'Consultant', initials: 'CK', role: 'consultant' }}
       projects={projectsWithThumbs}
+      view={view}
     />
   )
 }

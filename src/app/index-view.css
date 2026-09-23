@@ -200,10 +200,9 @@
 }
 
 /* ── The export pack ─────────────────────────────────────────────────────
-   The button that opens this lives inside the index content, beside "Merge
-   duplicates", and deliberately not in the header's right-hand group — that
-   group's width is measured by hand against the wordmark breakpoints in
-   studio.css, and adding to it has broken the header twice.
+   Opened from the header's one Export button, which offers the pack or a
+   picture of the option on screen. Its styles stay here with the rest of
+   the index's.
 
    Corners follow the concentric rule in globals.css: the modal is --radius,
    so the rows inside it are --radius-sm and the option chips inside those

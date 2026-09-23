@@ -262,6 +262,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   const [artworksPending, setArtworksPending] = useState(false)
   // Which call to loadOption is the newest — see there.
   const loadSeq = useRef(0)
+  /**
+   * The option whose wall is actually on screen. Until a load finishes, the
+   * state still describes the option before it, so anything copying the
+   * studio's state back onto "the active option" must check this first.
+   */
+  const loadedOptionIdRef = useRef<string | null>(null)
+  const loadedOptionId = useCallback(() => loadedOptionIdRef.current, [])
   // Background image downloads resume once the canvas has everything it
   // asked for. loadOption does the pausing.
   useEffect(() => {
@@ -494,6 +501,21 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  /**
+   * Draw the perspective outline for what the consultant is doing right now.
+   * The dotted outline and its corner labels mean "not confirmed yet": they
+   * show while corners are being placed or adjusted, and never for a
+   * perspective that has been confirmed — the skewed artworks show it then.
+   * Drawing the saved corners whenever a wall loaded is what made a confirmed
+   * perspective look unconfirmed every time it was reopened.
+   */
+  function redrawSkewOutline(elev: StudioElev | null) {
+    const s = stateRef.current
+    if (s.skewAdjustMode) renderSkewHandles([...skewDefCornersRef.current], elev, true)
+    else if (s.skewDefMode) renderSkewHandles([...skewDefCornersRef.current], elev)
+    else renderSkewHandles([], elev)
+  }
+
   // Rubber-band preview: after the first click in skew-def mode, show a
   // dashed line from the last placed corner to the cursor so the consultant
   // can see the edge they're about to commit before they commit it.
@@ -553,8 +575,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function cancelSkewAdjust() {
     skewDefCornersRef.current = []
     const s = stateRef.current
-    // Restore previous state
-    renderSkewHandles(s.skewCorners ? [...s.skewCorners] : [], s.elev)
+    // Back to the confirmed perspective, which has no outline
+    renderSkewHandles([], s.elev)
     requestAnimationFrame(() => applySkewTransform())
     setState(st => ({ ...st, skewDefMode: false, skewAdjustMode: false }))
   }
@@ -596,9 +618,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   function cancelSkewDef() {
     skewDefCornersRef.current = []
     const s = stateRef.current
-    // Restore handles from existing corners if any
-    if (s.skewCorners) renderSkewHandles([...s.skewCorners], s.elev)
-    else renderSkewHandles([], s.elev)
+    // Back to the confirmed perspective (if any), which has no outline
+    renderSkewHandles([], s.elev)
     // Re-apply existing transform if it was active
     requestAnimationFrame(() => applySkewTransform())
     setState(st => ({ ...st, skewDefMode: false, skewAdjustMode: false }))
@@ -764,11 +785,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const newScale = scale ? { ...scale, dispPxPerCm: scale.origPxPerCm * zoom } : null
     renderArtworksDOM(artworks, elev, newScale)
     renderForegroundSVG(masks ?? [], elev, elev.imageUrl)
-    // Re-render skew handles at new display size
-    const s = stateRef.current
-    if (s.skewCorners) renderSkewHandles([...s.skewCorners], elev)
-    const skewHandlesSvg = document.getElementById('skew-handles-svg') as SVGSVGElement | null
-    if (skewHandlesSvg && !s.skewCorners) { skewHandlesSvg.innerHTML = ''; skewHandlesSvg.style.display = 'none' }
+    // Re-draw an in-progress perspective outline at the new display size
+    redrawSkewOutline(elev)
 
     // Resize draw + highlight SVGs and re-render draw contents at new scale
     const drawSvg = document.getElementById('fg-draw-svg') as SVGSVGElement | null
@@ -1216,11 +1234,14 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     foregroundMasks: ForegroundMasks | null;
     skewCorners?: SkewCorners | null;
     skewActive?: boolean;
+    /** The option being loaded — see loadedOptionIdRef. */
+    optionId: string;
   }) {
     // Every load takes a ticket, and only the newest may touch the canvas.
     // Clicking B while A is still arriving used to let A land on top of B.
     const seq = ++loadSeq.current
     const current = () => seq === loadSeq.current
+    loadedOptionIdRef.current = null
 
     // Empty canvas: the option has no image, or the one it has cannot be
     // loaded. Bailing out without clearing left the *previous* option on
@@ -1228,6 +1249,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     const showEmptyCanvas = () => {
       if (!current()) return
       setState({ elev: null, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, calib: DEFAULT_CALIB, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false })
+      loadedOptionIdRef.current = opts.optionId
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
       rememberSaved([], [])
@@ -1426,6 +1448,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         calib: DEFAULT_CALIB, masks, maskDraw: DEFAULT_MASK_DRAW,
         skewCorners, skewActive, skewDefMode: false, skewAdjustMode: false,
       })
+      loadedOptionIdRef.current = opts.optionId
       setBusy(false)
 
       let frames = 0
@@ -1441,8 +1464,8 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
         }
         applyZoom(zoom, elev, scale, newArts, masks, fit)
         applySkewTransform()
-        if (skewCorners) renderSkewHandles([...skewCorners], elev)
-        else renderSkewHandles([], elev)
+        // A saved perspective is a confirmed one: no outline. See redrawSkewOutline.
+        renderSkewHandles([], elev)
         wallPlaced = true
         maybeReveal()
       }
@@ -2030,6 +2053,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
 
   // Flush any pending save + fire thumbnail regen and await the response.
   // Callers (e.g. the Dashboard back button) await this so the dashboard never renders a stale preview.
+  /**
+   * Write a pending wall edit now instead of in a second and a half. For
+   * anything that reads the project back from the database — the export
+   * pack — and would otherwise miss the last thing moved.
+   */
+  async function flushPendingSave(): Promise<void> {
+    if (!optionId || !saveTimer.current) return
+    clearTimeout(saveTimer.current)
+    saveTimer.current = null
+    await persistOption(stateRef.current)
+  }
+
   async function flushPendingAndRegen(): Promise<void> {
     if (!optionId) return
     // Option data (artworks + foreground masks). A write that changes the
@@ -2174,6 +2209,18 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   // ─── TOGGLE VISIBILITY ────────────────────────────────────────────
+  /**
+   * Save positions the keyboard nudge changed in place. It is the commit a
+   * mouse drag ends with; without it an arrow-key move showed on screen and
+   * was lost on leaving unless something else on the wall was saved after it.
+   */
+  function commitArtworkMove() {
+    setState(st => {
+      debounceSave(st)
+      return { ...st, artworks: [...st.artworks] }
+    })
+  }
+
   async function toggleVisibility(artId: string) {
     setState(s => {
       const newArts = s.artworks.map(a => a.id === artId ? { ...a, visible: !a.visible } : a)
@@ -2732,6 +2779,10 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     updateArtworkDims,
     updateArtworkPrice,
     patchArtworkLocal,
+    commitArtworkMove,
+    /** The option whose wall the state describes, or null mid-load. */
+    loadedOptionId,
+    flushPendingSave,
     updateArtworkName,
     updateArtworkArtist,
     updateArtworkLineItems,
