@@ -31,12 +31,14 @@ interface Props {
   onReorderOptions: (elevId: string, orderedKeys: string[]) => void
   /** Name (or clear, with '') one option. */
   onRenameOption: (elevId: string, optKey: string, name: string) => void
+  /** Move an elevation one place left (-1) or right (+1). */
+  onMoveElevation: (elevId: string, delta: number) => void
 }
 
 export default function TabBar({
   elevations, activeElevId, activeOption, onSwitch,
   onAddElevation, onRenameElevation, onDeleteElevation, onSetVisibleToClient,
-  onAddOption, onDeleteOption, onReorderOptions, onRenameOption,
+  onAddOption, onDeleteOption, onReorderOptions, onRenameOption, onMoveElevation,
 }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -299,7 +301,8 @@ export default function TabBar({
 
       {/* Elevation menu: add option, rename, client visibility, delete */}
       {elevMenu && (() => {
-        const elev = elevations.find(e => e.id === elevMenu.elevId)
+        const elevIndex = elevations.findIndex(e => e.id === elevMenu.elevId)
+        const elev = elevations[elevIndex]
         if (!elev) return null
         return (
           <div
@@ -322,6 +325,13 @@ export default function TabBar({
             </button>
             {elevations.length > 1 && (
               <>
+                <div className="studio-tab-menu-sep" />
+                <button role="menuitem" disabled={elevIndex <= 0} onClick={() => { onMoveElevation(elev.id, -1); setElevMenu(null) }}>
+                  ← Move left
+                </button>
+                <button role="menuitem" disabled={elevIndex >= elevations.length - 1} onClick={() => { onMoveElevation(elev.id, 1); setElevMenu(null) }}>
+                  Move right →
+                </button>
                 <div className="studio-tab-menu-sep" />
                 <button role="menuitem" className="danger" onClick={() => { setConfirmDeleteElevId(elev.id); setElevMenu(null) }}>
                   <TrashIcon /> Delete elevation…
@@ -442,7 +452,12 @@ export default function TabBar({
       {confirmDeleteElevId && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirmDeleteElevId(null) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Delete Elevation</div>
+            <div className="modal-title">
+              Delete {(() => {
+                const name = elevations.find(e => e.id === confirmDeleteElevId)?.name
+                return name ? `“${name}”` : 'Elevation'
+              })()}?
+            </div>
             <div className="modal-sub" style={{ color: 'var(--red)' }}>
               This will permanently delete this elevation and all its artworks. This cannot be undone.
             </div>

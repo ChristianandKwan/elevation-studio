@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useStudio } from '@/hooks/useStudio'
 import StudioCanvas from './StudioCanvas'
 import StudioSidebar from './StudioSidebar'
+import ExportMenu from './ExportMenu'
+import ExportModal from '@/components/export/ExportModal'
 import TabBar from './TabBar'
 import CalibrationModal from './CalibrationModal'
 import AddArtworkModal from './AddArtworkModal'
@@ -109,6 +111,17 @@ type SkewOptData = Pick<DbElevation['elevation_options'][number],
  */
 function optHasWall(o: { imagePath: string | null; wall_color?: string | null }): boolean {
   return !!o.imagePath || !!o.wall_color
+}
+
+/** The perspective as the option row stores it — the inverse of buildSkewCorners. */
+function skewColumns(corners: import('@/hooks/useStudio').SkewCorners | null, active: boolean): SkewOptData & { skew_active: boolean } {
+  return {
+    skew_tl_x: corners?.[0][0] ?? null, skew_tl_y: corners?.[0][1] ?? null,
+    skew_tr_x: corners?.[1][0] ?? null, skew_tr_y: corners?.[1][1] ?? null,
+    skew_br_x: corners?.[2][0] ?? null, skew_br_y: corners?.[2][1] ?? null,
+    skew_bl_x: corners?.[3][0] ?? null, skew_bl_y: corners?.[3][1] ?? null,
+    skew_active: active,
+  }
 }
 
 function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCorners | null {
@@ -310,6 +323,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (skipNextLoadRef.current) { skipNextLoadRef.current = false; return }
     const skewCorners = buildSkewCorners(activeOptData)
     studio.loadOption({
+      optionId: activeOptData.id,
       imageUrl: activeOptData.imageUrl,
       imagePath: activeOptData.imagePath,
       origW: activeOptData.orig_w,
@@ -383,6 +397,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           if (e.key === 'ArrowDown')  art.yF = Math.min(1, art.yF + step / s.elev.dispH)
         })
         studio.renderArtworksDOM(s.artworks, s.elev, s.scale, s.selIds)
+        studio.commitArtworkMove()
         e.preventDefault()
       }
       if ((e.key === '=' || e.key === '+') && (e.metaKey || e.ctrlKey)) { studio.changeZoom(0.1, s); e.preventDefault() }
@@ -406,10 +421,16 @@ export default function StudioScreen({ project, elevations: initialElevations, e
    * Every field the sidebar can edit has to be listed here. A field left out
    * saves to the database and still looks lost.
    */
+  const studioLoadedOptionId = studio.loadedOptionId
   const syncStudioIntoElevations = useCallback(() => {
     const currentArts = studio.state.artworks
     const currentMasks = studio.state.masks
+    const currentSkew = skewColumns(studio.state.skewCorners, studio.state.skewActive)
     if (!activeElevId || !activeOption) return
+    // Mid-load, the studio's wall is still the option before this one: its
+    // masks and perspective must not be copied onto the active option.
+    const activeOptId = elevations.find(e => e.id === activeElevId)?.elevation_options.find(o => o.option === activeOption)?.id
+    const wallIsLoaded = !!activeOptId && studioLoadedOptionId() === activeOptId
     // Name, artist, size and the money belong to the work, not to this
     // placement of it — so every other placement of the same work, on any
     // option or elevation, and the index's copy move with it.
@@ -429,7 +450,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         if (e.id === activeElevId && o.option === activeOption) {
           return {
             ...o,
-            foreground_masks: currentMasks.length > 0 ? currentMasks : null,
+            ...(wallIsLoaded ? {
+              foreground_masks: currentMasks.length > 0 ? currentMasks : null,
+              // Without this, a perspective set this visit was forgotten on
+              // switching away and back, and never reached a new option.
+              ...currentSkew,
+            } : {}),
             artworks: o.artworks.map(a => {
               const cur = currentArts.find(ca => ca.id === a.id)
               if (!cur) return a
@@ -459,7 +485,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       const cur = byWork.get(w.id)
       return cur ? { ...w, ...workFields(cur) } : w
     }))
-  }, [studio.state.artworks, studio.state.masks, activeElevId, activeOption])
+  }, [studio.state.artworks, studio.state.masks, studio.state.skewCorners, studio.state.skewActive, studioLoadedOptionId, elevations, activeElevId, activeOption])
 
   // ─── EDITING A WORK FROM THE BUDGET OR THE INDEX ─────────────────
   // The money, the notes and the sourcing detail belong to the work, so a
@@ -875,8 +901,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const targetOpt = elev?.elevation_options.find(o => o.option === opt)
     const sourceOpt = elev?.elevation_options.find(o => o.option !== opt && optHasWall(o))
     if (targetOpt && !optHasWall(targetOpt) && sourceOpt) {
+      const sourceSkew = skewColumns(buildSkewCorners(sourceOpt), sourceOpt.skew_active ?? false)
       const supabase = createClient()
       await supabase.from('elevation_options').update({
+        ...sourceSkew,
         image_path: sourceOpt.imagePath,
         orig_w: sourceOpt.orig_w,
         orig_h: sourceOpt.orig_h,
@@ -899,12 +927,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               wall_w_cm: sourceOpt.wall_w_cm ?? null,
               wall_h_cm: sourceOpt.wall_h_cm ?? null,
               wall_color: sourceOpt.wall_color ?? null,
+              ...sourceSkew,
             }
           }),
         }
       }))
       skipNextLoadRef.current = true
       studio.loadOption({
+        optionId: targetOpt.id,
         imageUrl: sourceOpt.imageUrl,
         imagePath: sourceOpt.imagePath,
         origW: sourceOpt.orig_w,
@@ -915,8 +945,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         wallColor: sourceOpt.wall_color ?? null,
         artworks: targetOpt.artworks ?? [],
         foregroundMasks: (targetOpt.foreground_masks as import('@/types').ForegroundMasks | null) ?? null,
-        skewCorners: buildSkewCorners(targetOpt),
-        skewActive: targetOpt.skew_active ?? false,
+        skewCorners: buildSkewCorners(sourceSkew),
+        skewActive: sourceSkew.skew_active,
       })
       setActiveElevId(elevId)
       setActiveOption(opt)
@@ -977,7 +1007,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   async function renameElevation(elevId: string, newName: string) {
     const supabase = createClient()
-    await supabase.from('elevations').update({ name: newName }).eq('id', elevId)
+    const { error } = await supabase.from('elevations').update({ name: newName }).eq('id', elevId)
+    if (error) { onStatus('Could not rename the elevation — please try again'); return }
     setElevations(prev => prev.map(e => e.id === elevId ? { ...e, name: newName } : e))
     onStatus('Elevation renamed')
   }
@@ -1056,6 +1087,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     if (inheritedMasks && inheritedMasks.length > 0) {
       insertPayload.foreground_masks = inheritedMasks
     }
+    // The perspective belongs to the wall too. Without it option B of an angled
+    // wall started flat, and had to have its four corners placed again.
+    const inheritedSkew = (inheritedImagePath || inheritedWallColor) && srcOpt
+      ? skewColumns(buildSkewCorners(srcOpt), srcOpt.skew_active ?? false)
+      : null
+    if (inheritedSkew) Object.assign(insertPayload, inheritedSkew)
     const { data: optRow, error: insertError } = await supabase.from('elevation_options')
       .insert(insertPayload)
       .select().single()
@@ -1074,6 +1111,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           wall_w_cm: inheritedWallW, wall_h_cm: inheritedWallH, wall_color: inheritedWallColor,
           approved: false, approved_at: null,
           foreground_masks: inheritedMasks,
+          ...inheritedSkew,
           clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [],
         }],
       }
@@ -1154,6 +1192,36 @@ export default function StudioScreen({ project, elevations: initialElevations, e
    * sort_order in one statement (see migration 023). If that fails the old
    * order comes back. Only the order changes — nothing is deleted or re-keyed.
    */
+  /**
+   * Move one elevation a place left or right. The order is the order the
+   * client's tabs, the budget and the export all follow. Every elevation is
+   * renumbered from 0, which also straightens out the ties that adding after
+   * a delete could leave (a new elevation took the count as its number).
+   */
+  async function moveElevation(elevId: string, delta: number) {
+    const from = elevations.findIndex(e => e.id === elevId)
+    const to = from + delta
+    if (from < 0 || to < 0 || to >= elevations.length) return
+    const previous = elevations
+    const reordered = [...elevations]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    const renumbered = reordered.map((e, i) => ({ ...e, display_order: i }))
+    setElevations(renumbered)
+
+    const supabase = createClient()
+    const results = await Promise.all(
+      renumbered
+        .filter(e => previous.find(p => p.id === e.id)?.display_order !== e.display_order)
+        .map(e => supabase.from('elevations').update({ display_order: e.display_order }).eq('id', e.id)),
+    )
+    if (results.some(r => r.error)) {
+      console.error('moveElevation failed:', results.find(r => r.error)?.error)
+      setElevations(previous)
+      onStatus('Could not save the new order — please try again')
+    }
+  }
+
   async function reorderOptions(elevId: string, orderedKeys: string[]) {
     const elev = elevations.find(e => e.id === elevId)
     if (!elev) return
@@ -1173,28 +1241,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       setElevations(prev => prev.map(e => e.id === elevId ? { ...e, elevation_options: previous } : e))
       onStatus('Could not save the new tab order — please try again')
     }
-  }
-
-  async function handleUnapprove() {
-    if (!activeOptData) return
-    const supabase = createClient()
-    await supabase.from('elevation_options').update({ approved: false, approved_at: null }).eq('id', activeOptData.id)
-    await supabase.from('activity_logs').insert({
-      project_id: project.id,
-      type: 'unapprove',
-      text: `${PRACTICE_NAME} unapproved ${activeOptionTitle} of ${activeElev?.name ?? ''}`,
-    })
-    setElevations(prev => prev.map(e => {
-      if (e.id !== activeElevId) return e
-      return {
-        ...e,
-        elevation_options: e.elevation_options.map(o => {
-          if (o.option !== activeOption) return o
-          return { ...o, approved: false, approved_at: null }
-        }),
-      }
-    }))
-    onStatus('Approval removed')
   }
 
   /**
@@ -1269,7 +1315,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   async function updateBudget(newBudget: number | null) {
     const supabase = createClient()
-    await supabase.from('projects').update({ budget: newBudget }).eq('id', project.id)
+    const { error } = await supabase.from('projects').update({ budget: newBudget }).eq('id', project.id)
+    if (error) { onStatus('Could not save the budget — please try again'); return }
     setBudget(newBudget)
     onStatus(newBudget ? 'Budget saved' : 'Budget cleared')
   }
@@ -1277,10 +1324,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   async function handleConsultantUnapprove() {
     if (!activeOptData?.id) return
     const supabase = createClient()
-    await supabase
+    const { error } = await supabase
       .from('elevation_options')
       .update({ approved: false, approved_at: null })
       .eq('id', activeOptData.id)
+    if (error) { onStatus('Could not remove the approval — please try again'); return }
     setElevations(prev => prev.map(e => {
       if (e.id !== activeElevId) return e
       return {
@@ -1446,6 +1494,31 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const budgetCaptureHost = useRef<HTMLDivElement | null>(null)
   const budgetCaptureResolve = useRef<((url: string | null) => void) | null>(null)
 
+  const [exportingPack, setExportingPack] = useState(false)
+
+  /**
+   * The pack is built on the server from what is saved, so anything still
+   * waiting to save — the last artwork moved, a price typed a moment ago —
+   * is written first, or the pack would come out one edit behind the screen.
+   */
+  async function openPackExport() {
+    syncStudioIntoElevations()
+    await Promise.all([
+      studio.flushPendingSave(),
+      ...[...workPending.current.keys()].map(id => {
+        const t = workTimers.current.get(id)
+        if (t) clearTimeout(t)
+        return flushWorkWrite(id)
+      }),
+      ...[...notePending.current.keys()].map(id => {
+        const t = noteTimers.current.get(id)
+        if (t) clearTimeout(t)
+        return flushNoteWrite(id)
+      }),
+    ])
+    setExportingPack(true)
+  }
+
   const captureBudgetForExport = useCallback((): Promise<string | null> => {
     // A second request while one is in flight would strand the first promise.
     if (budgetCaptureResolve.current) return Promise.resolve(null)
@@ -1526,12 +1599,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   const { state } = studio
 
-  // Widest right-hand button group: studio view with an approved option, which
-  // adds the "✓ Approved" chip and the Unapprove button. See studio.css.
-  // Which set of buttons is on the right, which is what decides where the
-  // wordmark has to give way. See the table in studio.css.
-  const headerHasStudioActions = view === 'studio'
-  const headerHasWideActions = view === 'studio' && !!activeOptData?.approved
 
   return (
     <div
@@ -1544,11 +1611,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       } as React.CSSProperties}
     >
       {(returningToDashboard || showIntroLoader) && <DrawLoader variant="cream" />}
-      {/* Header. The extra class tells the stylesheet that the right-hand group
-          is in its widest form (the approved state adds a chip and an Unapprove
-          button), so the centred "Elevation Studio" title can hide before it
-          collides rather than overlapping the buttons. */}
-      <div className={`studio-header${headerHasStudioActions ? ' studio-header--studio-actions' : ''}${headerHasWideActions ? ' studio-header--wide-actions' : ''}`}>
+      {/* Header. Its right-hand group is the same on every view, so one
+          breakpoint in studio.css decides when the centred title gives way. */}
+      <div className="studio-header">
         <div className="studio-header-left">
           <button
             className="studio-back"
@@ -1615,27 +1680,20 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             </button>
           </div>
 
-          {view === 'studio' && (
-            <>
-              {activeOptData?.approved && (
-                <>
-                  <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 500 }}>✓ Approved</span>
-                  <button className="btn btn-sm btn-ghost" onClick={handleUnapprove}>
-                    Unapprove
-                  </button>
-                </>
-              )}
-              {/* Short labels: the header is the most crowded row in the app
-                  and these two were the widest things in it. The full meaning
-                  moves to the tooltip rather than being lost. */}
-              <button className="btn btn-sm btn-ghost" title="Share this project with the client" onClick={() => studio.setShowShareModal(true)}>
-                Share
-              </button>
-              <button className="btn btn-sm" title="Export this wall as a PNG image" onClick={studio.exportPng} disabled={!state.elev || !state.scale}>
-                Export
-              </button>
-            </>
-          )}
+          {/* On every view: the link is needed as often from the budget as
+              from the wall. Short labels, because this is the most crowded
+              row in the app — the full meaning is in the tooltip and menu. */}
+          <button className="btn btn-sm btn-ghost" title="Share this project with the client" onClick={() => studio.setShowShareModal(true)}>
+            Share
+          </button>
+          <ExportMenu
+            wallLabel={activeElev && activeElev.elevation_options.length > 1
+              ? `${activeElev.name} · ${activeOptionTitle}`
+              : activeElev?.name ?? ''}
+            canExportImage={!!state.elev && !!state.scale}
+            onExportImage={studio.exportPng}
+            onExportPack={openPackExport}
+          />
           <FeedbackButton />
         </div>
       </div>
@@ -1693,6 +1751,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onAddOption={addOption}
           onDeleteOption={deleteOption}
           onReorderOptions={reorderOptions}
+          onMoveElevation={moveElevation}
           onRenameOption={renameOption}
         />
 
@@ -1793,8 +1852,6 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       {/* Index view — every work in the project, placed or not. Mounted only when active. */}
       {view === 'index' && (
         <IndexScreen
-          projectId={project.id}
-          onCaptureBudget={captureBudgetForExport}
           projectName={project.name}
           clientName={project.client_name}
           works={works}
@@ -1970,6 +2027,17 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           </div>
         )
       })()}
+
+      {exportingPack && (
+        <ExportModal
+          projectId={project.id}
+          projectName={project.name}
+          elevations={indexElevations}
+          setAsideCount={works.filter(w => w.setAside).length}
+          onCaptureBudget={captureBudgetForExport}
+          onClose={() => setExportingPack(false)}
+        />
+      )}
 
       {studio.showShareModal && (
         <ShareModal
