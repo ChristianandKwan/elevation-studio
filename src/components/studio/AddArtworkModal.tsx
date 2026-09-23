@@ -277,7 +277,7 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
                 <input type="checkbox" checked={pickedIds.has(w.id)} onChange={() => togglePicked(w.id)} />
                 <div className="work-pick-thumb">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {w.imageUrl && <img src={w.imageUrl} alt="" />}
+                  {w.imageUrl && <img src={w.imageUrl} crossOrigin="anonymous" alt="" />}
                 </div>
                 <div className="work-pick-main">
                   <span className="work-pick-title">{w.name}</span>

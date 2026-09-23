@@ -42,58 +42,81 @@ export default async function ClientPortalPage({ params }: Props) {
 
   const projectId = tokenRow.project_id
 
-  // Fetch project
-  const { data: project } = await supabase
-    .from('projects')
-    .select('id, name, client_name, status, consultant_id, created_at, client_budget')
-    .eq('id', projectId)
-    .single()
-
-  if (!project) notFound()
-
-  // Fetch consultant name
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name, initials')
-    .eq('id', project.consultant_id)
-    .single()
-
   // Fetch elevations with options and artworks. Elevations the consultant has
   // hidden are filtered out here, not in the browser, so nothing about them
   // (images, prices, names) ever reaches the client. The Budget tab is built
   // from this same list, so hidden elevations drop out of it too.
   // Try full query (requires migrations 009 + 010). On failure, fall back to base query.
-  let { data: elevations, error: elevError } = await supabase
-    .from('elevations')
-    .select(`
-      id, name, display_order, client_picked_option,
-      elevation_options(
-        id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
-        skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
-        ${ARTWORKS_FRAGMENT}
-      )
-    `)
-    .eq('project_id', projectId)
-    .eq('visible_to_client', true)
-    .order('display_order', { ascending: true })
-
-  // If query failed (e.g. skew columns not yet migrated), fall back without them
-  if (elevError || !elevations) {
-    const { data: fallback, error: fallbackErr } = await supabase
+  const fetchElevations = async () => {
+    let { data: elevations, error: elevError } = await supabase
       .from('elevations')
       .select(`
         id, name, display_order, client_picked_option,
         elevation_options(
           id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+          skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
           ${ARTWORKS_FRAGMENT}
         )
       `)
       .eq('project_id', projectId)
       .eq('visible_to_client', true)
       .order('display_order', { ascending: true })
-    elevations = fallback as typeof elevations
-    elevError = fallbackErr
+
+    // If query failed (e.g. skew columns not yet migrated), fall back without them
+    if (elevError || !elevations) {
+      const { data: fallback, error: fallbackErr } = await supabase
+        .from('elevations')
+        .select(`
+          id, name, display_order, client_picked_option,
+          elevation_options(
+            id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+            ${ARTWORKS_FRAGMENT}
+          )
+        `)
+        .eq('project_id', projectId)
+        .eq('visible_to_client', true)
+        .order('display_order', { ascending: true })
+      elevations = fallback as typeof elevations
+      elevError = fallbackErr
+    }
+    return { elevations, elevError }
   }
+
+  // Once the token has named the project, everything else is asked for at
+  // once. These used to go one after another, and each wait was added to the
+  // time before the client saw anything. Only the consultant's name has to
+  // wait, for the project row — it goes alongside the image links below.
+  const [
+    { data: project },
+    { elevations, elevError },
+    { data: activity },
+    { data: budgetRow },
+  ] = await Promise.all([
+    supabase
+      .from('projects')
+      .select('id, name, client_name, status, consultant_id, created_at, client_budget')
+      .eq('id', projectId)
+      .single(),
+    fetchElevations(),
+    // Approval activity
+    supabase
+      .from('activity_logs')
+      .select('id, type, text, created_at')
+      .eq('project_id', projectId)
+      .in('type', ['approved', 'unapprove'])
+      .order('created_at', { ascending: false }),
+    // Budget row for the portal's Budget tab. Fetched here rather than in the
+    // browser: the client is read-only for budgets and has no way to query
+    // project_budgets directly. Null when the consultant hasn't opened the
+    // budget screen yet (the row is created lazily on the consultant side).
+    supabase
+      .from('project_budgets')
+      .select('*')
+      .eq('project_id', projectId)
+      .maybeSingle(),
+  ])
+
+  if (!project) notFound()
 
   // Both attempts failed. Rendering on would show the client a proposal with
   // no walls in it, which reads as the consultant having sent them nothing.
@@ -110,12 +133,18 @@ export default async function ClientPortalPage({ params }: Props) {
       .filter(Boolean),
   )] as string[]
 
-  // Two batched createSignedUrls calls in parallel — service client, 72-hour expiry
-  const [{ data: elevSigned }, { data: artSigned }] = await Promise.all([
+  // Two batched createSignedUrls calls in parallel — service client, 72-hour
+  // expiry — with the consultant's name alongside.
+  const [{ data: elevSigned }, { data: artSigned }, { data: profile }] = await Promise.all([
     supabase.storage.from('elevation-images').createSignedUrls(elevPaths, 259200),
     artPaths.length
       ? supabase.storage.from('artwork-images').createSignedUrls(artPaths, 259200)
       : Promise.resolve({ data: [] as Array<{ path: string | null; signedUrl: string }> }),
+    supabase
+      .from('profiles')
+      .select('name, initials')
+      .eq('id', project.consultant_id)
+      .single(),
   ])
   const elevMap = new Map(elevSigned?.map(e => [e.path, e.signedUrl]) ?? [])
   const artMap = new Map(artSigned?.map(e => [e.path, e.signedUrl]) ?? [])
@@ -143,24 +172,6 @@ export default async function ClientPortalPage({ params }: Props) {
     // Sorted and lettered by position, in the same one place the studio uses (src/lib/options.ts).
     return { ...elev, elevation_options: labelOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null }
   })
-
-  // Fetch approval activity
-  const { data: activity } = await supabase
-    .from('activity_logs')
-    .select('id, type, text, created_at')
-    .eq('project_id', projectId)
-    .in('type', ['approved', 'unapprove'])
-    .order('created_at', { ascending: false })
-
-  // Budget row for the portal's Budget tab. Fetched here rather than in the
-  // browser: the client is read-only for budgets and has no way to query
-  // project_budgets directly. Null when the consultant hasn't opened the
-  // budget screen yet (the row is created lazily on the consultant side).
-  const { data: budgetRow } = await supabase
-    .from('project_budgets')
-    .select('*')
-    .eq('project_id', projectId)
-    .maybeSingle()
 
   const budget: ProjectBudget | null = budgetRow
     ? {

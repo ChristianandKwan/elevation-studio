@@ -52,7 +52,7 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
       <div className="index-thumb">
         {work.imageUrl
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={work.imageUrl} alt="" />
+          ? <img src={work.imageUrl} crossOrigin="anonymous" alt="" />
           : <span className="index-thumb-empty">No image</span>}
       </div>
       <div className="index-main">

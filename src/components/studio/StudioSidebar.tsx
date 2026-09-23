@@ -659,7 +659,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
     <div className={`aw-item${isSelected ? ' selected' : ''}`} onClick={e => e.stopPropagation()}>
       <div className="aw-item-top" onClick={onSelect}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="aw-thumb" src={art.imageUrl ?? ''} alt={art.name} />
+        <img className="aw-thumb" src={art.imageUrl ?? ''} crossOrigin="anonymous" alt={art.name} />
         <div className="aw-info">
           <div className="aw-name">{art.name}</div>
           {art.artist && <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 1 }}>{art.artist}</div>}

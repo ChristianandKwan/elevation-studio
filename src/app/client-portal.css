@@ -132,6 +132,10 @@
 }
 
 /* Artwork overlays on canvas */
+/* The artworks arrive together: hidden at once while any are still loading,
+   faded in when the last one lands. Same as the studio's #artwork-layer. */
+#client-artwork-layer { transition: opacity .35s ease; }
+#client-artwork-layer.artworks-pending { opacity: 0; pointer-events: none; transition: none; }
 .client-aw-overlay { position: absolute; border: 1px solid transparent; }
 .client-aw-overlay img { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
 .client-aw-overlay.locked { cursor: default; }

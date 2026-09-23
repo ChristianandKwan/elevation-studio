@@ -22,27 +22,35 @@ export default async function ProjectPage({ params }: Props) {
   const supabase = await createClient()
   const user = await getCurrentUser()
 
-  // Fetch project
-  const { data: project } = await supabase
-    .from('projects')
-    .select('id, name, client_name, status, consultant_id, budget')
-    .eq('id', id)
-    .eq('consultant_id', user!.id)
-    .single()
-
-  if (!project) notFound()
-
-  // Fetch profile for consultant name
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name, initials')
-    .eq('id', user!.id)
-    .single()
-
-  // Elevations → options → placements, each placement with its work joined
-  // in. Works themselves are fetched separately below, because the index
-  // lists every work in the project whether or not it hangs anywhere.
-  const [elevationsRes, worksRes, artistsRes] = await Promise.all([
+  // Everything the studio reads, asked for at once. These used to go one
+  // after another — project, then profile, then the elevations, then the
+  // client link, then notes, then activity — and each wait was added to the
+  // spinner before the studio appeared. None depends on another's answer.
+  // Ownership is still decided by the project query alone: if it comes back
+  // empty the page is a 404 and nothing else fetched here is shown.
+  const [
+    { data: project },
+    { data: profile },
+    elevationsRes, worksRes, artistsRes,
+    { data: tokenRow },
+    notesRes,
+    { data: activityLogs },
+  ] = await Promise.all([
+    supabase
+      .from('projects')
+      .select('id, name, client_name, status, consultant_id, budget')
+      .eq('id', id)
+      .eq('consultant_id', user!.id)
+      .single(),
+    // Profile, for the consultant's name
+    supabase
+      .from('profiles')
+      .select('name, initials')
+      .eq('id', user!.id)
+      .single(),
+    // Elevations → options → placements, each placement with its work joined
+    // in. Works themselves are fetched separately below, because the index
+    // lists every work in the project whether or not it hangs anywhere.
     supabase
       .from('elevations')
       .select(`
@@ -65,7 +73,40 @@ export default async function ProjectPage({ params }: Props) {
     // projects — the work editor offers these rather than a list scraped from
     // the spellings on works, which is how near-duplicates got in.
     supabase.from('artist_profiles').select('id, name, name_key, note').order('name', { ascending: true }),
+    // Most recent client token, expired or not. The expiry filter used to live
+    // in this query, which meant an expired link was indistinguishable from
+    // never having made one — the consultant had no way to know their client's
+    // link had gone dead. Filtering happens below instead, so the studio can
+    // warn.
+    supabase
+      .from('client_tokens')
+      .select('token, expires_at')
+      .eq('project_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // Notes, with the works an artist note is narrowed to. One query: they are
+    // read on four different screens and threading four fetches through would
+    // mean four chances to forget one.
+    supabase
+      .from('notes')
+      .select(`
+        id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
+        body, share, display_order, updated_at,
+        note_works(work_id)
+      `)
+      .eq('project_id', id)
+      .order('display_order', { ascending: true }),
+    // Last 10 activity logs for the project
+    supabase
+      .from('activity_logs')
+      .select('id, type, text, created_at')
+      .eq('project_id', id)
+      .order('created_at', { ascending: false })
+      .limit(10),
   ])
+
+  if (!project) notFound()
 
   // A screen may render empty only when the database said empty. A failed
   // query leaves `data` null, and `?? []` below would turn that into a
@@ -154,32 +195,7 @@ export default async function ProjectPage({ params }: Props) {
   // scraped from the spellings on works would only reintroduce what 032
   // collapsed. `artists` above is the list.
 
-  // Most recent client token, expired or not. The expiry filter used to live in
-  // this query, which meant an expired link was indistinguishable from never
-  // having made one — the consultant had no way to know their client's link had
-  // gone dead. Filtering happens below instead, so the studio can warn.
-  const { data: tokenRow } = await supabase
-    .from('client_tokens')
-    .select('token, expires_at')
-    .eq('project_id', id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
   const clientLinkExpired = !!tokenRow && new Date(tokenRow.expires_at) <= new Date()
-
-  // Notes, with the works an artist note is narrowed to. One query: they are
-  // read on four different screens and threading four fetches through would
-  // mean four chances to forget one.
-  const notesRes = await supabase
-    .from('notes')
-    .select(`
-      id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
-      body, share, display_order, updated_at,
-      note_works(work_id)
-    `)
-    .eq('project_id', id)
-    .order('display_order', { ascending: true })
 
   const notesFailure = firstLoadFailure([['notes', notesRes]])
   if (notesFailure) {
@@ -190,14 +206,6 @@ export default async function ProjectPage({ params }: Props) {
   const notes = (noteRows ?? []).map(r => rowToNote(r as unknown as NoteRow))
 
   const artists = sortArtists((artistRowsAll ?? []).map(r => rowToArtist(r as unknown as ArtistRow)))
-
-  // Fetch last 10 activity logs for the project
-  const { data: activityLogs } = await supabase
-    .from('activity_logs')
-    .select('id, type, text, created_at')
-    .eq('project_id', id)
-    .order('created_at', { ascending: false })
-    .limit(10)
 
   return (
     <StudioScreen

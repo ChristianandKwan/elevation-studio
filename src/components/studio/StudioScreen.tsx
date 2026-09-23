@@ -26,6 +26,7 @@ import { createWriteQueue, enqueue } from '@/lib/writeQueue'
 import type { WorkPatch, IndexElevation } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import IndexScreen from '@/components/index/IndexScreen'
+import { preloadImages, clearPreloads } from '@/lib/imagePreload'
 import NotesScreen from '@/components/notes/NotesScreen'
 import {
   noteRow, notesOn, rowToNote,
@@ -323,6 +324,26 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       skewActive: activeOptData.skew_active ?? false,
     })
   }, [activeElevId, activeOption]) // eslint-disable-line
+
+  // Once the option on screen has fully arrived, fetch every other picture in
+  // the project in the background, so clicking another tab is instant: the
+  // rest of this elevation first, then the other elevations in order, then
+  // the works that hang nowhere yet (the index shows them). useStudio holds
+  // these back while an option is loading. See imagePreload.ts.
+  const loadingOption = studio.busy || studio.artworksPending
+  useEffect(() => {
+    if (loadingOption) return
+    const optionUrls = (o: (typeof elevations)[number]['elevation_options'][number]) =>
+      [o.imageUrl, ...(o.artworks ?? []).map(a => a.imageUrl)]
+    const here = elevations.find(e => e.id === activeElevId)
+    const urls = [
+      ...(here?.elevation_options ?? []).filter(o => o.option !== activeOption).flatMap(optionUrls),
+      ...elevations.filter(e => e.id !== activeElevId).flatMap(e => e.elevation_options.flatMap(optionUrls)),
+      ...works.map(w => w.imageUrl),
+    ]
+    preloadImages(urls)
+  }, [loadingOption, activeElevId, activeOption, elevations, works])
+  useEffect(() => () => clearPreloads(), [])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1892,7 +1913,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                       <span className="merge-choice-thumb">
                         {w.imageUrl
                           // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={w.imageUrl} alt="" />
+                          ? <img src={w.imageUrl} crossOrigin="anonymous" alt="" />
                           : <span className="index-thumb-empty">No image</span>}
                       </span>
                       <span className="merge-choice-text">
