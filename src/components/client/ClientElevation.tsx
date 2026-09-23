@@ -188,7 +188,7 @@ export default function ClientElevation({
               wall is picked or approved — nothing moves then on any screen. */}
           {!artworksLocked && !phoneNoteDismissed && (
             <div className="client-phone-note" role="note">
-              <span>For the best experience and to move and rearrange artworks, we would recommend reviewing this link on a computer.</span>
+              <span>For the best experience and to move and rearrange artworks, we would recommend viewing this link on a computer.</span>
               <button
                 className="client-phone-note-close"
                 onClick={() => {

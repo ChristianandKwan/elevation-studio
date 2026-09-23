@@ -272,6 +272,11 @@
   /* 16px stops iOS zooming the whole page in when the box is tapped. */
   .client-notes-textarea { font-size: 16px; height: 96px; }
   .client-approval-section { padding: 14px 16px 24px; }
+
+  /* Export PDF opens the browser's print window, which a phone too often
+     shows nothing for — inside Gmail's or WhatsApp's own browser, the
+     button did nothing at all. Clients keep it on a computer (Tom). */
+  .client-budget-wrap .budget-export-btn { display: none; }
 }
 
 /* A phone turned on its side is too wide for the phone layout above, but
