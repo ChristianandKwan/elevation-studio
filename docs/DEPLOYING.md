@@ -105,6 +105,16 @@ is one higher than the highest file in `supabase/migrations/`.
 Because preview and production share one database, **testing on a preview
 writes to real data**. Use a project you don't mind changing.
 
+### Where the server runs
+
+`vercel.json` pins the server to **`dub1` (Dublin)**, beside the Supabase
+database in **`eu-west-1` (Ireland)**. Vercel's default is Washington DC, and
+from there every database question a page asks crossed the Atlantic and back
+— the client portal took one and a half to two and a half seconds to build
+before a single picture could start. If the database ever moves, move this
+with it. To check where a deployment is running, look at the `x-vercel-id`
+response header: the middle part (`lhr1::dub1::…`) is the server's region.
+
 ---
 
 ## Storage buckets

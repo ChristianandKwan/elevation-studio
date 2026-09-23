@@ -136,6 +136,18 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     return elev.elevation_options.filter(hasWall).length > 1
   }
 
+  // The options an elevation offers as tabs. Once the client has picked, only
+  // the chosen one — the others come back if the pick is cleared. The tab bar
+  // and the background preload both read this, so the portal never downloads
+  // an option there is no way to click to.
+  function tabOptions(elev: ClientElevationData): ClientOption[] {
+    const withWalls = elev.elevation_options.filter(hasWall)
+    const picked = pickedOptions[elev.id]
+    return withWalls.length > 1 && picked
+      ? withWalls.filter(o => o.option === picked)
+      : withWalls
+  }
+
   // Resolve the active option for an elevation (respecting pick state)
   function resolveOpt(elev: ClientElevationData): string | null {
     if (pickedOptions[elev.id]) return pickedOptions[elev.id]!
@@ -168,18 +180,21 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
 
   const [rerenderKey, setRerenderKey] = useState(0)
 
-  // Every other picture in the proposal, fetched in the background so the
-  // client can flick between options without waiting: the rest of this
-  // elevation first, then the others in order. ClientCanvas holds these back
-  // while the option on screen is still arriving. See imagePreload.ts.
+  // Every other picture the client can reach, fetched in the background so
+  // they can flick between options without waiting: the rest of this
+  // elevation first, then the others in order. Only the tabs on offer — a
+  // picked elevation contributes its pick alone, because on a phone the whole
+  // proposal can run to tens of megabytes of options nobody will open.
+  // ClientCanvas holds these back while the option on screen is still
+  // arriving. See imagePreload.ts.
   useEffect(() => {
     const optionUrls = (o: ClientOption) => [o.imageUrl, ...o.artworks.map(a => a.imageUrl)]
     const here = elevations.find(e => e.id === activeElevId)
     preloadImages([
-      ...(here?.elevation_options ?? []).filter(o => o.option !== activeOpt).flatMap(optionUrls),
-      ...elevations.filter(e => e.id !== activeElevId).flatMap(e => e.elevation_options.flatMap(optionUrls)),
+      ...(here ? tabOptions(here) : []).filter(o => o.option !== activeOpt).flatMap(optionUrls),
+      ...elevations.filter(e => e.id !== activeElevId).flatMap(e => tabOptions(e).flatMap(optionUrls)),
     ])
-  }, [activeElevId, activeOpt]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeElevId, activeOpt, pickedOptions]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => clearPreloads(), [])
 
   // Mirrors for the debounced writers below, which fire from timers and would
@@ -594,14 +609,11 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         {/* Elevation tab bar */}
         <div className="client-tab-bar">
           {elevations.map((elev, i) => {
-            const optsWithImages = elev.elevation_options.filter(hasWall)
-            const multiOption = optsWithImages.length > 1
+            const multiOption = elev.elevation_options.filter(hasWall).length > 1
             const picked = pickedOptions[elev.id]
 
             // Once picked: only show the chosen option's tab
-            const visibleOpts = multiOption && picked
-              ? optsWithImages.filter(o => o.option === picked)
-              : optsWithImages
+            const visibleOpts = tabOptions(elev)
 
             return (
               <div key={elev.id} style={{ display: 'flex', alignItems: 'center' }}>
