@@ -60,6 +60,9 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
                 id="elev-img"
                 className="elev-img"
                 src={state.elev?.imageUrl ?? ''}
+                // Every studio image is fetched this way (see imagePreload.ts);
+                // the browser keeps one copy per way of asking.
+                crossOrigin="anonymous"
                 alt="elevation"
                 draggable={false}
                 ref={elevImgRef}
@@ -77,6 +80,7 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <image
                   id="fg-image"
+                  crossOrigin="anonymous"
                   x="0"
                   y="0"
                   preserveAspectRatio="none"
@@ -138,6 +142,7 @@ export default function StudioCanvas({ studio, onStatus, clientPickedOption, act
               {/* Artwork overlay layer — perspective transform applied here when skew is active */}
               <div
                 id="artwork-layer"
+                className={studio.artworksPending ? 'artworks-pending' : undefined}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }}
               />
 

@@ -429,6 +429,10 @@
 .calib-ruler { stroke: #000; stroke-width: 2; stroke-dasharray: 6 3; }
 .calib-tick { stroke: #000; stroke-width: 2; }
 .calib-cap { fill: #000; }
+/* The artworks arrive together. While any are still loading the layer is
+   hidden at once (no transition), and when the last one lands it fades in. */
+#artwork-layer { transition: opacity .35s ease; }
+#artwork-layer.artworks-pending { opacity: 0; pointer-events: none; transition: none; }
 .aw-overlay {
   position: absolute; cursor: grab; border: 1.5px solid transparent; transition: border-color .1s, box-shadow .1s;
 }
