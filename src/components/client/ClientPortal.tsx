@@ -6,6 +6,7 @@ import ClientElevation from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { DrawLoader } from '@/components/ui/Spinner'
+import { preloadImages, clearPreloads } from '@/lib/imagePreload'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import type { ProjectBudget, DiscountStatus, SubLineItem } from '@/types'
 import { optionTitleFor, optionTagClass } from '@/lib/options'
@@ -166,6 +167,20 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   })
 
   const [rerenderKey, setRerenderKey] = useState(0)
+
+  // Every other picture in the proposal, fetched in the background so the
+  // client can flick between options without waiting: the rest of this
+  // elevation first, then the others in order. ClientCanvas holds these back
+  // while the option on screen is still arriving. See imagePreload.ts.
+  useEffect(() => {
+    const optionUrls = (o: ClientOption) => [o.imageUrl, ...o.artworks.map(a => a.imageUrl)]
+    const here = elevations.find(e => e.id === activeElevId)
+    preloadImages([
+      ...(here?.elevation_options ?? []).filter(o => o.option !== activeOpt).flatMap(optionUrls),
+      ...elevations.filter(e => e.id !== activeElevId).flatMap(e => e.elevation_options.flatMap(optionUrls)),
+    ])
+  }, [activeElevId, activeOpt]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => clearPreloads(), [])
 
   // Mirrors for the debounced writers below, which fire from timers and would
   // otherwise close over a stale snapshot.

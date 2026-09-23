@@ -11,6 +11,7 @@ import { ArcSpinner } from '@/components/ui/Spinner'
 import { frameHex, mountHex, bandsPx, isWoodFrame } from '@/lib/frames'
 import { frameGrainElement } from '@/lib/frameGrain'
 import { wallImageUrl } from '@/lib/wall'
+import { setPreloadPaused } from '@/lib/imagePreload'
 
 interface ClientArtwork {
   id: string
@@ -174,7 +175,7 @@ export default function ClientElevation({
                   {optData.artworks.map(art => (
                     <div key={art.id} className="client-art-row">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {art.imageUrl && <img className="client-art-thumb" src={art.imageUrl} alt={art.name} />}
+                      {art.imageUrl && <img className="client-art-thumb" src={art.imageUrl} crossOrigin="anonymous" alt={art.name} />}
                       <div className="client-art-info">
                         <div className="client-art-name">{art.name}</div>
                         <div className="client-art-dims">{art.wCm} × {art.hCm} cm</div>
@@ -393,11 +394,16 @@ function ClientCanvas({
   const elevWrapRef = useRef<HTMLDivElement>(null)
   const elevImgRef = useRef<HTMLImageElement>(null)
   const [isLoading, setIsLoading] = useState(true)
-  // Decoded elevation images, kept across rebuilds. Every visibility toggle
-  // bumps rerenderKey and re-runs this effect; without the cache each one
-  // re-entered the loading state and flashed the spinner over an image the
-  // browser already had, which is what made the eye icon feel slow.
+  // Decoded images — walls and artworks — kept across rebuilds. Every
+  // visibility toggle bumps rerenderKey and re-runs this effect; without the
+  // cache each one re-entered the loading state and flashed the spinner over
+  // an image the browser already had, which is what made the eye icon feel
+  // slow.
   const decodedRef = useRef(new Map<string, HTMLImageElement>())
+  // The option the canvas last drew. Redrawing that same option — an artwork
+  // switched on with the eye, a re-fit — never hides the artworks: fading
+  // them all out and back in to add one would be worse than letting it land.
+  const shownOptionRef = useRef<string | null>(null)
 
   // The wall to draw: the photograph if the consultant uploaded one, or a
   // generated rectangle of the colour they chose if they entered the wall as
@@ -411,8 +417,11 @@ function ClientCanvas({
 
   useEffect(() => {
     if (!wallUrl || !canvasRef.current) return
+    let cancelled = false
 
-    const build = (img: HTMLImageElement) => {
+    // `artworksPending` hides the artwork layer until every artwork is ready,
+    // so they arrive together rather than one at a time.
+    const build = (img: HTMLImageElement, artworksPending: boolean) => {
       // Fit to the visible canvas frame (.client-canvas-area) on both dimensions
       // with 32 px padding per side. Measuring canvas-area — not canvas-inner —
       // matters because canvas-inner grows with its own content (the wrap we size
@@ -443,6 +452,7 @@ function ClientCanvas({
         else wrap.appendChild(artLayer)
       }
       artLayer.innerHTML = ''
+      artLayer.classList.toggle('artworks-pending', artworksPending)
 
       const elevImg = wrap.querySelector('.client-elev-img') as HTMLImageElement | null
       if (elevImg) {
@@ -482,6 +492,9 @@ function ClientCanvas({
         }
 
         const ai = document.createElement('img')
+        // Asked for the same way the loader below fetched it, so this is the
+        // copy already in the browser rather than a second download.
+        ai.crossOrigin = 'anonymous'
         ai.src = art.imageUrl!
         ai.draggable = false
 
@@ -717,23 +730,81 @@ function ClientCanvas({
       setIsLoading(false)
     }
 
-    // Already decoded (a visibility toggle, a re-fit, a tab switch back):
-    // rebuild the overlays straight away and never show the spinner.
-    const url = wallUrl
-    const cached = decodedRef.current.get(url)
-    if (cached?.complete && cached.naturalWidth > 0) {
-      build(cached)
+    // ── How an option arrives ── (the same as in the studio's useStudio)
+    // The wall and the artworks on it are fetched side by side. The wall goes
+    // up the moment it is ready, and the spinner with it; the artworks appear
+    // together once all of them are ready, fading in if the wall got there
+    // first. Everything already in the browser — a visibility toggle, a
+    // re-fit, a tab the background preload has reached — is drawn at once.
+    const ready = (u: string) => {
+      const c = decodedRef.current.get(u)
+      return !!c && c.complete && c.naturalWidth > 0
+    }
+    const load = (u: string) => new Promise<void>(resolve => {
+      if (ready(u)) { resolve(); return }
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => {
+        // Unpacked before it counts as ready, so it shows the moment it is
+        // revealed instead of being decoded then.
+        img.decode().catch(() => { /* drawn regardless */ }).then(() => {
+          decodedRef.current.set(u, img)
+          resolve()
+        })
+      }
+      // A broken artwork shows as it always has; it just does not hold up
+      // the others.
+      img.onerror = () => resolve()
+      img.src = u
+    })
+
+    const artUrls = [...new Set(
+      optData.artworks.filter(a => a.visible && a.imageUrl).map(a => a.imageUrl!),
+    )]
+    const wall = decodedRef.current.get(wallUrl)
+    if (wall && ready(wallUrl) && (shownOptionRef.current === optData.id || artUrls.every(ready))) {
+      build(wall, false)
+      shownOptionRef.current = optData.id
       return
     }
 
-    setIsLoading(true)
-    const img = new Image()
-    img.onerror = () => setIsLoading(false)
-    img.onload = () => {
-      decodedRef.current.set(url, img)
-      build(img)
+    // Background downloads of the other options wait for this one.
+    setPreloadPaused(true)
+    if (!ready(wallUrl)) setIsLoading(true)
+
+    let wallShown = false
+    let artsDone = false
+    const artLayer = () => elevWrapRef.current?.querySelector('#client-artwork-layer')
+
+    load(wallUrl).then(() => {
+      if (cancelled) return
+      const img = decodedRef.current.get(wallUrl)
+      if (!img) {
+        setIsLoading(false)
+        setPreloadPaused(false)
+        return
+      }
+      wallShown = true
+      build(img, !artsDone)
+      shownOptionRef.current = optData.id
+      if (artsDone) setPreloadPaused(false)
+    })
+
+    // Ten seconds is as long as any one slow artwork may hold up the rest.
+    Promise.race([
+      Promise.all(artUrls.map(load)),
+      new Promise(resolve => setTimeout(resolve, 10_000)),
+    ]).then(() => {
+      artsDone = true
+      if (cancelled || !wallShown) return
+      artLayer()?.classList.remove('artworks-pending')
+      setPreloadPaused(false)
+    })
+
+    return () => {
+      cancelled = true
+      setPreloadPaused(false)
     }
-    img.src = url
   }, [optData.id, wallUrl, locked, rerenderKey, refitKey]) // eslint-disable-line
 
   return (
@@ -750,6 +821,9 @@ function ClientCanvas({
           width={optData.orig_w || 1600}
           height={optData.orig_h || 900}
           unoptimized
+          // Every portal image is fetched this way (see imagePreload.ts); the
+          // browser keeps one copy per way of asking.
+          crossOrigin="anonymous"
           draggable={false}
           ref={elevImgRef}
         />
@@ -760,7 +834,7 @@ function ClientCanvas({
         <svg id="client-fg-svg" className="fg-svg" style={{ display: 'none' }}>
           <defs><clipPath id="client-fg-clip" /></defs>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <image id="client-fg-image" x="0" y="0" preserveAspectRatio="none" clipPath="url(#client-fg-clip)" style={{ pointerEvents: 'none' }} />
+          <image id="client-fg-image" crossOrigin="anonymous" x="0" y="0" preserveAspectRatio="none" clipPath="url(#client-fg-clip)" style={{ pointerEvents: 'none' }} />
         </svg>
       </div>
       {isLoading && <ArcSpinner imageRef={elevImgRef} />}

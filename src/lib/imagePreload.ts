@@ -1,15 +1,16 @@
 /**
- * Quietly fetching the pictures the consultant is about to look at.
+ * Quietly fetching the pictures someone is about to look at.
  *
  * The point of options is flicking between them to compare, and a spinner on
- * every click gets in the way of that. So once the option on screen has
- * finished loading, the studio hands this module every other image in the
- * project — the rest of this elevation first — and it downloads them a few at
- * a time in the background. By the time a tab is clicked its images are
- * already in the browser, and the switch is as quick as drawing them.
+ * every click gets in the way of that. So the studio and the client portal
+ * each hand this module every other image in the project — the rest of this
+ * elevation first — and once the option on screen has finished loading it
+ * downloads them a few at a time in the background. By the time a tab is
+ * clicked its images are already in the browser, and the switch is as quick
+ * as drawing them.
  *
  * Every image is requested with `crossOrigin = 'anonymous'`, the same way the
- * canvas and its tiles ask for them. The browser keeps a separate copy for
+ * canvases and their tiles ask for them. The browser keeps a separate copy for
  * each way of asking, so a request made any other way would be a second
  * download of the same file rather than a hit on this one.
  *
