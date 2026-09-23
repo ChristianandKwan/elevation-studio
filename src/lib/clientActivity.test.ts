@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildDigest, type DigestAction, type DigestElevation, type DigestProject } from './clientActivity.ts'
 
-const project: DigestProject = { name: 'Nepean', clientName: 'Mr & Mrs Hamilton', status: 'sent' }
+const project: DigestProject = { name: 'Nepean', status: 'sent' }
 const url = 'https://studio.example/projects/p1'
 
 function living(over: Partial<DigestElevation> = {}): DigestElevation {
@@ -34,7 +34,7 @@ describe('buildDigest', () => {
       act('approve', 'o2', '2026-09-23T13:09:00Z'),
     ], url)!
     assert.equal(d.subject, 'Nepean: 1 choice, 1 approval and 1 note from the client')
-    assert.match(d.text, /Mr & Mrs Hamilton was in the Nepean proposal between 14:02 and 14:09\./)
+    assert.match(d.text, /^The client was active in the Nepean proposal between 14:02 and 14:09\./)
     assert.match(d.text, /Chose Option B/)
     assert.match(d.text, /Approved Option B/)
     assert.match(d.text, /Left a note on Option B/)
@@ -107,9 +107,9 @@ describe('buildDigest', () => {
     assert.match(d.text, /proposal at 14:02\./)
   })
 
-  test('an unnamed client is "the client", not "Unnamed client"', () => {
-    const d = buildDigest({ ...project, clientName: 'Unnamed client' }, [living()], [act('pick', null)], url)!
-    assert.match(d.text, /^The client was in/)
+  test('the opening says "the client", which is singular however many people they are', () => {
+    const d = buildDigest(project, [living()], [act('pick', null)], url)!
+    assert.match(d.text.split('\n')[0], /^The client was active in the Nepean proposal/)
   })
 
   test('nothing to say about walls that are gone: no email', () => {

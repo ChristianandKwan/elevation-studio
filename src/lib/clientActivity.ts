@@ -41,7 +41,6 @@ export interface DigestElevation {
 
 export interface DigestProject {
   name: string
-  clientName: string
   /** 'approved' once every elevation the client can see is approved. */
   status: string
 }
@@ -128,13 +127,15 @@ export function buildDigest(
     distinct('note', a => a.optionId) && count(distinct('note', a => a.optionId), 'note', 'notes'),
   ].filter((p): p is string => !!p))
 
-  const who = project.clientName && project.clientName !== 'Unnamed client'
-    ? project.clientName : 'The client'
   const times = actions.map(a => Date.parse(a.createdAt)).filter(t => !Number.isNaN(t))
   const first = TIME.format(Math.min(...times))
   const last = TIME.format(Math.max(...times))
   const when = first === last ? `at ${first}` : `between ${first} and ${last}`
-  const intro = `${who} was in the ${project.name} proposal ${when}.`
+  // "The client", not their name: a name cannot say whether it takes "was"
+  // (Mr & Mrs Hamilton, Acme Ltd), and "From Mr & Mrs Hamilton" reads as if
+  // they sent the email. "Active", not "viewed": the times are when they did
+  // something, not how long they had the proposal open.
+  const intro = `The client was active in the ${project.name} proposal ${when}.`
   const allApproved = project.status === 'approved' && actions.some(a => a.kind === 'approve')
   const finale = 'Every elevation is now approved.'
 

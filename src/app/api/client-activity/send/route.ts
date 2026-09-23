@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     }
     try {
       const [projectRes, elevRes] = await Promise.all([
-        svc.from('projects').select('name, client_name, status').eq('id', projectId).maybeSingle(),
+        svc.from('projects').select('name, status').eq('id', projectId).maybeSingle(),
         svc.from('elevations')
           .select('id, name, display_order, client_picked_option, elevation_options(id, option, name, sort_order, created_at, image_path, wall_color, approved, client_notes)')
           .eq('project_id', projectId)
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       })
 
       const digest = buildDigest(
-        { name: projectRes.data.name, clientName: projectRes.data.client_name ?? '', status: projectRes.data.status },
+        { name: projectRes.data.name, status: projectRes.data.status },
         elevations,
         actions.map(a => ({ kind: a.kind, elevationId: a.elevation_id, optionId: a.option_id, createdAt: a.created_at })),
         `${origin}/projects/${projectId}`,

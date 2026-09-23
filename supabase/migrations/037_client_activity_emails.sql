@@ -125,6 +125,8 @@ $$;
 
 revoke all on function public.claim_due_client_activity(interval) from public, anon, authenticated;
 revoke all on function public.release_client_activity(uuid[]) from public, anon, authenticated;
+grant execute on function public.claim_due_client_activity(interval) to service_role;
+grant execute on function public.release_client_activity(uuid[]) to service_role;
 
 -- ── 4. The clock ──────────────────────────────────────────
 --
