@@ -10,6 +10,7 @@ import { readOptionNoteFields } from '@/lib/lineItems'
 import { PLACEMENT_WITH_WORK_SELECT, WORK_COLUMNS } from '@/lib/works'
 import { placementsToArtworks, rowToWork } from '@/lib/workRows'
 import { rowToNote, type NoteRow } from '@/lib/notes'
+import { MESSAGE_COLUMNS, rowToMessage, type OptionMessageRow } from '@/lib/messages'
 import { rowToArtist, sortArtists, type ArtistRow } from '@/lib/artists'
 import { blankWallDataUrl } from '@/lib/wall'
 
@@ -35,6 +36,7 @@ export default async function ProjectPage({ params }: Props) {
     { data: tokenRow },
     notesRes,
     { data: activityLogs },
+    messagesRes,
   ] = await Promise.all([
     supabase
       .from('projects')
@@ -56,7 +58,7 @@ export default async function ProjectPage({ params }: Props) {
       .select(`
         id, name, display_order, client_picked_option, visible_to_client,
         elevation_options(
-          id, option, sort_order, created_at, name, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+          id, option, sort_order, created_at, name, image_path, thumbnail_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, consultant_note, consultant_note_shown_to_client,
           skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
           artworks(${PLACEMENT_WITH_WORK_SELECT})
         )
@@ -104,6 +106,12 @@ export default async function ProjectPage({ params }: Props) {
       .eq('project_id', id)
       .order('created_at', { ascending: false })
       .limit(10),
+    // The conversation on every option (038), oldest first.
+    supabase
+      .from('option_messages')
+      .select(MESSAGE_COLUMNS)
+      .eq('project_id', id)
+      .order('created_at', { ascending: true }),
   ])
 
   if (!project) notFound()
@@ -164,7 +172,6 @@ export default async function ProjectPage({ params }: Props) {
       orig_w: number; orig_h: number; scale_px_per_cm: number | null;
       wall_w_cm: number | null; wall_h_cm: number | null; wall_color: string | null;
       approved: boolean; approved_at: string | null;
-      client_notes?: string | null;
       skew_tl_x?: number | null; skew_tl_y?: number | null;
       skew_tr_x?: number | null; skew_tr_y?: number | null;
       skew_br_x?: number | null; skew_br_y?: number | null;
@@ -183,7 +190,7 @@ export default async function ProjectPage({ params }: Props) {
           ? blankWallDataUrl(opt.orig_w || 1600, opt.orig_h || 900, opt.wall_color)
           : null
       const artworks = placementsToArtworks(opt.artworks, artUrlFor)
-      return { ...opt, imageUrl, thumbnailUrl, imagePath: opt.image_path, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
+      return { ...opt, imageUrl, thumbnailUrl, imagePath: opt.image_path, artworks, ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
     })
     // Display order is decided in exactly one place — see src/lib/options.ts.
     return { ...elev, elevation_options: sortOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null, visibleToClient: (elev as any).visible_to_client ?? true }
@@ -197,13 +204,14 @@ export default async function ProjectPage({ params }: Props) {
 
   const clientLinkExpired = !!tokenRow && new Date(tokenRow.expires_at) <= new Date()
 
-  const notesFailure = firstLoadFailure([['notes', notesRes]])
+  const notesFailure = firstLoadFailure([['notes', notesRes], ['messages', messagesRes]])
   if (notesFailure) {
     return <LoadFailed {...notesFailure} schemaDrift={looksLikeSchemaDrift(notesFailure)} />
   }
   const noteRows = notesRes.data
 
   const notes = (noteRows ?? []).map(r => rowToNote(r as unknown as NoteRow))
+  const messages = (messagesRes.data ?? []).map(r => rowToMessage(r as OptionMessageRow))
 
   const artists = sortArtists((artistRowsAll ?? []).map(r => rowToArtist(r as unknown as ArtistRow)))
 
@@ -217,6 +225,7 @@ export default async function ProjectPage({ params }: Props) {
       activityLogs={(activityLogs ?? []).map(a => ({ id: a.id, type: a.type, text: a.text, createdAt: a.created_at }))}
       initialNotes={notes}
       initialArtists={artists}
+      initialMessages={messages}
     />
   )
 }

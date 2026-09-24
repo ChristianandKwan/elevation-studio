@@ -176,8 +176,9 @@ export interface ElevationOption {
   approved: boolean
   approvedAt: string | null
   /**
-   * The consultant writing to the client. Distinct from `clientNotes`, which
-   * runs the other way. This is where pair and set pricing gets explained,
+   * The consultant's budget note to the client. Distinct from the option's
+   * conversation (src/lib/messages.ts), which runs both ways, and from its
+   * notes (src/lib/notes.ts). This is where pair and set pricing gets explained,
    * since a rate agreed for two works belongs to the combination, not to
    * either work on its own.
    */

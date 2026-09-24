@@ -8,7 +8,7 @@
  * reads Supabase, renders walls with sharp and writes the zip — and it does
  * no thinking about what the document says.
  *
- * Everything here is already filtered. Private notes are gone (that is
+ * Everything here is already filtered. Empty notes are gone (that is
  * `notesForExport`, and it stays the one place that filter lives), set-aside
  * works are in or out according to the consultant's choice, and elevations
  * the consultant unticked are simply absent. Nothing downstream re-decides.
@@ -68,12 +68,36 @@ export const DEFAULT_CHOICES: Omit<ExportChoices, 'optionIds'> = {
   includeThumbnails: false,
 }
 
-/** A note, already filtered to the ones that may leave the studio. */
+/**
+ * A note, already filtered to the ones with something in them. Every note
+ * goes into the pack, Client and C&K alike (038).
+ */
 export interface ExportNote {
   id: string
   body: string
   /** Named when the note covers several works, so the reader knows the scope. */
   covers?: string
+}
+
+/**
+ * The note from the Budget screen on a work or an option: pricing,
+ * discounts, shipping. Kept apart from the notes above because it is a
+ * different kind of thing, written in a different place.
+ *
+ * One the client was not shown still comes into the pack (Tom), flagged for
+ * Christian & Kwan to decide whether it belongs in the proposal.
+ */
+export interface ExportBudgetNote {
+  body: string
+  shownToClient: boolean
+}
+
+/** One message in an option's conversation (038). */
+export interface ExportMessage {
+  from: 'client' | 'studio'
+  body: string
+  /** "19 September 2026". */
+  sentOn: string
 }
 
 export interface ExportWork {
@@ -98,6 +122,7 @@ export interface ExportWork {
   /** Path inside the zip, when the work's image was included. */
   imageFile: string | null
   notes: ExportNote[]
+  budgetNote: ExportBudgetNote | null
 }
 
 export interface ExportOption {
@@ -112,6 +137,9 @@ export interface ExportOption {
   /** Works on this wall, in the order they were placed. */
   workIds: string[]
   notes: ExportNote[]
+  budgetNote: ExportBudgetNote | null
+  /** The conversation with the client on this option, oldest first. */
+  conversation: ExportMessage[]
 }
 
 export interface ExportElevation {

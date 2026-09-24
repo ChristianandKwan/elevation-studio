@@ -1,0 +1,60 @@
+/* ══════════════════════════════════════════════════════════
+   CONVERSATION — the messages on an option
+   One component in the portal's sidebar and the studio's. The
+   two sides differ only in who "You" is, so the look is shared;
+   C&K's messages carry the accent tint on both, so the practice
+   reads as the same voice whoever is looking.
+══════════════════════════════════════════════════════════ */
+
+.convo-empty { margin: 0 0 12px; font-size: 12px; line-height: 1.5; color: var(--mid); }
+
+.convo-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.convo-msg {
+  padding: 9px 11px; border-radius: var(--radius);
+  background: white; border: 1px solid var(--border);
+}
+.convo-msg.from-studio { background: var(--accent-light); border-color: rgba(139, 111, 71, 0.22); }
+.convo-msg.is-new { border-color: var(--accent); }
+
+.convo-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+.convo-who { font-size: 10.5px; font-weight: 700; color: var(--charcoal); display: inline-flex; align-items: center; gap: 6px; }
+.convo-msg.from-studio .convo-who { color: #6B5535; }
+.convo-new {
+  font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: white; background: var(--accent); padding: 1px 5px; border-radius: var(--radius-xs);
+}
+.convo-when { font-size: 10.5px; color: var(--mid); flex-shrink: 0; }
+.convo-body { font-size: 12px; line-height: 1.5; color: var(--charcoal); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.convo-input {
+  width: 100%; height: 64px; box-sizing: border-box; resize: vertical;
+  padding: 8px 10px; font-family: var(--font-karla, 'Karla'), sans-serif; font-size: 12px; line-height: 1.5;
+  color: var(--charcoal); background: var(--cream);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none;
+}
+.convo-input:focus { border-color: var(--charcoal); }
+
+.convo-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.convo-hint { font-size: 10.5px; line-height: 1.4; color: var(--mid); }
+.convo-send { flex-shrink: 0; }
+
+/* ── The note from C&K above it, in the portal ─────────── */
+.client-ck-note {
+  padding: 12px 14px; background: var(--cream);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.client-ck-note p {
+  margin: 0; font-family: var(--font-cormorant, 'Cormorant Garamond'), serif;
+  font-size: 14.5px; line-height: 1.45; color: var(--charcoal); white-space: pre-wrap;
+}
+.client-ck-note p + p { margin-top: 8px; }
+
+/* Phones: 16px stops iOS zooming the page when the box is tapped, and the
+   button is a thumb's width. Matches the portal's own breakpoint. */
+@media (max-width: 640px) {
+  .convo-body { font-size: 14px; }
+  .convo-input { font-size: 16px; height: 96px; }
+  .convo-send { min-height: 44px; padding: 0 20px; font-size: 13px; }
+  .client-ck-note p { font-size: 16px; }
+}

@@ -30,6 +30,7 @@ import sharp from 'sharp'
 
 import { buildThumbnailBuffer, EXPORT_WALL_W, type ArtworkEntry } from '@/lib/thumbnail'
 import { notesForExport, notesMentioning, notesOn, rowToNote, workSetLabel, type Note, type NoteRow } from '@/lib/notes'
+import { MESSAGE_COLUMNS, messagesByOption, rowToMessage, type OptionMessage, type OptionMessageRow } from '@/lib/messages'
 import { sortOptions, optionTitleFor } from '@/lib/options'
 import {
   netPrice, subItemAmount, installCostDisplay, consultantFeeRange,
@@ -43,7 +44,7 @@ import { buildMarkdown, fileSlug } from './markdown'
 import { decodeCapturedImage } from './capturedImage'
 import { EXPORTS_BUCKET, exportObjectPath } from './bucket'
 import type {
-  ExportBudgetLine, ExportChoices, ExportElevation, ExportNote,
+  ExportBudgetLine, ExportBudgetNote, ExportChoices, ExportElevation, ExportMessage, ExportNote,
   ExportSnapshot, ExportWork,
 } from './types'
 
@@ -130,6 +131,8 @@ interface OptionRow {
   wall_h_cm: number | null
   wall_color: string | null
   foreground_masks: unknown
+  consultant_note: string | null
+  consultant_note_shown_to_client: boolean | null
   artworks: PlacementRow[]
 }
 
@@ -161,6 +164,8 @@ interface WorkRow {
   set_aside: unknown
   considered_for: string | null
   display_order: number | null
+  note: string | null
+  note_shown_to_client: boolean | null
 }
 
 interface BudgetRow {
@@ -172,6 +177,7 @@ interface BudgetRow {
 const OPTION_SELECT = `
   id, option, sort_order, created_at, name, image_path, thumbnail_path,
   orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, foreground_masks,
+  consultant_note, consultant_note_shown_to_client,
   artworks(
     id, work_id, x_fraction, y_fraction, visible, display_order,
     brightness, fade, frame_type, frame_width_mm,
@@ -182,7 +188,7 @@ const OPTION_SELECT = `
 
 /** Everything the pack needs, in as few round trips as the shapes allow. */
 async function readProject(supabase: SupabaseClient, projectId: string) {
-  const [project, elevations, works, notes, artists, budget] = await Promise.all([
+  const [project, elevations, works, notes, artists, budget, messages] = await Promise.all([
     supabase.from('projects')
       .select('id, name, client_name, budget, consultant_id')
       .eq('id', projectId).maybeSingle(),
@@ -191,7 +197,7 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
       .eq('project_id', projectId)
       .order('display_order', { ascending: true }),
     supabase.from('works')
-      .select('id, artist, artist_id, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, year, medium, edition, source, set_aside, considered_for, display_order')
+      .select('id, artist, artist_id, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, year, medium, edition, source, set_aside, considered_for, display_order, note, note_shown_to_client')
       .eq('project_id', projectId)
       .order('display_order', { ascending: true }),
     supabase.from('notes')
@@ -202,6 +208,10 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
     supabase.from('project_budgets')
       .select('installation, consultant_fee, custom_line_items')
       .eq('project_id', projectId).maybeSingle(),
+    supabase.from('option_messages')
+      .select(MESSAGE_COLUMNS)
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true }),
   ])
 
   return {
@@ -211,6 +221,7 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
     notes: ((notes.data ?? []) as unknown as NoteRow[]).map(rowToNote),
     artists: (artists.data ?? []) as Array<{ id: string; name: string; note: string | null }>,
     budget: budget.data as BudgetRow | null,
+    messages: ((messages.data ?? []) as OptionMessageRow[]).map(rowToMessage),
   }
 }
 
@@ -219,9 +230,8 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
 /**
  * Notes for one anchor, already filtered.
  *
- * `notesForExport` is applied once, here, to the whole set — the filter that
- * drops private and empty notes lives in exactly one place and this is the
- * only call site in the pack.
+ * `notesForExport` is applied once, to the whole set — the filter that drops
+ * empty notes lives in exactly one place, and this reads its result.
  */
 function notesFor(
   visible: Note[],
@@ -235,6 +245,20 @@ function notesFor(
 function toExportNote(n: Note, nameOf: (id: string) => string | undefined): ExportNote {
   const covers = n.workIds.length > 1 ? workSetLabel(n.workIds, nameOf) : undefined
   return { id: n.id, body: n.body, ...(covers ? { covers } : {}) }
+}
+
+/** A Budget-screen note, or null when nothing was written. */
+function budgetNote(body: string | null, shownToClient: boolean | null): ExportBudgetNote | null {
+  const text = body?.trim()
+  return text ? { body: text, shownToClient: shownToClient !== false } : null
+}
+
+const SENT_ON = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London',
+})
+
+function toExportMessage(m: OptionMessage): ExportMessage {
+  return { from: m.author, body: m.body, sentOn: SENT_ON.format(new Date(m.createdAt)) }
 }
 
 // ── Images ─────────────────────────────────────────────────────────────────
@@ -588,14 +612,15 @@ export async function assemblePack(
    */
   budgetImage?: unknown,
 ): Promise<AssembledPack | null> {
-  const { project, elevations, works, notes, artists, budget } = await readProject(supabase, projectId)
+  const { project, elevations, works, notes, artists, budget, messages } = await readProject(supabase, projectId)
   if (!project) return null
 
   const workById = new Map(works.map(w => [w.id, w]))
   const nameOf = (id: string) => workById.get(id)?.name ?? undefined
 
-  // The one filter for what may leave the studio, applied once.
+  // The one filter for what goes into the pack, applied once.
   const visible = notesForExport(notes)
+  const conversations = messagesByOption(messages)
 
   // Which option was picked for each elevation. An elevation the consultant
   // unticked contributes nothing — not an empty section, no mention at all.
@@ -749,6 +774,7 @@ export async function assemblePack(
     imageFile: workImagePaths.get(w.id) ?? null,
     // Both a note written about this work and one covering a set it belongs to.
     notes: notesMentioning(visible, w.id).map(n => toExportNote(n, nameOf)),
+    budgetNote: budgetNote(w.note, w.note_shown_to_client),
   }))
 
   const exportElevations: ExportElevation[] = chosen.map(({ elev, opts, options }) => ({
@@ -775,6 +801,8 @@ export async function assemblePack(
         thumbnailFile: thumbPaths.get(opt.id) ?? null,
         workIds: placed.map(pl => pl.work_id),
         notes: notesFor(visible, 'option', opt.id, nameOf),
+        budgetNote: budgetNote(opt.consultant_note, opt.consultant_note_shown_to_client),
+        conversation: (conversations[opt.id] ?? []).map(toExportMessage),
       }
     }),
   }))
