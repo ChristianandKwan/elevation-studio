@@ -5,7 +5,7 @@ import WorkRow from './WorkRow'
 import { groupWorksByArtist, placementsOf } from '@/lib/works'
 import type { IndexElevation, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
-import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
+import NotePanel, { type NoteChangeHandler } from '@/components/notes/NotePanel'
 import ArtistStandingNote from '@/components/notes/ArtistStandingNote'
 import { ANCHOR_META, notesMentioning, notesOwnedBy, type Note, type NoteAnchor } from '@/lib/notes'
 import ArtistNameEditor from './ArtistNameEditor'
@@ -23,7 +23,7 @@ interface Props {
   /** Rename an artist everywhere at once. */
   onRenameArtist: (artistId: string, name: string) => void
   /** The standing note about an artist, carried into every project. */
-  onArtistNoteChange: (artistId: string, note: string) => void
+  onArtistNoteChange: (artistId: string, note: string) => void | Promise<unknown>
   onWorkChange: (workId: string, patch: WorkPatch) => void
   onAddWork: () => void
   onDeleteWork: (workId: string) => void
@@ -38,7 +38,7 @@ interface Props {
    * can be seen side by side.
    */
   onMergeWorks: (workIds: string[]) => void
-  onChangeNote: (noteId: string, patch: NotePatch) => void
+  onChangeNote: NoteChangeHandler
   onDeleteNote: (noteId: string) => void
 }
 
@@ -147,14 +147,14 @@ function ArtistGroupSection({
   notes: Note[]
   nameOf: (id: string) => string | undefined
   onRenameArtist: (artistId: string, name: string) => void
-  onArtistNoteChange: (artistId: string, note: string) => void
+  onArtistNoteChange: (artistId: string, note: string) => void | Promise<unknown>
   onSetWorkArtist: (workId: string, name: string) => void
   onWorkChange: (workId: string, patch: WorkPatch) => void
   onDeleteWork: (workId: string) => void
   onAddNote: (anchor: NoteAnchor, id: string | null) => void
   onAddWorkSetNote: (artistId: string, workIds: string[]) => void
   onMergeWorks: (workIds: string[]) => void
-  onChangeNote: (noteId: string, patch: NotePatch) => void
+  onChangeNote: NoteChangeHandler
   onDeleteNote: (noteId: string) => void
 }) {
   const artistKeyValue = artist?.id ?? ''
@@ -347,7 +347,7 @@ function WorkNotes({
   workId: string
   nameOf: (id: string) => string | undefined
   onAdd: () => void
-  onChange: (noteId: string, patch: NotePatch) => void
+  onChange: NoteChangeHandler
   onDelete: (noteId: string) => void
 }) {
   // No open/closed state. A panel with no notes in it is already just a

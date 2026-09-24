@@ -6,7 +6,7 @@ import type { ActivityLog, Artwork } from '@/types'
 import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail, MIN_ELEVATION_LONG_EDGE } from '@/lib/utils'
 import { wallSizeLabel } from '@/lib/wall'
 import BlankWallModal from './BlankWallModal'
-import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
+import NotePanel, { type NoteChangeHandler } from '@/components/notes/NotePanel'
 import Conversation from '@/components/conversation/Conversation'
 import type { OptionMessage } from '@/lib/messages'
 import type { Note } from '@/lib/notes'
@@ -41,7 +41,7 @@ interface Props {
   /** Notes on this option only — the full record lives on the Notes screen. */
   optionNotes?: Note[]
   onAddNote?: () => void
-  onChangeNote?: (noteId: string, patch: NotePatch) => void
+  onChangeNote?: NoteChangeHandler
   onDeleteNote?: (noteId: string) => void
 }
 

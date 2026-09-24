@@ -1,6 +1,6 @@
 'use client'
 
-import NotePanel, { type NotePatch } from './NotePanel'
+import NotePanel, { type NoteChangeHandler } from './NotePanel'
 import { ANCHOR_META, notesForPortal, notesOn, notesOwnedBy, writtenCount, type Note, type NoteAnchor } from '@/lib/notes'
 import { labelOptions } from '@/lib/options'
 
@@ -22,7 +22,7 @@ interface Props {
   notes: Note[]
   elevations: NotesElevation[]
   onAdd: (anchor: NoteAnchor, id: string | null) => void
-  onChange: (noteId: string, patch: NotePatch) => void
+  onChange: NoteChangeHandler
   onDelete: (noteId: string) => void
 }
 
@@ -147,7 +147,7 @@ function Section({
   suffix?: string
   notes: Note[]
   onAdd: () => void
-  onChange: (noteId: string, patch: NotePatch) => void
+  onChange: NoteChangeHandler
   onDelete: (noteId: string) => void
 }) {
   return (
