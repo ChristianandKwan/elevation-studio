@@ -2,8 +2,9 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ANCHOR_META, ARTIST_STANDING_PROMPT, NOTE_ANCHORS,
-  noteRow, notesForExport, notesMentioning, notesOn, notesOwnedBy,
-  rowToNote, workSetLabel, writtenCount,
+  DEFAULT_SHARE, noteRow, notesForExport, notesForPortal, notesMentioning,
+  notesOn, notesOwnedBy, parseShare, rowToNote, showsInPortal, workSetLabel,
+  writtenCount,
   type Note, type NoteRow,
 } from './notes.ts'
 
@@ -11,7 +12,7 @@ function note(over: Partial<Note> = {}): Note {
   return {
     id: 'n1', projectId: 'p1', anchor: 'project',
     elevationId: null, optionId: null, workId: null, artistId: null,
-    body: 'because', share: 'proposal',
+    body: 'because', share: 'client',
     workIds: [], displayOrder: 0, updatedAt: null,
     ...over,
   }
@@ -34,7 +35,7 @@ describe('the anchors', () => {
     const row = noteRow({
       projectId: 'p1', anchor: 'budget',
       elevationId: 'e1', optionId: 'o1', workId: 'w1', artistId: 'artist-9',
-      body: 'ceiling is 40k', share: 'proposal', displayOrder: 0,
+      body: 'ceiling is 40k', share: 'client', displayOrder: 0,
     })
     assert.equal(row.anchor_type, 'budget')
     assert.equal(row.elevation_id, null)
@@ -63,7 +64,7 @@ describe('artists are anchored by id, not by name', () => {
     const row = noteRow({
       projectId: 'p1', anchor: 'artist',
       elevationId: null, optionId: null, workId: null, artistId: 'artist-1',
-      body: 'Represented by X', share: 'proposal', displayOrder: 0,
+      body: 'Represented by X', share: 'client', displayOrder: 0,
     })
     assert.equal(row.artist_id, 'artist-1')
     assert.ok(!('artist_key' in row), 'artist_key was dropped in 032')
@@ -82,13 +83,13 @@ describe('rows in and out', () => {
     const row: NoteRow = {
       id: 'n9', project_id: 'p1', anchor_type: 'artist',
       elevation_id: null, option_id: null, work_id: null, artist_id: 'artist-1',
-      body: 'Represented by X', share: 'private',
+      body: 'Represented by X', share: 'studio',
       display_order: 2, updated_at: '2026-09-20T10:00:00Z',
       note_works: [{ work_id: 'w1' }, { work_id: 'w2' }],
     }
     const n = rowToNote(row)
     assert.equal(n.anchor, 'artist')
-    assert.equal(n.share, 'private')
+    assert.equal(n.share, 'studio')
     assert.deepEqual(n.workIds, ['w1', 'w2'])
   })
 
@@ -100,14 +101,15 @@ describe('rows in and out', () => {
     })
     assert.equal(n.body, 'still text')
     assert.equal(n.anchor, 'project')
-    assert.equal(n.share, 'proposal')
+    // Unknown reads as the default, which is what a new note would be.
+    assert.equal(n.share, DEFAULT_SHARE)
   })
 
   test('writing a note clears the anchors it is not', () => {
     const row = noteRow({
       projectId: 'p1', anchor: 'option',
       elevationId: 'e1', optionId: 'o1', workId: 'w1', artistId: 'artist-9',
-      body: 'paired', share: 'proposal', displayOrder: 0,
+      body: 'paired', share: 'client', displayOrder: 0,
     })
     assert.equal(row.option_id, 'o1')
     assert.equal(row.elevation_id, null)
@@ -119,7 +121,7 @@ describe('rows in and out', () => {
     const row = noteRow({
       projectId: 'p1', anchor: 'project',
       elevationId: null, optionId: null, workId: null, artistId: null,
-      body: 'x', share: 'proposal', displayOrder: 0,
+      body: 'x', share: 'client', displayOrder: 0,
     })
     assert.ok(!('role' in row), 'role was dropped in 031 and must not be written')
   })
@@ -210,18 +212,52 @@ describe('naming what a set covers', () => {
   })
 })
 
+describe('who sees a note', () => {
+  test('the values from before 038 read as their replacements', () => {
+    // Code from before the deploy may still write these for a while.
+    assert.equal(parseShare('proposal'), 'client')
+    assert.equal(parseShare('private'), 'studio')
+    assert.equal(parseShare('client'), 'client')
+    assert.equal(parseShare('studio'), 'studio')
+  })
+
+  test('new notes are for the client', () => {
+    assert.equal(DEFAULT_SHARE, 'client')
+  })
+
+  test('only an option note has a place in the portal, for now', () => {
+    assert.equal(showsInPortal('option'), true)
+    for (const a of ['project', 'budget', 'elevation', 'work', 'artist'] as const) {
+      assert.equal(showsInPortal(a), false, `${a} would offer a switch that does nothing`)
+    }
+  })
+})
+
 describe('what the export may see', () => {
-  test('private notes never leave', () => {
+  test('C&K notes go into the pack as well as client ones', () => {
     const notes = [
-      note({ id: 'ok', share: 'proposal', body: 'for the client' }),
-      note({ id: 'no', share: 'private', body: 'the gallery owes us one' }),
+      note({ id: 'client', share: 'client', body: 'for the client' }),
+      note({ id: 'ck', share: 'studio', body: 'why we steered them off the bronze' }),
     ]
-    assert.deepEqual(notesForExport(notes).map(n => n.id), ['ok'])
+    assert.deepEqual(notesForExport(notes).map(n => n.id), ['client', 'ck'])
   })
 
   test('a note opened and never written in does not become a blank heading', () => {
     const notes = [note({ id: 'empty', body: '   ' }), note({ id: 'real', body: 'text' })]
     assert.deepEqual(notesForExport(notes).map(n => n.id), ['real'])
+  })
+})
+
+describe('what the portal may show', () => {
+  test('a client note on an option, with something in it', () => {
+    const notes = [
+      note({ id: 'shown', anchor: 'option', optionId: 'o1', share: 'client' }),
+      note({ id: 'ck', anchor: 'option', optionId: 'o1', share: 'studio' }),
+      note({ id: 'blank', anchor: 'option', optionId: 'o1', share: 'client', body: ' ' }),
+      // Client, but the portal has nowhere to put a project note yet.
+      note({ id: 'project', anchor: 'project', share: 'client' }),
+    ]
+    assert.deepEqual(notesForPortal(notes).map(n => n.id), ['shown'])
   })
 })
 
@@ -247,7 +283,7 @@ describe('every note has a way out', () => {
   const note = (over: Partial<Note>): Note => ({
     id: 'n1', projectId: 'p1', anchor: 'artist',
     elevationId: null, optionId: null, workId: null, artistId: 'a1',
-    body: 'text', share: 'proposal', workIds: [], displayOrder: 0,
+    body: 'text', share: 'client', workIds: [], displayOrder: 0,
     updatedAt: null, ...over,
   })
 

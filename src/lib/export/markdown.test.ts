@@ -14,7 +14,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildMarkdown, fileSlug, money } from './markdown.ts'
+import { UNSHOWN_BUDGET_NOTE, buildMarkdown, fileSlug, money } from './markdown.ts'
 import type {
   ExportChoices, ExportElevation, ExportSnapshot, ExportWork,
 } from './types.ts'
@@ -36,6 +36,7 @@ function work(over: Partial<ExportWork> = {}): ExportWork {
     subLineItems: [], year: '2018', medium: 'Screenprint', edition: '12/50',
     source: 'Cristea Roberts', setAside: null, consideredFor: null,
     hangsOn: ['Living Room'], imageFile: 'images/works/street-1.jpg', notes: [],
+    budgetNote: null,
     ...over,
   }
 }
@@ -44,7 +45,7 @@ function option(over: Partial<ExportElevation['options'][number]> = {}) {
   return {
     id: 'opt1', title: 'Option A', picked: true,
     renderFile: 'images/elevations/living-room-option-a.jpg', thumbnailFile: null,
-    workIds: ['w1'], notes: [],
+    workIds: ['w1'], notes: [], budgetNote: null, conversation: [],
     ...over,
   }
 }
@@ -436,5 +437,40 @@ describe('money', () => {
     assert.equal(money(4500), '£4,500')
     assert.equal(money(1234567), '£1,234,567')
     assert.equal(money(0), '£0')
+  })
+})
+
+describe('budget notes and conversations (038)', () => {
+  test('a budget note the client saw is labelled plainly', () => {
+    const md = buildMarkdown(snapshot({
+      works: [work({ budgetNote: { body: 'Pair rate agreed with the gallery.', shownToClient: true } })],
+    }))
+    assert.match(md, /\*\*Budget note\*\* Pair rate agreed with the gallery\./)
+    assert.ok(!md.includes(UNSHOWN_BUDGET_NOTE), 'nothing to flag, so no flag anywhere')
+  })
+
+  test('one the client did not see comes in, flagged where it stands and at the top', () => {
+    const md = buildMarkdown(snapshot({
+      elevations: [elevation({ options: [option({
+        budgetNote: { body: 'Gallery gives us 20%; we pass on 10%.', shownToClient: false },
+      })] })],
+    }))
+    assert.ok(md.includes(`**Budget note (${UNSHOWN_BUDGET_NOTE})** Gallery gives us 20%; we pass on 10%.`))
+    // Said once near the top as well, before anyone reaches the note.
+    assert.ok(md.indexOf(UNSHOWN_BUDGET_NOTE) < md.indexOf('## The project'))
+  })
+
+  test('the conversation on an option is listed in order, with who and when', () => {
+    const md = buildMarkdown(snapshot({
+      elevations: [elevation({ options: [option({ conversation: [
+        { from: 'client', body: 'Could it go higher?\nAbove the sofa.', sentOn: '19 September 2026' },
+        { from: 'studio', body: 'Yes, by 10 cm.', sentOn: '19 September 2026' },
+      ] })] })],
+    }))
+    assert.match(md, /\*\*Conversation with the client\*\*\n\n- \*\*Client\*\*, 19 September 2026: Could it go higher\?\n  Above the sofa\.\n- \*\*Christian & Kwan\*\*, 19 September 2026: Yes, by 10 cm\./)
+  })
+
+  test('no conversation, no heading', () => {
+    assert.ok(!buildMarkdown(snapshot()).includes('Conversation with the client'))
   })
 })

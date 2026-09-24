@@ -42,9 +42,10 @@
   background: var(--warm-white); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 10px 11px;
 }
-/* A private note has to be obvious at a glance — it is the one thing on this
-   screen that behaves differently when the export runs. */
-.note-card.private {
+/* A note the client will not see in the portal, where the portal would
+   otherwise show it. Tinted so it stands out from the ones that will: most
+   option notes are for the client, and this is the exception. */
+.note-card.ck-only {
   background: var(--amber-light); border-color: rgba(139, 111, 71, 0.35);
 }
 .note-card.standing { background: var(--cream); }
@@ -59,12 +60,19 @@
   cursor: pointer;
 }
 
+/* Client | C&K. Two halves of one control, so it reads as a choice between
+   two rather than a button that does something. */
 .note-share {
-  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
-  padding: 3px 7px; border-radius: var(--radius-xs); cursor: pointer;
-  border: 1px solid var(--border); background: white; color: var(--mid);
+  display: inline-flex; border: 1px solid var(--border);
+  border-radius: var(--radius-xs); overflow: hidden;
 }
-.note-share.on { background: var(--amber); border-color: var(--amber); color: white; }
+.note-share button {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  padding: 3px 7px; cursor: pointer; border: none;
+  background: white; color: var(--mid); font-family: inherit;
+}
+.note-share button + button { border-left: 1px solid var(--border); }
+.note-share button.on { background: var(--charcoal); color: white; }
 
 .note-narrow-btn {
   font-size: 10px; padding: 3px 7px; cursor: pointer;

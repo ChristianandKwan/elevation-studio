@@ -13,7 +13,7 @@ interface ElevationTab {
    * consultant's optional name, `label` / `title` whichever of those applies
    * (tab text / sentence form). See src/lib/options.ts.
    */
-  options: Array<{ key: string; letter: string; label: string; title: string; name: string | null; hasArtworks: boolean; hasClientNotes: boolean }>
+  options: Array<{ key: string; letter: string; label: string; title: string; name: string | null; hasArtworks: boolean; hasNewMessages: boolean }>
 }
 
 interface Props {
@@ -236,8 +236,8 @@ export default function TabBar({
                       {opt.name
                         ? opt.name
                         : <><span className={optionTagClass(opt.letter)} style={{ marginRight: 5 }}>{opt.letter}</span>{elev.name}</>}
-                      {opt.hasClientNotes && !isActive && (
-                        <span className="studio-tab-notes-dot" title="Client has left notes on this option" aria-label="Has client notes" />
+                      {opt.hasNewMessages && !isActive && (
+                        <span className="studio-tab-notes-dot" title="New message from the client on this option" aria-label="New message from the client" />
                       )}
                       {elev.options.length > 1 && (
                         <span
@@ -266,8 +266,8 @@ export default function TabBar({
                     >
                       {hiddenMark}
                       {elev.name}
-                      {onlyOpt?.hasClientNotes && !isActive && (
-                        <span className="studio-tab-notes-dot" title="Client has left notes on this elevation" aria-label="Has client notes" />
+                      {onlyOpt?.hasNewMessages && !isActive && (
+                        <span className="studio-tab-notes-dot" title="New message from the client on this elevation" aria-label="New message from the client" />
                       )}
                     </button>
                   )

@@ -28,14 +28,14 @@
  *
  * ── What it does not do ─────────────────────────────────────────────────
  *
- * No filtering and no arithmetic. Private notes were dropped by
+ * No filtering and no arithmetic. Empty notes were dropped by
  * `notesForExport` before the snapshot was built, works were included or
  * excluded by the consultant's choices, and the budget arrives costed. This
  * module only decides what the document looks like — which is what lets
  * `node --test` cover it without a database.
  */
 import type {
-  ExportBudget, ExportElevation, ExportNote, ExportOption,
+  ExportBudget, ExportBudgetNote, ExportElevation, ExportMessage, ExportNote, ExportOption,
   ExportSnapshot, ExportWork,
 } from './types'
 
@@ -115,6 +115,44 @@ function noteLines(notes: ExportNote[]): string[] {
   return notes.map(n => (n.covers ? `*About ${n.covers}.* ${n.body.trim()}` : n.body.trim()))
 }
 
+/**
+ * The label on a Budget-screen note the client was not shown. It comes into
+ * the pack anyway (Tom) — C&K rarely write anything sensitive here, and they
+ * read a proposal thoroughly before it goes — but it says so where it
+ * stands, rather than trusting the reader to have read a preamble.
+ */
+export const UNSHOWN_BUDGET_NOTE =
+  'not shown to the client: ask Christian & Kwan before using it in the proposal'
+
+/** A work's or an option's note from the Budget screen, labelled either way. */
+function budgetNoteLine(note: ExportBudgetNote | null): string | null {
+  if (!note) return null
+  return note.shownToClient
+    ? `**Budget note** ${note.body}`
+    : `**Budget note (${UNSHOWN_BUDGET_NOTE})** ${note.body}`
+}
+
+/** Whether anything in the pack carries that label, so the top can say so. */
+function hasUnshownBudgetNote(snap: ExportSnapshot): boolean {
+  return snap.works.some(w => w.budgetNote && !w.budgetNote.shownToClient)
+    || snap.elevations.some(e => e.options.some(o => o.budgetNote && !o.budgetNote.shownToClient))
+}
+
+/**
+ * The conversation on an option, as a list: who, when, what. A message that
+ * runs to several lines is indented to stay inside its item.
+ */
+function conversationBlock(messages: ExportMessage[]): string[] {
+  if (messages.length === 0) return []
+  return [
+    '**Conversation with the client**',
+    tight(messages.map(m => {
+      const who = m.from === 'client' ? 'Client' : 'Christian & Kwan'
+      return `- **${who}**, ${m.sentOn}: ${m.body.trim().replace(/\n/g, '\n  ')}`
+    })),
+  ]
+}
+
 function workSection(work: ExportWork, level: number): string[] {
   const h = '#'.repeat(level)
   const out: string[] = [`${h} ${work.name}`]
@@ -163,6 +201,8 @@ function workSection(work: ExportWork, level: number): string[] {
   }
 
   out.push(...noteLines(work.notes))
+  const budgetLine = budgetNoteLine(work.budgetNote)
+  if (budgetLine) out.push(budgetLine)
   return out
 }
 
@@ -227,6 +267,9 @@ function optionSection(
   out.push(tight(hung))
 
   out.push(...noteLines(opt.notes))
+  const budgetLine = budgetNoteLine(opt.budgetNote)
+  if (budgetLine) out.push(budgetLine)
+  out.push(...conversationBlock(opt.conversation))
   return out
 }
 
@@ -294,6 +337,9 @@ export function buildMarkdown(snap: ExportSnapshot): string {
       ['Consultant', snap.consultantName],
       ['Exported', snap.exportedAt],
     ]),
+    ...(hasUnshownBudgetNote(snap)
+      ? [`*Every note Christian & Kwan wrote is in this pack. Budget notes marked “${UNSHOWN_BUDGET_NOTE}” were kept from the client in the portal.*`]
+      : []),
   ])
 
   blocks.push(['## The project', ...notesBlock(snap.projectNotes)])

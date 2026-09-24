@@ -26,9 +26,45 @@
 export const NOTE_ANCHORS = ['project', 'budget', 'elevation', 'option', 'work', 'artist'] as const
 export type NoteAnchor = typeof NOTE_ANCHORS[number]
 
-/** Whether a note may leave the studio. */
-export const NOTE_SHARES = ['proposal', 'private'] as const
+/**
+ * Who reads a note, beyond C&K. Every note goes into the proposal pack; this
+ * decides only whether the client also reads it in the portal (038).
+ *
+ * There is no private setting. C&K know the pack becomes a client proposal,
+ * and anything truly sensitive is not written here in the first place.
+ */
+export const NOTE_SHARES = ['client', 'studio'] as const
 export type NoteShare = typeof NOTE_SHARES[number]
+
+/** What each setting is called on screen, and what it means in a tooltip. */
+export const SHARE_META: Record<NoteShare, { label: string; title: string }> = {
+  client: { label: 'Client', title: 'Shown to the client in the portal, and in the proposal pack' },
+  studio: { label: 'C&K',    title: 'Not shown in the portal. Still goes into the proposal pack' },
+}
+
+/** New notes are for the client: most of what C&K write about an option is. */
+export const DEFAULT_SHARE: NoteShare = 'client'
+
+/**
+ * The anchors the portal has a place for. Only these offer the Client / C&K
+ * choice: on any other note it would be a switch that does nothing. Add an
+ * anchor here when the portal learns to show it, and its notes gain the
+ * choice everywhere at once.
+ */
+export const PORTAL_ANCHORS: readonly NoteAnchor[] = ['option']
+
+export function showsInPortal(anchor: NoteAnchor): boolean {
+  return PORTAL_ANCHORS.includes(anchor)
+}
+
+/**
+ * A stored value as the app understands it. 'proposal' and 'private' are the
+ * values before 038, still accepted by the database while code from before
+ * it could be running; they read as their replacements.
+ */
+export function parseShare(v: unknown): NoteShare {
+  return v === 'studio' || v === 'private' ? 'studio' : 'client'
+}
 
 /**
  * The heading, and what is worth writing under it.
@@ -140,7 +176,7 @@ export function rowToNote(r: NoteRow): Note {
     workId: r.work_id,
     artistId: r.artist_id,
     body: r.body ?? '',
-    share: r.share === 'private' ? 'private' : 'proposal',
+    share: parseShare(r.share),
     workIds: (r.note_works ?? []).map(w => w.work_id),
     displayOrder: r.display_order ?? 0,
     updatedAt: r.updated_at ?? null,
@@ -218,16 +254,24 @@ export function notesMentioning(notes: Note[], workId: string): Note[] {
 }
 
 /**
- * What the export is allowed to see.
+ * What the export works from: every note that says something.
  *
- * Private notes are dropped here, once, rather than at each place the export
- * assembles a section — a filter that has to be remembered in six places is
- * a filter that will be forgotten in one. Empty notes go too: a note that
- * was opened and never written in should not become a blank heading in a
- * client proposal.
+ * Both settings go into the pack (038), so the only thing dropped is a note
+ * that was opened and never written in — it should not become a blank
+ * heading in a client proposal. Kept as the one filter the export applies,
+ * so a rule added later has one place to go.
  */
 export function notesForExport(notes: Note[]): Note[] {
-  return notes.filter(n => n.share === 'proposal' && n.body.trim().length > 0)
+  return notes.filter(n => n.body.trim().length > 0)
+}
+
+/**
+ * What the client reads in the portal: notes set to Client, on an anchor the
+ * portal has a place for, with something in them. The portal's loader and
+ * anything that previews it share this, so the two cannot disagree.
+ */
+export function notesForPortal(notes: Note[]): Note[] {
+  return notes.filter(n => n.share === 'client' && showsInPortal(n.anchor) && n.body.trim().length > 0)
 }
 
 /** How many notes here actually say something. */

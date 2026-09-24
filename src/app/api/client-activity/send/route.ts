@@ -32,13 +32,15 @@ interface ClaimedRow {
   elevation_id: string | null
   option_id: string | null
   created_at: string
+  /** The message a 'note' action sent (038); null for one recorded before it. */
+  message_id: string | null
 }
 
 interface OptionRow {
   id: string; option: string; name: string | null
   sort_order: number | null; created_at: string | null
   image_path: string | null; wall_color: string | null
-  approved: boolean; client_notes: string | null
+  approved: boolean
 }
 
 export async function POST(request: Request) {
@@ -70,15 +72,21 @@ export async function POST(request: Request) {
       await svc.rpc('release_client_activity', { p_ids: actions.map(a => a.id) })
     }
     try {
-      const [projectRes, elevRes] = await Promise.all([
+      const messageIds = actions.map(a => a.message_id).filter((id): id is string => !!id)
+      const [projectRes, elevRes, messagesRes] = await Promise.all([
         svc.from('projects').select('name, status').eq('id', projectId).maybeSingle(),
         svc.from('elevations')
-          .select('id, name, display_order, client_picked_option, elevation_options(id, option, name, sort_order, created_at, image_path, wall_color, approved, client_notes)')
+          .select('id, name, display_order, client_picked_option, elevation_options(id, option, name, sort_order, created_at, image_path, wall_color, approved)')
           .eq('project_id', projectId)
           .eq('visible_to_client', true)
           .order('display_order', { ascending: true }),
+        messageIds.length
+          ? svc.from('option_messages').select('id, body').in('id', messageIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; body: string }>, error: null }),
       ])
-      if (projectRes.error || elevRes.error) { await release(projectRes.error ?? elevRes.error); continue }
+      const failed = projectRes.error ?? elevRes.error ?? messagesRes.error
+      if (failed) { await release(failed); continue }
+      const words = new Map((messagesRes.data ?? []).map(m => [m.id as string, m.body as string]))
       // Deleted since: its actions went with it (cascade), and nobody wants the email.
       if (!projectRes.data) continue
 
@@ -93,7 +101,7 @@ export async function POST(request: Request) {
           name: e.name as string,
           pickedOptionId: picked?.id ?? null,
           options: shown.map(o => ({
-            id: o.id, title: o.title, approved: o.approved, clientNotes: o.client_notes ?? '',
+            id: o.id, title: o.title, approved: o.approved,
           })),
         }
       })
@@ -101,7 +109,10 @@ export async function POST(request: Request) {
       const digest = buildDigest(
         { name: projectRes.data.name, status: projectRes.data.status },
         elevations,
-        actions.map(a => ({ kind: a.kind, elevationId: a.elevation_id, optionId: a.option_id, createdAt: a.created_at })),
+        actions.map(a => ({
+          kind: a.kind, elevationId: a.elevation_id, optionId: a.option_id, createdAt: a.created_at,
+          message: a.message_id ? words.get(a.message_id) ?? null : null,
+        })),
         `${origin}/projects/${projectId}`,
       )
       if (!digest) continue

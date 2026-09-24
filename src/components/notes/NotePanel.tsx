@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ANCHOR_META, workSetLabel, type Note, type NoteAnchor, type NoteShare } from '@/lib/notes'
+import {
+  ANCHOR_META, NOTE_SHARES, SHARE_META, showsInPortal, workSetLabel,
+  type Note, type NoteAnchor, type NoteShare,
+} from '@/lib/notes'
 
 export interface NotePatch {
   body?: string
@@ -134,8 +137,10 @@ function NoteCard({
     && note.workIds.includes(onWork)
     && note.workIds.length > 1
 
+  const inPortal = showsInPortal(note.anchor)
+
   return (
-    <div className={`note-card${note.share === 'private' ? ' private' : ''}${borrowed ? ' borrowed' : ''}`}>
+    <div className={`note-card${inPortal && note.share === 'studio' ? ' ck-only' : ''}${borrowed ? ' borrowed' : ''}`}>
       <div className="note-card-head">
         {covers && (
           <span className="note-covers" title={note.workIds.map(id => workName?.(id)).filter(Boolean).join(', ')}>
@@ -150,16 +155,26 @@ function NoteCard({
         )}
 
         <div className="note-card-actions">
-          <button
-            type="button"
-            className={`note-share${note.share === 'private' ? ' on' : ''}`}
-            title={note.share === 'private'
-              ? 'Private — kept out of the export'
-              : 'Goes into the export'}
-            onClick={() => onChange({ share: note.share === 'private' ? 'proposal' : 'private' })}
-          >
-            {note.share === 'private' ? 'Private' : 'In proposal'}
-          </button>
+          {/* Only where the portal has a place for the note: elsewhere every
+              note goes into the pack and nowhere else, and a switch would
+              change nothing. */}
+          {inPortal && (
+            <div className="note-share" role="radiogroup" aria-label="Who can see this note">
+              {NOTE_SHARES.map(share => (
+                <button
+                  key={share}
+                  type="button"
+                  role="radio"
+                  aria-checked={note.share === share}
+                  className={note.share === share ? 'on' : ''}
+                  title={SHARE_META[share].title}
+                  onClick={() => { if (note.share !== share) onChange({ share }) }}
+                >
+                  {SHARE_META[share].label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* A plain "Remove" on a note being read somewhere it is not
               anchored would say one thing and do another: it looks like

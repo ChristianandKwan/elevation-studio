@@ -121,15 +121,6 @@
 .client-art-eye:hover { color: var(--charcoal); border-color: var(--charcoal); }
 .client-art-eye.hidden-art { color: var(--border); }
 
-.client-notes-textarea {
-  width: 100%; resize: none; height: 80px; box-sizing: border-box;
-  font-family: var(--font-karla, 'Karla'); font-size: 12px; padding: 8px 10px; line-height: 1.5;
-  border: 1px solid var(--border); background: var(--cream);
-  outline: none; color: var(--charcoal); border-radius: var(--radius-sm);
-}
-.client-notes-textarea:focus { border-color: var(--charcoal); }
-.client-notes-textarea:disabled { opacity: .6; cursor: not-allowed; }
-.client-notes-hint { font-size: 10.5px; color: var(--mid); margin-top: 5px; }
 
 .client-approval-section { padding: 14px 16px; border-top: 1px solid var(--border); }
 
@@ -269,8 +260,6 @@
   .client-sidebar-scroll { overflow: visible; scrollbar-gutter: auto; }
   .client-sidebar-section { padding: 14px 16px; }
   .client-art-name { font-size: 13px; }
-  /* 16px stops iOS zooming the whole page in when the box is tapped. */
-  .client-notes-textarea { font-size: 16px; height: 96px; }
   .client-approval-section { padding: 14px 16px 24px; }
 
   /* Export PDF opens the browser's print window, which a phone too often

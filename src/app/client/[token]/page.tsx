@@ -8,6 +8,8 @@ import { labelOptions } from '@/lib/options'
 import { readOptionNoteFields } from '@/lib/lineItems'
 import { PLACEMENT_WITH_WORK_SELECT } from '@/lib/works'
 import { placementsToArtworks, placementImagePath } from '@/lib/workRows'
+import { notesForPortal, rowToNote, type NoteRow } from '@/lib/notes'
+import { MESSAGE_COLUMNS, messagesByOption, rowToMessage, type OptionMessageRow } from '@/lib/messages'
 
 interface Props {
   params: Promise<{ token: string }>
@@ -53,7 +55,7 @@ export default async function ClientPortalPage({ params }: Props) {
       .select(`
         id, name, display_order, client_picked_option,
         elevation_options(
-          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+          id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, consultant_note, consultant_note_shown_to_client,
           skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y, skew_active,
           ${ARTWORKS_FRAGMENT}
         )
@@ -69,7 +71,7 @@ export default async function ClientPortalPage({ params }: Props) {
         .select(`
           id, name, display_order, client_picked_option,
           elevation_options(
-            id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, client_notes, consultant_note, consultant_note_shown_to_client,
+            id, option, sort_order, created_at, name, image_path, orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, approved, approved_at, foreground_masks, consultant_note, consultant_note_shown_to_client,
             ${ARTWORKS_FRAGMENT}
           )
         `)
@@ -91,6 +93,8 @@ export default async function ClientPortalPage({ params }: Props) {
     { elevations, elevError },
     { data: activity },
     { data: budgetRow },
+    notesRes,
+    messagesRes,
   ] = await Promise.all([
     supabase
       .from('projects')
@@ -114,6 +118,21 @@ export default async function ClientPortalPage({ params }: Props) {
       .select('*')
       .eq('project_id', projectId)
       .maybeSingle(),
+    // Option notes C&K may have set to Client. Which of them the client
+    // actually reads is decided by notesForPortal below, the one rule the
+    // studio's count uses too.
+    supabase
+      .from('notes')
+      .select('id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id, body, share, display_order')
+      .eq('project_id', projectId)
+      .eq('anchor_type', 'option')
+      .order('display_order', { ascending: true }),
+    // The conversation on every option (038).
+    supabase
+      .from('option_messages')
+      .select(MESSAGE_COLUMNS)
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true }),
   ])
 
   if (!project) notFound()
@@ -123,6 +142,23 @@ export default async function ClientPortalPage({ params }: Props) {
   if (elevError) {
     return <LoadFailed what="proposal" detail="" audience="client" />
   }
+
+  // Notes and messages sit beside the walls rather than being the proposal,
+  // so a failure to read them costs the client those and nothing else.
+  if (notesRes.error) console.warn('[portal] notes failed:', notesRes.error.message)
+  if (messagesRes.error) console.warn('[portal] messages failed:', messagesRes.error.message)
+
+  // Keyed by option, and only ever looked up for the options fetched above —
+  // so nothing on a wall the client cannot see reaches the page.
+  const ckNotesByOption = new Map<string, string[]>()
+  for (const n of notesForPortal((notesRes.data ?? []).map(r => rowToNote(r as NoteRow)))) {
+    if (!n.optionId) continue
+    ckNotesByOption.set(n.optionId, [...(ckNotesByOption.get(n.optionId) ?? []), n.body.trim()])
+  }
+  // When C&K read a message is theirs to know; the client is sent none of it.
+  const messagesOn = messagesByOption(
+    (messagesRes.data ?? []).map(r => ({ ...rowToMessage(r as OptionMessageRow), readAt: null })),
+  )
 
   // Collect all image paths up-front, deduplicated across elevations/options
   const allOptions = (elevations ?? []).flatMap(elev => elev.elevation_options ?? [])
@@ -157,7 +193,7 @@ export default async function ClientPortalPage({ params }: Props) {
       orig_w: number; orig_h: number; scale_px_per_cm: number | null;
       wall_w_cm: number | null; wall_h_cm: number | null; wall_color: string | null;
       approved: boolean; approved_at: string | null;
-      foreground_masks?: any[] | null; client_notes?: string | null;
+      foreground_masks?: any[] | null;
       skew_tl_x?: number | null; skew_tl_y?: number | null;
       skew_tr_x?: number | null; skew_tr_y?: number | null;
       skew_br_x?: number | null; skew_br_y?: number | null;
@@ -167,7 +203,12 @@ export default async function ClientPortalPage({ params }: Props) {
     }) => {
       const imageUrl = opt.image_path ? (elevMap.get(opt.image_path) ?? null) : null
       const artworks = placementsToArtworks(opt.artworks, artUrlFor)
-      return { ...opt, imageUrl, artworks, clientNotes: opt.client_notes ?? '', ...readOptionNoteFields(opt as unknown as Record<string, unknown>) }
+      return {
+        ...opt, imageUrl, artworks,
+        ckNotes: ckNotesByOption.get(opt.id) ?? [],
+        messages: messagesOn[opt.id] ?? [],
+        ...readOptionNoteFields(opt as unknown as Record<string, unknown>),
+      }
     })
     // Sorted and lettered by position, in the same one place the studio uses (src/lib/options.ts).
     return { ...elev, elevation_options: labelOptions(options), clientPickedOption: (elev as any).client_picked_option ?? null }
