@@ -10,6 +10,7 @@ import { preloadImages, clearPreloads } from '@/lib/imagePreload'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import type { ProjectBudget, DiscountStatus, SubLineItem } from '@/types'
 import { optionTitleFor, optionTagClass } from '@/lib/options'
+import type { OptionMessage } from '@/lib/messages'
 
 interface ClientArtwork {
   id: string
@@ -58,7 +59,10 @@ interface ClientOption {
   approved_at: string | null
   foreground_masks?: unknown
   artworks: ClientArtwork[]
-  clientNotes: string
+  /** What C&K wrote about this option for the client (notes set to Client). */
+  ckNotes: string[]
+  /** The conversation on this option, oldest first. */
+  messages: OptionMessage[]
   consultantNote: string
   consultantNoteShownToClient: boolean
   skew_tl_x?: number | null
@@ -235,13 +239,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       return { ...prev, [activeOptId]: next }
     })
   }
-  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Clear debounce timer on unmount to prevent state updates on an unmounted component
-  useEffect(() => {
-    return () => { if (notesTimer.current) clearTimeout(notesTimer.current) }
-  }, [])
-
   /**
    * Send anything still sitting in a debounce when the tab goes away. `pagehide`
    * rather than `beforeunload` because it also fires on mobile Safari's
@@ -452,24 +449,31 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     }, POSITION_SAVE_DELAY_MS)
   }
 
-  function onNotesChange(notes: string) {
-    if (!optData) return
-    const optionId = optData.id
-    setOptionsState(prev => ({
-      ...prev,
-      [activeElevId]: {
-        ...prev[activeElevId],
-        [activeOpt]: { ...prev[activeElevId][activeOpt], clientNotes: notes },
-      },
-    }))
-    if (notesTimer.current) clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(() => {
-      // Fire-and-forget, as before: notes are low-stakes and the field keeps
-      // the typed value regardless.
-      callAction('save_notes', { optionId, notes }).catch(err => {
-        console.warn('save_notes failed:', err)
+  /**
+   * Send a message on the option on screen. Not optimistic: the message
+   * appears once the server has kept it, and until then the text stays in
+   * the box — a message that seemed sent and was not is worse than a second
+   * of waiting.
+   */
+  async function sendMessage(body: string): Promise<boolean> {
+    if (!optData) return false
+    const elevId = activeElevId, opt = activeOpt
+    try {
+      const { message } = await callAction<{ message: OptionMessage }>('send_message', {
+        optionId: optData.id, body,
       })
-    }, 800)
+      setOptionsState(prev => ({
+        ...prev,
+        [elevId]: {
+          ...prev[elevId],
+          [opt]: { ...prev[elevId][opt], messages: [...prev[elevId][opt].messages, message] },
+        },
+      }))
+      return true
+    } catch {
+      onStatus('Your message was not sent. Please try again.')
+      return false
+    }
   }
 
   async function handlePick(elevId: string, opt: string) {
@@ -670,7 +674,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
             onArtworkMove={onArtworkMove}
             onArtworkMoveEnd={onArtworkMoveEnd}
             onToggleVisibility={toggleVisibility}
-            onNotesChange={onNotesChange}
+            onSendMessage={sendMessage}
             onApprove={handleApprove}
           />
         ) : (

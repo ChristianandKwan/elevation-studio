@@ -6,7 +6,9 @@ import type { ActivityLog, Artwork } from '@/types'
 import { framingLabel, formatPrice, formatApprovalTimestamp, checkArtworkDetail, MIN_ELEVATION_LONG_EDGE } from '@/lib/utils'
 import { wallSizeLabel } from '@/lib/wall'
 import BlankWallModal from './BlankWallModal'
-import NotePanel, { type NotePatch } from '@/components/notes/NotePanel'
+import NotePanel, { type NoteChangeHandler } from '@/components/notes/NotePanel'
+import Conversation from '@/components/conversation/Conversation'
+import type { OptionMessage } from '@/lib/messages'
 import type { Note } from '@/lib/notes'
 import {
   FRAME_COLORS, frameLabel, MOUNT_COLORS, mountLabel, MOUNT_DEFAULT_MM, mountIsUniform,
@@ -19,7 +21,11 @@ interface Props {
   optionId: string
   projectId: string
   onStatus: (msg: string) => void
-  clientNotes?: string
+  /** The conversation with the client on this option (038). */
+  conversation?: {
+    messages: OptionMessage[]
+    onReply: (body: string) => Promise<boolean>
+  }
   activityLogs?: ActivityLog[]
   onRequestDeleteArtworks: (ids: Set<string>) => void
   approvalStatus?: {
@@ -35,11 +41,11 @@ interface Props {
   /** Notes on this option only — the full record lives on the Notes screen. */
   optionNotes?: Note[]
   onAddNote?: () => void
-  onChangeNote?: (noteId: string, patch: NotePatch) => void
+  onChangeNote?: NoteChangeHandler
   onDeleteNote?: (noteId: string) => void
 }
 
-export default function StudioSidebar({ studio, onStatus, optionId, clientNotes, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange, optionNotes, onAddNote, onChangeNote, onDeleteNote }: Props) {
+export default function StudioSidebar({ studio, onStatus, optionId, conversation, activityLogs = [], onRequestDeleteArtworks, approvalStatus, onUnapprove, budget, onBudgetChange, optionNotes, onAddNote, onChangeNote, onDeleteNote }: Props) {
   const { state, uploadElevation, setBlankWall, startCalibration, setShowArtModal, startMaskDraw, finishMaskDraw, cancelMaskDraw, clearCurrentPoints, deletePolygon, clearAllMasks, highlightMask } = studio
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -426,13 +432,18 @@ export default function StudioSidebar({ studio, onStatus, optionId, clientNotes,
         </div>
       )}
 
-      {/* Client notes (read-only, scoped to the active option) */}
-      {clientNotes && (
-        <div className="sidebar-section" style={{ background: 'var(--amber-light)', border: '1px solid rgba(139,111,71,.2)', padding: '10px 14px', marginTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
-            Client Notes
-          </div>
-          <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--charcoal)', whiteSpace: 'pre-wrap' }}>{clientNotes}</div>
+      {/* The conversation with the client on this option. It replaced a
+          read-only box showing whatever the client's single note said last. */}
+      {conversation && (
+        <div className="sidebar-section">
+          <div className="s-title">Conversation with the client</div>
+          <Conversation
+            key={optionId}
+            viewer="studio"
+            messages={conversation.messages}
+            onSend={conversation.onReply}
+            hint="The client sees it next time they open their link. It goes into the proposal pack."
+          />
         </div>
       )}
 

@@ -31,7 +31,7 @@ import IndexScreen from '@/components/index/IndexScreen'
 import { preloadImages, clearPreloads } from '@/lib/imagePreload'
 import NotesScreen from '@/components/notes/NotesScreen'
 import {
-  noteRow, notesOn, rowToNote,
+  DEFAULT_SHARE, noteRow, notesOn, rowToNote,
   type Note, type NoteAnchor, type NoteRow,
 } from '@/lib/notes'
 import {
@@ -39,6 +39,8 @@ import {
   type Artist,
 } from '@/lib/artists'
 import type { NotePatch } from '@/components/notes/NotePanel'
+import { useConversations } from '@/hooks/useConversations'
+import type { OptionMessage } from '@/lib/messages'
 
 interface DbElevation {
   id: string
@@ -69,7 +71,6 @@ interface DbElevation {
     approved: boolean
     approved_at: string | null
     foreground_masks: unknown
-    clientNotes: string
     consultantNote: string
     consultantNoteShownToClient: boolean
     skew_tl_x?: number | null
@@ -98,6 +99,8 @@ interface Props {
   initialNotes: Note[]
   /** Every artist the practice knows — the picker offers these. */
   initialArtists: Artist[]
+  /** Every message on every option, client's and C&K's (038). */
+  initialMessages: OptionMessage[]
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
@@ -132,7 +135,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists, initialMessages }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -189,6 +192,18 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const activeElev = elevations.find(e => e.id === activeElevId)
   const activeOptData = activeElev?.elevation_options.find(o => o.option === activeOption)
   const optionId = activeOptData?.id ?? ''
+
+  // The conversation on each option. Leaving an option is what marks the
+  // client's messages on it as read, so "New" stays while they are on screen.
+  const conversations = useConversations(project.id, initialMessages, onStatus)
+  const { markRead } = conversations
+  const lastOptionId = useRef(optionId)
+  useEffect(() => {
+    const left = lastOptionId.current
+    lastOptionId.current = optionId
+    if (left && left !== optionId) void markRead(left)
+  }, [optionId, markRead])
+
   // How the active option is referred to: its name, or "Option" plus its position letter — never its stored key.
   const activeOptionTitle = optionTitleFor(activeElev?.elevation_options ?? [], activeOption)
 
@@ -555,7 +570,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       workId:      anchor === 'work'      ? id : null,
       artistId:    anchor === 'artist'    ? id : null,
       body: '',
-      share: 'proposal',
+      share: DEFAULT_SHARE,
       displayOrder: notes.filter(n => n.anchor === anchor).length,
     })
     const { data, error } = await supabase.from('notes').insert(payload).select(NOTE_SELECT).single()
@@ -1040,7 +1055,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     const newElev: DbElevation = {
       id: elev.id, name: elev.name, display_order: elev.display_order, clientPickedOption: null, visibleToClient: true,
       elevation_options: [
-        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, wall_w_cm: null, wall_h_cm: null, wall_color: null, approved: false, approved_at: null, foreground_masks: null, clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
+        { id: optRow?.id ?? '', option: 'A', sort_order: 0, imageUrl: null, imagePath: null, orig_w: 0, orig_h: 0, scale_px_per_cm: null, wall_w_cm: null, wall_h_cm: null, wall_color: null, approved: false, approved_at: null, foreground_masks: null, consultantNote: '', consultantNoteShownToClient: true, artworks: [] },
       ],
     }
     setElevations(prev => [...prev, newElev])
@@ -1112,7 +1127,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           approved: false, approved_at: null,
           foreground_masks: inheritedMasks,
           ...inheritedSkew,
-          clientNotes: '', consultantNote: '', consultantNoteShownToClient: true, artworks: [],
+          consultantNote: '', consultantNoteShownToClient: true, artworks: [],
         }],
       }
     }))
@@ -1810,7 +1825,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               title: o.title,
               name: cleanOptionName(o.name),
               hasArtworks: o.artworks.length > 0,
-              hasClientNotes: (o.clientNotes ?? '').trim().length > 0,
+              hasNewMessages: conversations.unreadFor(o.id) > 0,
             })),
           }))}
           activeElevId={activeElevId}
@@ -1834,7 +1849,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             optionId={optionId}
             projectId={project.id}
             onStatus={onStatus}
-            clientNotes={activeOptData?.clientNotes ?? ''}
+            conversation={optionId ? {
+              messages: conversations.messagesFor(optionId),
+              onReply: body => conversations.reply(optionId, body),
+            } : undefined}
             activityLogs={activityLogs}
             onRequestDeleteArtworks={requestDeleteArtworks}
             approvalStatus={{

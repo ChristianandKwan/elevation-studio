@@ -3,9 +3,10 @@
  *
  * Written when it is sent, from the project as it stands then (migration
  * 037). The recorded actions only say what was touched — which wall was
- * chosen for, which option approved, which note changed — and the words come
- * from the current state: a note reads as the client left it, and a choice
- * made and then cleared says so instead of reporting the first click.
+ * chosen for, which option approved — and the words come from the current
+ * state, so a choice made and then cleared says so instead of reporting the
+ * first click. A message is the exception: it never changes once sent, so
+ * each one is quoted exactly as it went (038).
  *
  * Pure, so the wording can be tested without a database or an email.
  */
@@ -17,6 +18,12 @@ export interface DigestAction {
   elevationId: string | null
   optionId: string | null
   createdAt: string
+  /**
+   * The words of the message this action sent. Absent for a note recorded
+   * before 038, when the client had one box per option and its earlier text
+   * was overwritten — those are reported without a quote.
+   */
+  message?: string | null
 }
 
 export interface DigestOption {
@@ -24,7 +31,6 @@ export interface DigestOption {
   /** How the client saw it: its name, or "Option B". */
   title: string
   approved: boolean
-  clientNotes: string
 }
 
 export interface DigestElevation {
@@ -54,7 +60,7 @@ export interface Digest {
 /** A wall's lines, in the order a person would tell it: chose, approved, wrote. */
 interface Line {
   text: string
-  /** A note's own words, shown quoted under its line. */
+  /** A message's own words, shown quoted under its line. */
   quote?: string
 }
 
@@ -99,12 +105,33 @@ function linesFor(elev: DigestElevation, actions: DigestAction[]): Line[] {
     lines.push({ text: o.approved ? what : `${what} (since withdrawn)` })
   }
 
-  for (const o of once('note')) {
-    const note = o.clientNotes.trim()
-    if (note) lines.push({ text: single ? 'Left a note' : `Left a note on ${o.title}`, quote: note })
-    else lines.push({ text: single ? 'Cleared their note' : `Cleared their note on ${o.title}` })
+  // Every message is its own line, in the order sent. A pre-038 note was
+  // recorded once per autosave, so those collapse to one line per option.
+  const legacy = new Set<string>()
+  for (const a of messageActions(actions)) {
+    const o = optionById.get(a.optionId as string)
+    if (!o) continue
+    const on = single ? '' : ` on ${o.title}`
+    const words = a.message?.trim()
+    if (words) lines.push({ text: `Sent a message${on}`, quote: words })
+    else if (!legacy.has(o.id)) { legacy.add(o.id); lines.push({ text: `Left a note${on}` }) }
   }
   return lines
+}
+
+/** The message actions, oldest first. */
+function messageActions(actions: DigestAction[]): DigestAction[] {
+  return actions
+    .filter(a => a.kind === 'note' && a.optionId)
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+}
+
+/** How many messages the subject line should count: each sent, each old box once. */
+function messageCount(actions: DigestAction[]): number {
+  const notes = messageActions(actions)
+  const sent = notes.filter(a => a.message?.trim()).length
+  const legacy = new Set(notes.filter(a => !a.message?.trim()).map(a => a.optionId)).size
+  return sent + legacy
 }
 
 export function buildDigest(
@@ -124,7 +151,7 @@ export function buildDigest(
   const summary = listed([
     distinct('pick', a => a.elevationId) && count(distinct('pick', a => a.elevationId), 'choice', 'choices'),
     distinct('approve', a => a.optionId) && count(distinct('approve', a => a.optionId), 'approval', 'approvals'),
-    distinct('note', a => a.optionId) && count(distinct('note', a => a.optionId), 'note', 'notes'),
+    messageCount(actions) && count(messageCount(actions), 'message', 'messages'),
   ].filter((p): p is string => !!p))
 
   const times = actions.map(a => Date.parse(a.createdAt)).filter(t => !Number.isNaN(t))

@@ -21,6 +21,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { optionTitleFor, sortOptions } from '@/lib/options'
+import { MESSAGE_COLUMNS, cleanMessage, rowToMessage, type OptionMessageRow } from '@/lib/messages'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -29,14 +30,14 @@ type Svc = ReturnType<typeof createServiceClient>
 
 type Action =
   | 'toggle_visibility'
-  | 'save_notes'
+  | 'send_message'
   | 'move_artworks'
   | 'pick_option'
   | 'unpick_option'
   | 'approve'
 
 const ACTIONS: readonly Action[] = [
-  'toggle_visibility', 'save_notes', 'move_artworks',
+  'toggle_visibility', 'send_message', 'move_artworks',
   'pick_option', 'unpick_option', 'approve',
 ]
 
@@ -176,19 +177,21 @@ async function allElevationsApproved(svc: Svc, projectId: string): Promise<boole
 }
 
 /**
- * Note a pick, approval or note for the practice's email (migration 037).
+ * Note a pick, approval or message for the practice's email (migration 037).
  * Best-effort like the activity log: a client's action never fails because
- * the email about it could not be queued.
+ * the email about it could not be queued. A message is named (038) so the
+ * email quotes exactly what was sent; the kind stays 'note', as 037 has it.
  */
 async function recordForEmail(
   svc: Svc, projectId: string, kind: 'pick' | 'approve' | 'note',
-  ids: { elevationId?: string; optionId?: string },
+  ids: { elevationId?: string; optionId?: string; messageId?: string },
 ) {
   const { error } = await svc.from('client_activity').insert({
     project_id: projectId,
     kind,
     elevation_id: ids.elevationId ?? null,
     option_id: ids.optionId ?? null,
+    ...(ids.messageId ? { message_id: ids.messageId } : {}),
   })
   if (error) console.warn(`client_activity insert failed (${kind}):`, error.message)
 }
@@ -247,33 +250,28 @@ export async function POST(
       return NextResponse.json({ ok: true })
     }
 
-    // ── Save the client's notes on an option ─────────────
-    case 'save_notes': {
+    // ── Send a message on an option ──────────────────────
+    // The conversation replaced one notes box per option (038). A message is
+    // kept as sent, and allowed after approval: questions about delivery and
+    // hanging come once the choice is made.
+    case 'send_message': {
       const optionId = payload.optionId
-      const notes = payload.notes
-      if (typeof optionId !== 'string' || typeof notes !== 'string') {
-        return bad('Invalid payload', 400)
-      }
+      const body = cleanMessage(payload.body)
+      if (typeof optionId !== 'string' || !body) return bad('Invalid payload', 400)
       const owned = await optionInProject(svc, optionId, projectId)
       if (!owned) return bad('Forbidden', 403)
 
-      // Read first, so a save that changes nothing is not an action to email.
-      const { data: before } = await svc
-        .from('elevation_options')
-        .select('client_notes')
-        .eq('id', optionId)
-        .maybeSingle()
+      const { data, error } = await svc
+        .from('option_messages')
+        .insert({ project_id: projectId, option_id: optionId, author: 'client', body })
+        .select(MESSAGE_COLUMNS)
+        .single()
+      if (error || !data) return bad('Send failed', 500)
 
-      const { error } = await svc
-        .from('elevation_options')
-        .update({ client_notes: notes })
-        .eq('id', optionId)
-      if (error) return bad('Update failed', 500)
-
-      if ((before?.client_notes ?? '') !== notes) {
-        await recordForEmail(svc, projectId, 'note', { elevationId: owned.elevationId, optionId })
-      }
-      return NextResponse.json({ ok: true })
+      const message = rowToMessage(data as OptionMessageRow)
+      await recordForEmail(svc, projectId, 'note', { elevationId: owned.elevationId, optionId, messageId: message.id })
+      // When C&K read it is theirs to know.
+      return NextResponse.json({ message: { ...message, readAt: null } })
     }
 
     // ── Flush dragged artwork positions ──────────────────

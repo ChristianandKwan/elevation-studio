@@ -88,7 +88,7 @@ src/
 
 - **`useStudio` hook** (`src/hooks/useStudio.ts`) — all canvas logic lives here. Uses `stateRef` pattern so event handlers always read current state without stale closures. Artwork positions are mutated imperatively in the DOM; `debounceSave()` persists to Supabase.
 - **`StudioScreen.tsx`** — manages active elevation/option. Uses `skipNextLoadRef` to prevent double-loading when `loadOption` is called directly. Syncs artwork positions back into `elevations` state before each tab switch (prevents stale-position bugs on back-navigation). Tracks `projectStatus` in local state so `generateShareToken` never downgrades an approved project back to `'sent'`. Consultant Unapprove button lives here — shown in header when `activeOptData?.approved` is true.
-- **Client portal** (`src/components/client/`) — `optionsState` keyed `[elevId][optionLetter]` keeps positions/visibility across tab switches. Clients can move artworks and toggle visibility. Notes debounced 800ms to `elevation_options.client_notes`.
+- **Client portal** (`src/components/client/`) — `optionsState` keyed `[elevId][optionLetter]` keeps positions/visibility across tab switches. Clients can move artworks and toggle visibility. Each option has a conversation (`option_messages`, migration 038, `src/lib/messages.ts`) sent through the `send_message` action, and shows C&K's option notes set to Client under "From Christian & Kwan".
 - **Rubber-band select** — `useStudio.onWrapMouseDown`; `boxSelectedRef` + 100ms timeout suppresses the post-mouseup click-to-deselect.
 - **Option B** — auto-copies elevation image from Option A on first switch (via `handleSwitch` in `StudioScreen.tsx`).
 - **Perspective skew** — corners stored as 8 fractional floats on `elevation_options`. `src/lib/homography.ts` (`quadToCSSMatrix3d`) solves homography via DLT. Transform applied to `#artwork-layer` div (studio) and `#client-artwork-layer` div (client) — elevation image is unaffected.
@@ -104,7 +104,7 @@ Tables: `profiles`, `projects`, `elevations`, `elevation_options`, `artworks`, `
 - Storage buckets: `elevation-images`, `artwork-images`
 - Storage policies in `supabase/migrations/002_storage.sql`
 - `elevation_options` has a `foreground_masks` JSONB column (added in `003_foreground_masks.sql`) — stores an array of polygons, each polygon being an array of `{x, y}` points in 0–1 fractional coordinates
-- `elevation_options` has a `client_notes text` column (added in `005_client_notes.sql`)
+- `elevation_options` has a `client_notes text` column (added in `005_client_notes.sql`) — superseded by `option_messages` in 038; nothing reads it, and a later migration can drop it
 - `elevations` has a `client_picked_option text` column; `elevation_options` has client-token RLS update policies (added in `006_client_approval.sql`)
 - `artworks` has a `brightness float DEFAULT 1.0` column (`009_brightness.sql`) ✅ applied to prod
 - `elevation_options` has 9 skew columns: `skew_tl_x/y`, `skew_tr_x/y`, `skew_br_x/y`, `skew_bl_x/y` (all float nullable) + `skew_active boolean DEFAULT true` (`010_skew.sql`) ✅ applied to prod

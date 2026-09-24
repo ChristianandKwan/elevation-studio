@@ -1,7 +1,7 @@
 'use client'
 
-import NotePanel, { type NotePatch } from './NotePanel'
-import { ANCHOR_META, notesOn, notesOwnedBy, writtenCount, type Note, type NoteAnchor } from '@/lib/notes'
+import NotePanel, { type NoteChangeHandler } from './NotePanel'
+import { ANCHOR_META, notesForPortal, notesOn, notesOwnedBy, writtenCount, type Note, type NoteAnchor } from '@/lib/notes'
 import { labelOptions } from '@/lib/options'
 
 interface NotesElevation {
@@ -22,7 +22,7 @@ interface Props {
   notes: Note[]
   elevations: NotesElevation[]
   onAdd: (anchor: NoteAnchor, id: string | null) => void
-  onChange: (noteId: string, patch: NotePatch) => void
+  onChange: NoteChangeHandler
   onDelete: (noteId: string) => void
 }
 
@@ -38,7 +38,7 @@ export default function NotesScreen({
   projectName, clientName, notes, elevations, onAdd, onChange, onDelete,
 }: Props) {
   const written = writtenCount(notes)
-  const privateCount = notes.filter(n => n.share === 'private' && n.body.trim().length > 0).length
+  const shownToClient = notesForPortal(notes).length
 
   return (
     <div className="index-view">
@@ -49,15 +49,16 @@ export default function NotesScreen({
             <p className="index-sub">
               {clientName && <>{clientName} · </>}
               {written} note{written === 1 ? '' : 's'} written
-              {privateCount > 0 && <> · {privateCount} kept out of the export</>}
+              {shownToClient > 0 && <> · {shownToClient} shown to the client</>}
             </p>
           </div>
         </div>
 
         <p className="notes-preamble">
-          What the export will be built from. Notes about artists and about
+          What the proposal pack is built from — every note here goes into
+          it. A note on an option is also shown to the client in the portal,
+          unless it is set to C&amp;K. Notes about artists and about
           individual works are in the index, beside the works themselves.
-          Anything marked private stays here.
         </p>
 
         <Section
@@ -146,7 +147,7 @@ function Section({
   suffix?: string
   notes: Note[]
   onAdd: () => void
-  onChange: (noteId: string, patch: NotePatch) => void
+  onChange: NoteChangeHandler
   onDelete: (noteId: string) => void
 }) {
   return (

@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ARTIST_STANDING_PROMPT } from '@/lib/notes'
+import { useAutosave } from '@/hooks/useAutosave'
+import NoteSaveBar from './NoteSaveBar'
 
 interface Props {
   name: string
   note: string
-  onChange: (note: string) => void
+  /** May return a promise, which "Saved" waits on — see useAutosave. */
+  onChange: (note: string) => void | Promise<unknown>
 }
 
 /**
@@ -19,14 +22,11 @@ interface Props {
  * projects say and that should never be a surprise.
  */
 export default function ArtistStandingNote({ name, note, onChange }: Props) {
-  const [body, setBody] = useState(note)
+  // Saves itself, and follows the note when it changes elsewhere — it is
+  // shared, so another project may be editing it. See useAutosave.
+  const { draft: body, setDraft: setBody, flush, status } = useAutosave(note, onChange)
+  const [focused, setFocused] = useState(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
-
-  // Adjusted during render rather than in an effect — see the same pattern in
-  // NotePanel. The standing note is shown on the Notes screen while another
-  // project may be editing it.
-  const [saved, setSaved] = useState(note)
-  if (note !== saved) { setSaved(note); setBody(note) }
 
   useEffect(() => {
     const ta = taRef.current
@@ -47,8 +47,10 @@ export default function ArtistStandingNote({ name, note, onChange }: Props) {
         value={body}
         placeholder={ARTIST_STANDING_PROMPT}
         onChange={e => setBody(e.target.value)}
-        onBlur={() => { if (body !== saved) { setSaved(body); onChange(body) } }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => { setFocused(false); flush() }}
       />
+      <NoteSaveBar status={status} open={focused} onDone={() => { flush(); taRef.current?.blur() }} />
     </div>
   )
 }

@@ -41,10 +41,10 @@ function fileSize(bytes: number): string {
  * which wall and which version of it, whether the works nobody is proposing
  * any more come too, and which pictures.
  *
- * Every elevation starts ticked, on the option the client picked where they
- * have picked one. That is the export somebody wants nine times in ten, so
- * the common case is open-and-click and the checkboxes are there for the
- * tenth.
+ * Every elevation and every option starts ticked (Tom): the pack is meant
+ * to carry everything, so the common case is open-and-click and the
+ * checkboxes are there for the exception. An option left unticked is left
+ * out whole — its picture, its notes and its conversation.
  */
 export default function ExportModal({
   projectId, projectName, elevations, setAsideCount, onCaptureBudget, onClose,

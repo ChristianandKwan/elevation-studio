@@ -12,6 +12,8 @@ import { frameHex, mountHex, bandsPx, isWoodFrame } from '@/lib/frames'
 import { frameGrainElement } from '@/lib/frameGrain'
 import { wallImageUrl } from '@/lib/wall'
 import { setPreloadPaused } from '@/lib/imagePreload'
+import Conversation from '@/components/conversation/Conversation'
+import type { OptionMessage } from '@/lib/messages'
 
 interface ClientArtwork {
   id: string
@@ -53,7 +55,10 @@ interface ClientOption {
   approved_at: string | null
   foreground_masks?: unknown
   artworks: ClientArtwork[]
-  clientNotes: string
+  /** What C&K wrote about this option for the client (notes set to Client). */
+  ckNotes: string[]
+  /** The conversation on this option, oldest first. */
+  messages: OptionMessage[]
   skew_tl_x?: number | null
   skew_tl_y?: number | null
   skew_tr_x?: number | null
@@ -89,7 +94,8 @@ interface Props {
   /** Fired once when a drag finishes, so positions can be persisted. */
   onArtworkMoveEnd: () => void
   onToggleVisibility: (artId: string) => void
-  onNotesChange: (notes: string) => void
+  /** Resolves true once the message is saved. */
+  onSendMessage: (body: string) => Promise<boolean>
   onApprove: () => void
 }
 
@@ -97,7 +103,7 @@ export default function ClientElevation({
   optData, elevationName, activeOpt, optionTitle, rerenderKey,
   approvalActivity, clientBudget, isPicked, artworksLocked, onPick, onClearPick,
   zoom, onZoom,
-  onArtworkMove, onArtworkMoveEnd, onToggleVisibility, onNotesChange, onApprove,
+  onArtworkMove, onArtworkMoveEnd, onToggleVisibility, onSendMessage, onApprove,
 }: Props) {
   const [showApproveWarning, setShowApproveWarning] = useState(false)
   // Bumped on Fit click to re-measure the viewport and re-fit the elevation
@@ -206,6 +212,18 @@ export default function ClientElevation({
             <div className="client-sidebar-elev-name">{elevationName}</div>
           </div>
 
+          {/* What C&K wrote about this option, where they set it to Client.
+              Undated on purpose (Tom): it reads as the proposal speaking, not
+              as a message in the conversation below. */}
+          {optData.ckNotes.length > 0 && (
+            <div className="client-sidebar-section">
+              <div className="client-sidebar-kicker">From Christian &amp; Kwan</div>
+              <div className="client-ck-note">
+                {optData.ckNotes.map((body, i) => <p key={i}>{body}</p>)}
+              </div>
+            </div>
+          )}
+
           {/* Artwork list */}
           <div className="client-sidebar-section">
               <div className="client-sidebar-kicker">Artworks</div>
@@ -236,19 +254,18 @@ export default function ClientElevation({
 
           </div>
 
-          {/* Notes */}
+          {/* The conversation. It stays open after approval: questions about
+              delivery and hanging come after the choice, not before. */}
           <div className="client-sidebar-section">
-            <div className="client-sidebar-kicker">Notes for Christian &amp; Kwan</div>
-            <textarea
-              className="client-notes-textarea"
-              value={optData.clientNotes ?? ''}
-              onChange={e => onNotesChange(e.target.value)}
-              placeholder="Add any notes, questions or requests here…"
-              disabled={optData.approved}
+            <div className="client-sidebar-kicker">Conversation</div>
+            <Conversation
+              key={optData.id}
+              viewer="client"
+              messages={optData.messages}
+              onSend={onSendMessage}
+              hint="We are emailed when you send."
+              emptyText="Ask us anything about this option, and we will reply here."
             />
-            {optData.approved && (
-              <div className="client-notes-hint">This elevation is approved and locked</div>
-            )}
           </div>
 
           {/* Approval section — scrolls with the rest of the sidebar */}
@@ -506,7 +523,7 @@ function ClientCanvas({
       const availW = Math.max(1, areaW - padX)
       const availH = Math.max(1, areaH - padY)
       const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight)
-      // On a phone the client looks, reads and writes notes, but does not
+      // On a phone the client looks, reads and writes messages, but does not
       // rearrange the wall — at that size placing work is fiddly, and the
       // snap guides a mouse gets were never there for a finger (Tom). Checked
       // at each draw, so a phone turned on its side (see the resize re-fit)
