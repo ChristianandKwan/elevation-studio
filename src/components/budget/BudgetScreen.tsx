@@ -12,7 +12,7 @@ import { rememberVatMode, storedVatMode } from './vatMode'
 import { computeProjectTotals } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 import type { ProjectBudget } from '@/types'
-import { ArcSpinner } from '@/components/ui/Spinner'
+import { InlineSpinner } from '@/components/ui/InlineSpinner'
 
 interface Props {
   projectId: string
@@ -146,8 +146,8 @@ export default function BudgetScreen({
         </div>
 
         {isLoading ? (
-          <div className="budget-loading" style={{ position: 'relative', minHeight: 160 }}>
-            <ArcSpinner />
+          <div className="budget-loading" style={{ minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <InlineSpinner size={32} />
           </div>
         ) : !budget ? (
           <div className="budget-loading">Unable to load budget data.</div>

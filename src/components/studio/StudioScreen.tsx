@@ -14,7 +14,7 @@ import CalibrationModal from './CalibrationModal'
 import AddArtworkModal from './AddArtworkModal'
 import ShareModal from './ShareModal'
 import StatusToast from '@/components/ui/StatusToast'
-import { ArcSpinner, DrawLoader } from '@/components/ui/Spinner'
+import { DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { captureBudgetImage, PAGE_W, PAGE_PAD } from '@/components/budget/captureBudget'
 import { storedVatMode } from '@/components/budget/vatMode'
@@ -1693,14 +1693,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               router.push('/dashboard')
             }}
           >
-            {returningToDashboard ? (
-              <>
-                <span style={{ position: 'relative', display: 'inline-block', width: 16, height: 16 }}>
-                  <ArcSpinner size={14} />
-                </span>
-                Saving…
-              </>
-            ) : '← Dashboard'}
+            {/* No spinner here: the full-screen C&K covers the header while this saves. */}
+            {returningToDashboard ? 'Saving…' : '← Dashboard'}
           </button>
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
           <h2 className="studio-project-name">

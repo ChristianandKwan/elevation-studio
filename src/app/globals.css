@@ -129,6 +129,9 @@ body {
   100%      { opacity: 0; }
 }
 @keyframes ck-arc-rotate { to { transform: rotate(360deg); } }
+/* A spinner waits before it fades in: most waits are over within a fifth of a
+   second, and a ring that blinks on and off reads as a glitch (Tom). */
+@keyframes ck-spinner-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ck-arc-dash {
   0%   { stroke-dasharray:   4 248; stroke-dashoffset: 0; }
   60%  { stroke-dasharray: 228  24; stroke-dashoffset: 0; }

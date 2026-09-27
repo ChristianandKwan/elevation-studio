@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { ArcSpinner } from '@/components/ui/Spinner'
+import { InlineSpinner } from '@/components/ui/InlineSpinner'
 import { checkArtworkDetail } from '@/lib/utils'
 import { SET_ASIDE_BADGE } from '@/lib/works'
 import {
@@ -294,13 +294,17 @@ export default function AddArtworkModal({ onConfirm, onCancel, wallPxPerCm, mode
         {!pickingExisting && (
           <div className="field">
             <label className="field-label">Artwork Image</label>
-            <div style={{ position: 'relative' }}>
-              <div className={`upload-zone${files.length ? ' has-file' : ''}`} onClick={pickImages}>
-                {files.length === 0 && 'Click to upload up to 5 artwork images'}
-                {isSingle && files[0].name}
-                {isMulti && `${files.length} artworks selected`}
-              </div>
-              {reading && <ArcSpinner size={36} />}
+            <div className={`upload-zone${files.length ? ' has-file' : ''}`} onClick={pickImages} style={{ position: 'relative' }}>
+              {/* In the button, in its text colour, off to the left so the
+                  words do not move when it appears. */}
+              {reading && (
+                <span style={{ position: 'absolute', left: 12, top: 0, bottom: 0, display: 'flex', alignItems: 'center' }}>
+                  <InlineSpinner size={13} />
+                </span>
+              )}
+              {files.length === 0 && 'Click to upload up to 5 artwork images'}
+              {isSingle && files[0].name}
+              {isMulti && `${files.length} artworks selected`}
             </div>
             <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilesChange} />
             {sizeErrors.length > 0 && (
