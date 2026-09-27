@@ -242,7 +242,7 @@ export default function CreateProposalModal({
         </div>
         {busy && (
           <div className="export-progress" role="status" aria-live="polite">
-            <InlineSpinner size={28} />
+            <InlineSpinner size={28} immediate />
             <div>
               <p className="export-progress-stage">
                 Gathering {optionIds.length} wall{optionIds.length === 1 ? '' : 's'} and the works for Claude…

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArcSpinner } from '@/components/ui/Spinner'
+import { InlineSpinner } from '@/components/ui/InlineSpinner'
 
 interface Props {
   projectName: string
@@ -73,8 +73,8 @@ export default function ShareModal({ projectName, onGetToken, onRegenerateToken,
           Share this link with your client. No login required — they see all elevations and all options, with full approval controls.
         </div>
 
-        <div style={{ position: 'relative', padding: 12, background: 'var(--cream)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: 12, fontFamily: "'Karla'", wordBreak: 'break-all', color: 'var(--mid)', marginBottom: 12, minHeight: busy ? 56 : undefined }}>
-          {busy ? <ArcSpinner size={36} /> : url}
+        <div style={{ padding: 12, ...(busy && { display: 'flex', alignItems: 'center', justifyContent: 'center' }), background: 'var(--cream)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: 12, fontFamily: "'Karla'", wordBreak: 'break-all', color: 'var(--mid)', marginBottom: 12, minHeight: busy ? 56 : undefined }}>
+          {busy ? <InlineSpinner size={20} /> : url}
         </div>
 
         {confirmingRegen ? (

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { IndexElevation } from '@/lib/works'
 import { DEFAULT_CHOICES, type ExportChoices } from '@/lib/export/types'
-import { ArcSpinner } from '@/components/ui/Spinner'
+import { InlineSpinner } from '@/components/ui/InlineSpinner'
 import OptionPicker from './OptionPicker'
 
 interface Props {
@@ -262,7 +262,7 @@ export default function ExportModal({
         </div>
         {busy && (
           <div className="export-progress" role="status" aria-live="polite">
-            <ArcSpinner size={28} />
+            <InlineSpinner size={28} immediate />
             <div>
               <p className="export-progress-stage">
                 {stage === 'budget'

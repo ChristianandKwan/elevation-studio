@@ -194,7 +194,7 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
                 <p>{view.error ?? 'Claude could not build this proposal.'}</p>
               ) : (
                 <>
-                  <InlineSpinner size={32} />
+                  <InlineSpinner size={32} immediate />
                   <p>Claude is building the first draft. It usually takes a few minutes — you can leave this page and come back.</p>
                 </>
               )}
@@ -328,10 +328,10 @@ function EngineStatus({ view, waitingOn }: { view: View; waitingOn: number }) {
     return <span className="proposal-status-failed">{view.error ?? 'Claude stopped.'} Sending a message tries again.</span>
   }
   if (view.status === 'queued' || view.status === 'working') {
-    return <span><InlineSpinner size={14} /> {view.currentVersion ? 'Claude is working on your changes…' : 'Claude is building the first draft…'}</span>
+    return <span><InlineSpinner size={14} immediate /> {view.currentVersion ? 'Claude is working on your changes…' : 'Claude is building the first draft…'}</span>
   }
   if (waitingOn > 0) {
-    return <span><InlineSpinner size={14} /> Claude has your message{waitingOn > 1 ? 's' : ''} and is on it…</span>
+    return <span><InlineSpinner size={14} immediate /> Claude has your message{waitingOn > 1 ? 's' : ''} and is on it…</span>
   }
   if (view.status === 'resting' || !view.engineAlive) {
     const { left, limit } = view.starts

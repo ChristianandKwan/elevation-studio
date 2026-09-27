@@ -5,9 +5,10 @@
  *   <DrawLoader />   — Full-page transition screen (login→dashboard, dashboard→project).
  *                      Strokes the C&K circle in, fades in the mark, then loops.
  *
- *   <ArcSpinner />   — Inline overlay for mid-workflow loading (image uploads, data fetches).
- *                      Arc sweeps fully around then retracts from the trailing end.
- *                      Wrapped in a soft radial gradient so it reads on any elevation image.
+ *   <ArcSpinner />   — Overlay on an elevation photograph while it loads (studio wall,
+ *                      client wall). Arc sweeps fully around then retracts from the
+ *                      trailing end, on a frosted disc so it reads on any wall.
+ *                      Photographs only: everywhere else, InlineSpinner.
  *
  * Both use design tokens from globals.css.
  */
@@ -109,8 +110,8 @@ const drawStyles: Record<string, React.CSSProperties> = {
 
 /* ─────────────────────────────────────────
    ARC SPINNER
-   Inline overlay. Renders centred on its
-   container — give the parent position:relative.
+   Overlay on a photograph. Renders centred on
+   its container — give the parent position:relative.
 
    Usage:
      <div style={{ position: 'relative' }}>
@@ -122,8 +123,6 @@ const drawStyles: Record<string, React.CSSProperties> = {
              sample centre luminance and auto-pick
              dark vs light spinner. Falls back to
              'light' (white) if canvas is unavailable.
-
-   size:     spinner diameter in px (default 56)
 ───────────────────────────────────────── */
 
 function sampleCentreLuminance(img: HTMLImageElement): 'light' | 'dark' {
@@ -150,10 +149,8 @@ function sampleCentreLuminance(img: HTMLImageElement): 'light' | 'dark' {
 }
 
 export function ArcSpinner({
-  size = 56,
   imageRef,
 }: {
-  size?: number
   imageRef?: React.RefObject<HTMLImageElement | null>
 }) {
   const [variant, setVariant] = React.useState<'light' | 'dark'>('light')
@@ -167,22 +164,14 @@ export function ArcSpinner({
   }, [imageRef])
 
   const isDark = variant === 'dark'
-  const stroke = isDark ? '#1C1A18' : 'white'
-  const trackStroke = isDark ? 'rgba(28,26,24,0.12)' : 'rgba(255,255,255,0.10)'
-  const haloColor = isDark
-    ? ['rgba(28,26,24,0.18)', 'rgba(28,26,24,0.08)']
-    : ['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.10)']
-  const halo = size * 1.7
+  const stroke = isDark ? '#1C1A18' : '#FDFBF9'
+  const trackStroke = isDark ? 'rgba(28,26,24,0.14)' : 'rgba(253,251,249,0.18)'
+  const disc = isDark ? 'rgba(253,251,249,0.72)' : 'rgba(28,26,24,0.5)'
 
   return (
     <div style={arcStyles.overlay}>
-      <div style={{
-        ...arcStyles.halo,
-        width: halo, height: halo,
-        background: `radial-gradient(circle at center,
-          ${haloColor[0]} 0%, ${haloColor[1]} 42%, transparent 70%)`,
-      }}>
-        <div style={{ width: size, height: size, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ ...arcStyles.disc, background: disc }}>
+        <div style={{ width: SIZE, height: SIZE, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg viewBox="0 0 84 84" style={{ ...arcStyles.svg, animation: 'ck-arc-rotate 1.6s linear infinite' }}>
             <circle cx="42" cy="42" r="40" fill="none" stroke={trackStroke} strokeWidth="1.5" />
             <circle cx="42" cy="42" r="40" fill="none" stroke={stroke} strokeWidth="1.5"
@@ -196,6 +185,11 @@ export function ArcSpinner({
   )
 }
 
+/* One size: the mark is 13px and the ring is drawn for it. Smaller, the
+   letters crowd the ring and the hairline breaks up — which is why anything
+   that is not a photograph uses InlineSpinner instead. */
+const SIZE = 56
+
 const arcStyles: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'absolute',
@@ -205,8 +199,18 @@ const arcStyles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     zIndex: 10,
     pointerEvents: 'none',
+    // Waits of under 0.4s (a wall already downloaded) show no spinner at all.
+    animation: 'ck-spinner-in 0.2s ease 0.4s both',
   },
-  halo: {
+  // A frosted disc, so the ring reads on a busy wall as well as a plain one:
+  // the soft glow it replaced was lost wherever the ring crossed several colours.
+  disc: {
+    width: Math.round(SIZE * 1.35),
+    height: Math.round(SIZE * 1.35),
+    borderRadius: '50%',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    boxShadow: '0 2px 14px rgba(0,0,0,.12)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
