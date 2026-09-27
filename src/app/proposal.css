@@ -152,6 +152,20 @@
   .proposals-version { grid-template-columns: 1fr; gap: 6px; }
 }
 
+/* Phones: the header wraps — back and the version menu on one line, the
+   buttons on the next — and every field is 16px so iOS does not zoom the
+   page when it is tapped. */
+@media (max-width: 640px) {
+  .proposal-screen { height: 100dvh; }
+  .proposal-header { height: auto; flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
+  .proposal-title { flex-wrap: wrap; gap: 8px; }
+  /* The version menu says where you are; the word would push it onto a line of its own. */
+  .proposal-title-word { display: none; }
+  .proposal-actions { flex-basis: 100%; }
+  .proposal-version, .proposal-screen textarea { font-size: 16px; }
+  .proposal-pages { padding: 16px 12px 32px; gap: 16px; }
+}
+
 @media (max-width: 900px) {
   .proposal-body { flex-direction: column; }
   .proposal-chat { width: auto; height: 45vh; border-left: none; border-top: 1px solid var(--border); }

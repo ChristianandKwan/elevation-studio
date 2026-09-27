@@ -561,6 +561,18 @@
   text-transform: uppercase; color: var(--mid); text-align: right; white-space: nowrap;
 }
 
+/* Phones — the consultant's budget in the studio. Export PDF opens the
+   print window, which a phone too often shows nothing for; the portal hides
+   it for clients for the same reason (client-portal.css). That leaves the
+   VAT switch and the client view, which fit side by side. */
+@media (max-width: 640px) {
+  .budget-header { padding: 0 16px; gap: 10px; }
+  .budget-header-left { display: none; }
+  .budget-header-right { flex: none; }
+  .studio-root .budget-export-btn { display: none; }
+  .budget-content { padding: 28px 16px 48px; }
+}
+
 @media (max-width: 520px) {
   .budget-totals-row--split,
   .budget-grand-total--split { column-gap: 10px; }

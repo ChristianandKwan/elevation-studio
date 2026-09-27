@@ -55,6 +55,11 @@
    wrong at one size. There is no test that can catch it; measure in a
    browser with the real fonts loaded and update the table above. */
 @media (max-width: 1160px) {
+  .studio-header .header-app-title { display: none; }
+}
+/* The dashboard shares the title and has far less beside it: the threshold
+   it always had. */
+@media (max-width: 1080px) {
   .header-app-title { display: none; }
 }
 .save-status--error  { color: var(--red); }
@@ -538,3 +543,68 @@
   background: none; border: none; border-radius: var(--radius-sm); color: var(--charcoal); cursor: pointer;
 }
 .studio-more:hover, .studio-more.open { background: var(--cream); }
+
+/* ══════════════════════════════════════════════════════════
+   PHONES
+   A consultant on a phone looks at the walls, and updates the budget, the
+   notes and the proposals. Hanging and editing a wall waits for a computer
+   (Tom): the steps that build it are hidden, and the wall cannot be dragged
+   (useIsPhone → artworkDragLocked). The breakpoint is the portal's.
+══════════════════════════════════════════════════════════ */
+/* dvh follows the phone's address bar as it comes and goes. */
+.studio-root { height: 100vh; height: 100dvh; }
+.studio-phone-note { display: none; }
+
+@media (max-width: 640px) {
+  /* The header takes two lines: back, project and ⋯; then the places,
+     which scroll sideways if the screen is narrower than all five. */
+  .studio-header { flex-wrap: wrap; height: auto; padding: 8px 12px 0 16px; row-gap: 2px; }
+  .studio-header-left { gap: 10px; }
+  .studio-header-left .save-status { display: none; }
+  .studio-project-name { font-size: 13px; }
+  .studio-project-name span { display: none; }
+  .studio-header-right { display: contents; }
+  .studio-header-sep { display: none; }
+  .studio-more { order: 2; width: 40px; height: 40px; }
+  .studio-places {
+    order: 3; flex-basis: 100%; gap: 18px; overflow-x: auto; scrollbar-width: none;
+    padding: 6px 4px 10px 0;
+  }
+  .studio-places::-webkit-scrollbar { display: none; }
+  .studio-place { flex-shrink: 0; padding: 8px 0; }
+
+  /* The wall tabs switch walls and options; renaming, reordering and
+     adding them is a computer's job. */
+  .studio-tab-more, .studio-tab-add, .studio-tab-del-opt { display: none; }
+  .studio-tab-bar { padding: 0 8px; }
+
+  /* The wall on top, at the height its own shape needs at full width
+     (--wall-aspect, set from the option), within limits; everything else
+     below it, scrolling as one page. */
+  .studio-main { flex-direction: column; overflow-y: auto; }
+  .canvas-area {
+    order: -1; flex: none;
+    height: clamp(240px, calc((100vw - 64px) * var(--wall-aspect, .66) + 64px), 62dvh);
+  }
+  .studio-sidebar {
+    width: auto; border-right: none; border-top: 1px solid var(--border);
+    overflow: visible; scrollbar-gutter: auto; flex-shrink: 0;
+  }
+  .sidebar-section--edit, .sidebar-edit-only { display: none !important; }
+  /* Numbered steps read oddly once steps 1 and 2 have gone. */
+  .studio-sidebar .step-badge { display: none; }
+  /* A phone pinches to zoom; the buttons only covered a corner of the wall. */
+  .zoom-controls { display: none; }
+
+  /* iOS zooms the whole page into any field under 16px when it is tapped,
+     and stays zoomed. The portal's message box does the same (conversation.css). */
+  .studio-root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  .studio-root textarea,
+  .studio-root select { font-size: 16px; }
+
+  .studio-phone-note {
+    display: block; order: 0; margin: 0; padding: 10px 16px;
+    font-size: 12.5px; line-height: 1.5; color: var(--mid);
+    background: var(--cream); border-top: 1px solid var(--border);
+  }
+}

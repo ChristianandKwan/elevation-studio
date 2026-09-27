@@ -118,7 +118,11 @@
 .batch-fields .field-input { background: var(--warm-white); }
 
 @media (max-width: 560px) {
-  .index-main-row { flex-wrap: wrap; }
+  .index-main-row { flex-wrap: wrap; align-items: center; }
+  /* The name on a line of its own; squeezed beside the size and price it
+     was a few pixels wide, and the size printed over it. */
+  .index-identity { flex: 1 1 100%; }
+  .index-main-row .budget-artwork-price { min-width: 0; margin-left: auto; }
 }
 
 @media print {

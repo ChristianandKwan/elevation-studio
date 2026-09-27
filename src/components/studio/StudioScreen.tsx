@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useStudio } from '@/hooks/useStudio'
+import { useIsPhone } from '@/hooks/useIsPhone'
 import StudioCanvas from './StudioCanvas'
 import StudioSidebar from './StudioSidebar'
 import ProjectMenu from './ProjectMenu'
@@ -161,6 +162,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [budget, setBudget] = useState<number | null>(project.budget)
   const [view, setView] = useState<'studio' | 'index' | 'budget' | 'notes' | 'proposals'>(initialView)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  // On a phone the project is for looking, the budget and notes for
+  // updating; hanging work waits for a computer (studio.css, "Phones").
+  const isPhone = useIsPhone()
   // The speech-bubble button used to install this on mount; the "⋯" menu's
   // form mounts only when opened, and the report should carry what went
   // before it.
@@ -226,7 +230,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     projectName: project.name,
     elevationName: activeElev?.name ?? '',
     optionKey: activeOptionTitle,
-    artworkDragLocked: !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption) || (activeOptData?.approved ?? false),
+    artworkDragLocked: isPhone || !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption) || (activeOptData?.approved ?? false),
     onElevationUploaded: ({ imagePath, imageUrl, origW, origH }) => {
       setElevations(prev => prev.map(e => {
         if (e.id !== activeElevId) return e
@@ -1685,12 +1689,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
   return (
     <div
+      className="studio-root"
       style={{
-        display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
         // The studio has the sidebar down its left, so the wall's centre is
         // half a sidebar right of the window's. The index and budget are
         // full-width, and take the default of no shift.
-        '--status-bar-shift': view === 'studio' ? 'calc(var(--sidebar-w) / 2)' : '0px',
+        '--status-bar-shift': view === 'studio' && !isPhone ? 'calc(var(--sidebar-w) / 2)' : '0px',
       } as React.CSSProperties}
     >
       {(returningToDashboard || showIntroLoader) && <DrawLoader variant="cream" />}
@@ -1826,7 +1831,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       )}
 
       {/* Studio view — kept mounted (display:none when hidden) so the canvas DOM and artwork overlays are preserved */}
-      <div style={{ display: view === 'studio' ? 'flex' : 'none', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      <div
+        className="studio-view"
+        style={{
+          display: view === 'studio' ? 'flex' : 'none', flexDirection: 'column', flex: 1, overflow: 'hidden',
+          // A phone gives the wall the height its own shape needs at full width.
+          '--wall-aspect': activeOptData?.orig_w ? activeOptData.orig_h / activeOptData.orig_w : 0.66,
+        } as React.CSSProperties}
+      >
         {/* Tab bar */}
         <TabBar
           elevations={elevations.map(e => ({
@@ -1859,6 +1871,10 @@ export default function StudioScreen({ project, elevations: initialElevations, e
 
         {/* Main */}
         <div className="studio-main">
+          <p className="studio-phone-note">
+            On a phone the walls are for looking. Hanging and editing them is on a computer;
+            the budget, notes and proposals work here as usual.
+          </p>
           <StudioSidebar
             studio={studio}
             optionId={optionId}

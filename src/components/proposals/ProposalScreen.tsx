@@ -186,7 +186,7 @@ export default function ProposalScreen({ projectId, projectName, proposalId, ini
       <header className="proposal-header">
         <Link href={`/projects/${projectId}?view=proposals`} className="btn btn-sm btn-ghost">← {projectName}</Link>
         <div className="proposal-title">
-          Proposal
+          <span className="proposal-title-word">Proposal</span>
           {view.versions.length > 0 && (
             <select
               className="proposal-version"
