@@ -16,10 +16,13 @@ import { blankWallDataUrl } from '@/lib/wall'
 
 interface Props {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-export default async function ProjectPage({ params }: Props) {
+export default async function ProjectPage({ params, searchParams }: Props) {
   const { id } = await params
+  // "← Test Project" on a proposal comes back to the Proposals view.
+  const openOnProposals = (await searchParams).view === 'proposals'
   const supabase = await createClient()
   const user = await getCurrentUser()
 
@@ -213,6 +216,8 @@ export default async function ProjectPage({ params }: Props) {
   const notes = (noteRows ?? []).map(r => rowToNote(r as unknown as NoteRow))
   const messages = (messagesRes.data ?? []).map(r => rowToMessage(r as OptionMessageRow))
 
+  const proposalsEnabled = !!process.env.PROPOSAL_ROUTINE_URL && !!process.env.PROPOSAL_ROUTINE_TOKEN
+
   const artists = sortArtists((artistRowsAll ?? []).map(r => rowToArtist(r as unknown as ArtistRow)))
 
   return (
@@ -226,9 +231,11 @@ export default async function ProjectPage({ params }: Props) {
       initialNotes={notes}
       initialArtists={artists}
       initialMessages={messages}
-      // Create proposal is offered only once the engine can be started: a
-      // menu item that could only fail is worse than none.
-      proposalsEnabled={!!process.env.PROPOSAL_ROUTINE_URL && !!process.env.PROPOSAL_ROUTINE_TOKEN}
+      // New proposal is offered only where the engine can be started (the
+      // live site): a button that could only fail is worse than none. The
+      // proposals already made show everywhere.
+      proposalsEnabled={proposalsEnabled}
+      initialView={openOnProposals ? 'proposals' : 'studio'}
     />
   )
 }

@@ -140,9 +140,6 @@ export default function BudgetScreen({
         <div className="budget-project-header">
           <h1 className="budget-project-name">{projectName}</h1>
           {clientName && <p className="budget-project-client">{clientName}</p>}
-          {isPreviewingClientView && (
-            <span className="budget-client-view-badge">Client view</span>
-          )}
         </div>
 
         {isLoading ? (

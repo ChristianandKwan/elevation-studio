@@ -241,11 +241,204 @@ export async function proposalView(db: SupabaseClient, proposal: ProposalRow, ve
   }
 }
 
+// ── The project's Proposals view ─────────────────────────────────────────
+
+/** A consultant was told no, in words they can act on. */
+export class Refused extends Error {}
+
+/**
+ * Why Start again is not open right now, or null when it is. While Claude
+ * owes an answer it is part-way through a change to the version it has, and
+ * would publish that change on top of the one started again from.
+ */
+function startAgainBlocked(proposal: ProposalRow, unanswered: number): string | null {
+  if (!proposal.current_version) return 'Claude has not finished the first draft yet.'
+  if (unanswered > 0) return 'Claude is working on a change. You can start again once it is done.'
+  return null
+}
+
+/** Every proposal on a project, newest first, each with its versions and a picture of its cover. */
+export async function projectProposals(db: SupabaseClient, projectId: string) {
+  const { data: rows } = await db.from('proposals').select(PROPOSAL_COLUMNS)
+    .eq('project_id', projectId).order('created_at', { ascending: false })
+  const proposals = (rows ?? []) as ProposalRow[]
+  if (!proposals.length) return []
+  const ids = proposals.map(p => p.id)
+
+  const [{ data: versionRows }, { data: waiting }] = await Promise.all([
+    db.from('proposal_versions').select('proposal_id, number, summary, page_count, files, created_at')
+      .in('proposal_id', ids).eq('finished', true).order('number', { ascending: false }),
+    db.from('proposal_messages').select('proposal_id')
+      .in('proposal_id', ids).eq('author', 'consultant').is('answered_at', null),
+  ])
+  const versions = (versionRows ?? []) as (VersionRow & { proposal_id: string })[]
+
+  // The latest version's first page stands for the proposal.
+  const coverPaths = new Map<string, string>()
+  for (const p of proposals) {
+    const v = versions.find(x => x.proposal_id === p.id && x.number === p.current_version)
+    const first = v?.files.filter(f => f.startsWith('pages/')).sort()[0]
+    if (v && first) coverPaths.set(p.id, `${versionPrefix(p.id, v.number)}/${first}`)
+  }
+  const covers = new Map<string, string>()
+  if (coverPaths.size) {
+    const paths = [...coverPaths.values()]
+    const { data: signed } = await db.storage.from(PROPOSALS_BUCKET).createSignedUrls(paths, SIGNED_FOR)
+    for (const s of signed ?? []) if (s.signedUrl && s.path) covers.set(s.path, s.signedUrl)
+  }
+
+  return proposals.map(p => {
+    const unanswered = (waiting ?? []).filter(m => m.proposal_id === p.id).length
+    const cover = coverPaths.get(p.id)
+    const hasVersions = versions.some(v => v.proposal_id === p.id)
+    return {
+      id: p.id,
+      subtitle: p.brief?.subtitle ?? '',
+      status: p.status,
+      error: p.error,
+      createdAt: p.created_at,
+      currentVersion: p.current_version,
+      coverUrl: cover ? covers.get(cover) ?? null : null,
+      startAgainBlocked: startAgainBlocked(p, unanswered),
+      // No first draft, and no run working on one: it stopped (the first
+      // live runs did, in the cloud environment's setup). Such a proposal
+      // holds nothing, and may be removed.
+      stalled: !hasVersions && !engineIsAlive(p.status, p.engine_seen_at, p.engine_fired_at),
+      versions: versions.filter(v => v.proposal_id === p.id).map(v => ({
+        number: v.number, summary: v.summary, pageCount: v.page_count, createdAt: v.created_at,
+      })),
+    }
+  })
+}
+
+/**
+ * Remove a proposal that never produced a version — one that stalled or
+ * failed before its first draft. One with versions is kept: a draft is work,
+ * and nothing about it needs clearing away.
+ */
+export async function removeUnfinishedProposal(db: SupabaseClient, proposal: ProposalRow) {
+  const { count } = await db.from('proposal_versions').select('id', { count: 'exact', head: true })
+    .eq('proposal_id', proposal.id)
+  if ((count ?? 0) > 0) throw new Refused('This proposal has drafts, so it is kept.')
+  if (engineIsAlive(proposal.status, proposal.engine_seen_at, proposal.engine_fired_at)) {
+    throw new Refused('Claude is still working on this one. Try again in a few minutes if it stays stuck.')
+  }
+  if (proposal.pack_path) await db.storage.from(PROPOSALS_BUCKET).remove([proposal.pack_path])
+  // Versions and messages go with it (039's cascades).
+  const { error } = await db.from('proposals').delete().eq('id', proposal.id)
+  if (error) throw new Error(`The proposal could not be removed: ${error.message}`)
+  return { ok: true }
+}
+
+/** A signed link that downloads one version's PDF under a readable name. */
+export async function versionPdfUrl(db: SupabaseClient, proposal: ProposalRow, number: number): Promise<string | null> {
+  const { data: version } = await db.from('proposal_versions').select('number')
+    .eq('proposal_id', proposal.id).eq('number', number).eq('finished', true).maybeSingle()
+  if (!version) return null
+  const { data: project } = await db.from('projects').select('name').eq('id', proposal.project_id).maybeSingle()
+  const { data } = await db.storage.from(PROPOSALS_BUCKET).createSignedUrl(
+    `${versionPrefix(proposal.id, number)}/proposal.pdf`, SIGNED_FOR,
+    { download: `${project?.name ?? 'Proposal'} — v${number}.pdf` },
+  )
+  return data?.signedUrl ?? null
+}
+
+/**
+ * Start again from an earlier version: copy it forward as the newest, so the
+ * next change is made to it. Nothing is overwritten — the versions after it
+ * stay in the list, and starting again from one of them is the way back.
+ *
+ * A run that is listening hears of it through a message, and its next wait
+ * fetches the new starting point (studio.mjs, `resynced`). With no run, the
+ * next one starts from the current version anyway, so the message is only a
+ * record in the conversation.
+ */
+export async function startAgainFrom(db: SupabaseClient, proposal: ProposalRow, from: number) {
+  const { count } = await db.from('proposal_messages').select('id', { count: 'exact', head: true })
+    .eq('proposal_id', proposal.id).eq('author', 'consultant').is('answered_at', null)
+  const blocked = startAgainBlocked(proposal, count ?? 0)
+  if (blocked) throw new Refused(blocked)
+  if (from === proposal.current_version) throw new Refused(`Version ${from} is already the latest.`)
+
+  const { data: source } = await db.from('proposal_versions').select('number, page_count, warnings, files')
+    .eq('proposal_id', proposal.id).eq('number', from).eq('finished', true).maybeSingle()
+  if (!source) throw new Refused(`There is no version ${from}.`)
+
+  // Claim the number before copying: the engine opens versions the same way,
+  // and the unique (proposal, number) constraint settles any race.
+  const { data: last } = await db.from('proposal_versions').select('number')
+    .eq('proposal_id', proposal.id).order('number', { ascending: false }).limit(1).maybeSingle()
+  const number = (last?.number ?? 0) + 1
+  const files = source.files as string[]
+  const { error } = await db.from('proposal_versions').insert({ proposal_id: proposal.id, number, files })
+  if (error) throw new Error(`The new version could not be opened: ${error.message}`)
+
+  for (const f of files) {
+    const { error: e } = await db.storage.from(PROPOSALS_BUCKET)
+      .copy(`${versionPrefix(proposal.id, from)}/${f}`, `${versionPrefix(proposal.id, number)}/${f}`)
+    if (e) {
+      await db.from('proposal_versions').delete().eq('proposal_id', proposal.id).eq('number', number)
+      throw new Error(`Version ${from} could not be copied (${f}): ${e.message}`)
+    }
+  }
+
+  const now = new Date().toISOString()
+  await db.from('proposal_versions').update({
+    finished: true, summary: `Started again from version ${from}.`,
+    page_count: source.page_count, warnings: source.warnings,
+  }).eq('proposal_id', proposal.id).eq('number', number)
+  await db.from('proposals').update({ current_version: number, updated_at: now }).eq('id', proposal.id)
+
+  const listening = engineIsAlive(proposal.status, proposal.engine_seen_at, proposal.engine_fired_at)
+  await db.from('proposal_messages').insert({
+    proposal_id: proposal.id, author: 'consultant', body: `Start again from version ${from}.`,
+    answered_in: number, answered_at: listening ? null : now,
+  })
+  return { version: number }
+}
+
 // ── The engine's side ─────────────────────────────────────────────────────
 
 async function heard(db: SupabaseClient, id: string, extra: Record<string, unknown> = {}) {
   const now = new Date().toISOString()
   await db.from('proposals').update({ engine_seen_at: now, updated_at: now, ...extra }).eq('id', id)
+}
+
+/**
+ * What identifies the stored pack's contents. Refresh figures rebuilds it in
+ * place, which changes this; a run compares it with the one it downloaded.
+ */
+async function packStamp(db: SupabaseClient, proposal: ProposalRow): Promise<string | null> {
+  if (!proposal.pack_path) return null
+  const { data } = await db.storage.from(PROPOSALS_BUCKET).list(proposal.id, { search: 'pack.zip' })
+  const file = data?.find(f => f.name === 'pack.zip')
+  return file?.metadata?.eTag ?? file?.updated_at ?? null
+}
+
+/** The current version's proposal.html, signed for the engine to download. */
+async function currentForEngine(db: SupabaseClient, proposal: ProposalRow) {
+  if (!proposal.current_version) return null
+  const { data } = await db.storage.from(PROPOSALS_BUCKET)
+    .createSignedUrl(`${versionPrefix(proposal.id, proposal.current_version)}/proposal.html`, SIGNED_FOR)
+  return data ? { number: proposal.current_version, htmlUrl: data.signedUrl } : null
+}
+
+/**
+ * What a listening run should be working from: the current version and the
+ * pack. Asked whenever messages arrive, because two things change them under
+ * a run — Start again (a different current version) and Refresh figures (a
+ * rebuilt pack) — and a run otherwise edits the copies it started with.
+ */
+export async function engineState(db: SupabaseClient, proposal: ProposalRow) {
+  const [current, stamp, pack] = await Promise.all([
+    currentForEngine(db, proposal),
+    packStamp(db, proposal),
+    proposal.pack_path
+      ? db.storage.from(PROPOSALS_BUCKET).createSignedUrl(proposal.pack_path, SIGNED_FOR).then(r => r.data?.signedUrl ?? null)
+      : Promise.resolve(null),
+  ])
+  await heard(db, proposal.id)
+  return { current, pack: pack ? { url: pack, stamp } : null }
 }
 
 /** A run has the job: hand it the pack, the brief, the conversation, and the version to edit. */
@@ -254,12 +447,7 @@ export async function engineStart(db: SupabaseClient, proposal: ProposalRow) {
   await heard(db, proposal.id, { status: 'working', error: null })
 
   const { data: pack } = await db.storage.from(PROPOSALS_BUCKET).createSignedUrl(proposal.pack_path, SIGNED_FOR)
-  let current: { number: number; htmlUrl: string } | null = null
-  if (proposal.current_version) {
-    const { data } = await db.storage.from(PROPOSALS_BUCKET)
-      .createSignedUrl(`${versionPrefix(proposal.id, proposal.current_version)}/proposal.html`, SIGNED_FOR)
-    if (data) current = { number: proposal.current_version, htmlUrl: data.signedUrl }
-  }
+  const [current, stamp] = await Promise.all([currentForEngine(db, proposal), packStamp(db, proposal)])
   const { data: messages } = await db.from('proposal_messages').select(MESSAGE_COLUMNS)
     .eq('proposal_id', proposal.id).order('created_at')
   const { data: project } = await db.from('projects').select('name').eq('id', proposal.project_id).maybeSingle()
@@ -273,6 +461,7 @@ export async function engineStart(db: SupabaseClient, proposal: ProposalRow) {
     projectName: project?.name ?? '',
     brief: proposal.brief.forEngine ?? proposal.brief,
     packUrl: pack?.signedUrl,
+    packStamp: stamp,
     current,
     messages: ((messages ?? []) as MessageRow[]).map(m => ({
       id: m.id, from: m.author, body: m.body, page: m.page, answered: m.answered_at != null,

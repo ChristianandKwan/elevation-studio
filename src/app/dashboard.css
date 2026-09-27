@@ -112,3 +112,22 @@
 .project-card-new:hover { border-color: var(--accent); background: var(--accent-light); }
 .project-card-new-icon { font-size: 28px; opacity: .25; }
 .project-card-new-label { font-size: 12px; color: var(--mid); }
+
+/* ── Phones ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .dash-header { padding: 0 16px; height: 64px; }
+  .dash-logo { height: 42px; }
+  .dash-body { padding: 24px 16px 40px; }
+  .dash-section-header { align-items: flex-end; }
+  .projects-grid { grid-template-columns: 1fr; gap: 14px; }
+  /* A row, not a card-sized empty box: on a phone a project is more often
+     opened than started. */
+  .project-card-new { min-height: 0; flex-direction: row; padding: 14px; }
+  .project-card-new-icon { font-size: 20px; }
+  .project-card-thumb { height: 150px; }
+}
+
+/* A touch screen has no hover to reveal a card's "⋯"; it is always shown. */
+@media (hover: none) {
+  .project-card-menu-btn { opacity: 1; }
+}

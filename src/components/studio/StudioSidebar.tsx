@@ -91,8 +91,9 @@ export default function StudioSidebar({ studio, onStatus, optionId, conversation
 
   return (
     <div className="studio-sidebar" onClick={e => { if (e.target === e.currentTarget) studio.selectArtwork(null) }}>
-      {/* Step 1: Elevation */}
-      <div className="sidebar-section">
+      {/* Step 1: Elevation. The steps that build the wall are a computer's
+          job; a phone hides them (studio.css, "Phones"). */}
+      <div className="sidebar-section sidebar-section--edit">
         <div className="s-title">
           <span className={`step-badge${hasElev ? ' done' : ''}`}>1</span>
           Elevation
@@ -148,7 +149,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, conversation
       </div>
 
       {/* Step 2: Scale */}
-      <div className="sidebar-section">
+      <div className="sidebar-section sidebar-section--edit">
         <div className="s-title">
           <span className={`step-badge${hasScale ? ' done' : ''}`}>2</span>
           Scale Calibration
@@ -183,7 +184,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, conversation
           Artworks
         </div>
         <button
-          className="btn btn-sm btn-step btn-full"
+          className="btn btn-sm btn-step btn-full sidebar-edit-only"
           disabled={!hasScale || isLocked}
           onClick={() => setShowArtModal(true)}
         >
@@ -193,7 +194,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, conversation
         {hasArts && (
           <>
             {state.selIds.size > 1 && (
-              <div className="multi-select-bar">
+              <div className="multi-select-bar sidebar-edit-only">
                 <span>{state.selIds.size} selected</span>
                 <button disabled={isLocked} onClick={() => onRequestDeleteArtworks(new Set(state.selIds))}>Delete all</button>
                 <button onClick={() => studio.selectArtwork(null)}>Deselect</button>
@@ -230,7 +231,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, conversation
             </div>
 
             {hasArts && (
-              <div className="kb-hint">
+              <div className="kb-hint sidebar-edit-only">
                 ↑↓←→ nudge · Shift+arrow = 10px · Delete = remove
               </div>
             )}
@@ -242,7 +243,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, conversation
           a shape out of the photograph and draws it back over the artworks,
           and cutting a shape out of a flat colour puts the same colour back. */}
       {hasElev && !isBlank && (
-        <div className="sidebar-section">
+        <div className="sidebar-section sidebar-section--edit">
           <div className="s-title">
             <span className={`step-badge${hasMasks ? ' done' : ''}`}>4</span>
             Foreground
@@ -330,7 +331,7 @@ export default function StudioSidebar({ studio, onStatus, optionId, conversation
 
       {/* Step 5: Perspective */}
       {hasElev && (
-        <div className="sidebar-section">
+        <div className="sidebar-section sidebar-section--edit">
           <div className="s-title">
             <span className={`step-badge${state.skewCorners ? ' done' : ''}`}>5</span>
             Perspective
@@ -685,7 +686,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
             </span>
           )}
         </div>
-        <div className="aw-btns">
+        <div className="aw-btns sidebar-edit-only">
           <button
             ref={editBtnRef}
             className="icon-btn"

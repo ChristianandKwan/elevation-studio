@@ -1,7 +1,6 @@
 'use client'
 
 import type { SaveStatus } from './useBudgetState'
-import FeedbackButton from '@/components/feedback/FeedbackButton'
 
 interface Props {
   vatMode: boolean
@@ -23,6 +22,15 @@ export default function BudgetHeader({
   onPreviewToggle,
 }: Props) {
   return (
+    // One sticky block, so the client-view band stays in sight with the bar.
+    <div className="budget-sticky">
+    {isConsultant && isPreviewingClientView && onPreviewToggle && (
+      <div className="budget-client-band" role="status">
+        <EyeIcon />
+        What the client sees
+        <button onClick={onPreviewToggle}>Back to editing</button>
+      </div>
+    )}
     <div className="budget-header">
       <div className="budget-header-left">
         {saveStatus === 'saving' && (
@@ -52,19 +60,27 @@ export default function BudgetHeader({
       </div>
 
       <div className="budget-header-right">
-        {isConsultant && onPreviewToggle && (
-          <button
-            className={`budget-preview-btn${isPreviewingClientView ? ' active' : ''}`}
-            onClick={onPreviewToggle}
-          >
-            {isPreviewingClientView ? 'Exit preview' : 'Preview as client'}
+        {/* The check before anything goes to a client: the figures, and
+            only the notes meant for them. The way back is in the band. */}
+        {isConsultant && onPreviewToggle && !isPreviewingClientView && (
+          <button className="budget-preview-btn" onClick={onPreviewToggle}>
+            <EyeIcon />
+            See it as the client
           </button>
         )}
-        {isConsultant && <FeedbackButton variant="dark" />}
         <button className="budget-export-btn" onClick={onExportPdf}>
           Export PDF
         </button>
       </div>
     </div>
+    </div>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+    </svg>
   )
 }

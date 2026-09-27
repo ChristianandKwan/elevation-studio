@@ -39,6 +39,8 @@ interface Props {
   projectId: string
   projectName: string
   proposalId: string
+  /** From the Proposals view's "View" on an older version. */
+  initialVersion?: number | null
 }
 
 /**
@@ -54,11 +56,12 @@ interface Props {
  * while it is working, and never implies an answer is on its way when the
  * engine has stopped (the next message starts it again).
  */
-export default function ProposalScreen({ projectId, projectName, proposalId }: Props) {
+export default function ProposalScreen({ projectId, projectName, proposalId, initialVersion = null }: Props) {
   const [view, setView] = useState<View | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   /** The version on screen; null follows the newest. */
-  const [versionShown, setVersionShown] = useState<number | null>(null)
+  const [versionShown, setVersionShown] = useState<number | null>(initialVersion)
+  const [startingAgain, setStartingAgain] = useState(false)
   const [selectedPage, setSelectedPage] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -133,6 +136,30 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
     }
   }
 
+  /** Copy the version on screen forward as the newest; the next change is made to it. */
+  async function startAgain() {
+    if (!view?.shown) return
+    const from = view.shown.number
+    setStartingAgain(true)
+    setNotice(null)
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}/start-again`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: from }),
+      })
+      const result = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(result?.error ?? 'That did not work. Try again in a moment.')
+      // The chat shows "Start again from version N" and the menu the new latest.
+      setVersionShown(null)
+      await load()
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'That did not work. Try again in a moment.')
+    } finally {
+      setStartingAgain(false)
+    }
+  }
+
   async function decide(rule: Rule, decision: 'approve' | 'reject') {
     const res = await fetch(`/api/proposals/rules/${rule.id}`, {
       method: 'POST',
@@ -157,9 +184,9 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
   return (
     <div className="proposal-screen">
       <header className="proposal-header">
-        <Link href={`/projects/${projectId}`} className="btn btn-sm btn-ghost">← {projectName}</Link>
+        <Link href={`/projects/${projectId}?view=proposals`} className="btn btn-sm btn-ghost">← {projectName}</Link>
         <div className="proposal-title">
-          Proposal
+          <span className="proposal-title-word">Proposal</span>
           {view.versions.length > 0 && (
             <select
               className="proposal-version"
@@ -173,6 +200,18 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
                 </option>
               ))}
             </select>
+          )}
+          {shown && shown.number !== view.currentVersion && (
+            <button
+              className="btn btn-sm"
+              onClick={startAgain}
+              disabled={startingAgain || waitingOn > 0}
+              title={waitingOn > 0
+                ? 'Claude is working on a change. You can start again once it is done.'
+                : `Carry on from version ${shown.number}: it is copied forward as the newest`}
+            >
+              {startingAgain ? 'Copying…' : 'Start again from this version'}
+            </button>
           )}
         </div>
         <div className="proposal-actions">

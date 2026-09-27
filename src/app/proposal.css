@@ -98,14 +98,121 @@
 }
 .proposal-chip button { border: none; background: none; cursor: pointer; color: inherit; font-size: 13px; line-height: 1; }
 
-/* Create proposal: the proposals already made on this project. */
-.proposal-earlier { display: flex; flex-direction: column; gap: 4px; }
-.proposal-earlier-row {
-  display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  font-size: 12px; color: var(--charcoal); text-decoration: none; transition: border-color .15s;
+/* ── The project's Proposals view ───────────────────────── */
+.proposals-content { max-width: 900px; }
+.proposals-loading { display: flex; justify-content: center; padding: 48px 0; color: var(--mid); }
+.proposals-empty { font-size: 13px; line-height: 1.6; color: var(--mid); max-width: 520px; }
+/* No proposals yet: a blank A4 page — cream, with a bronze rule under the
+   mark — beside what a proposal is and how it goes. */
+.proposals-empty-state {
+  display: flex; gap: 40px; align-items: center; padding: 36px 40px;
+  background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius);
 }
-.proposal-earlier-row:hover { border-color: var(--accent); }
+.proposals-empty-sheet {
+  flex-shrink: 0; width: 150px; aspect-ratio: 595 / 842; position: relative;
+  background: var(--warm-white); border: 1px solid var(--border); box-shadow: 0 10px 28px rgba(28,26,24,.10);
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 14px;
+}
+.proposals-empty-rule { position: absolute; left: 14px; right: 14px; top: 14px; height: 54%; background: #EDE6DB; }
+.proposals-empty-mark {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 20px;
+  letter-spacing: .06em; color: var(--charcoal);
+}
+.proposals-empty-lines { display: block; margin-top: 6px; height: 2px; width: 55%; background: var(--accent); box-shadow: 0 6px 0 rgba(139,111,71,.35); }
+.proposals-empty-text h2 {
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 26px; font-weight: 400; margin: 0 0 6px;
+}
+.proposals-empty-text p { font-size: 13.5px; line-height: 1.6; color: var(--mid); margin: 0 0 14px; max-width: 460px; }
+.proposals-empty-text ol { margin: 0 0 20px; padding-left: 20px; font-size: 13px; line-height: 1.6; color: var(--charcoal); }
+.proposals-empty-text li { margin-bottom: 4px; padding-left: 2px; }
+.proposals-empty-text li::marker { color: var(--accent); font-weight: 600; }
+.proposals-empty-aside { font-style: italic; }
+.proposals-notice {
+  font-size: 12.5px; line-height: 1.5; color: var(--charcoal); margin: 0 0 16px;
+  padding: 10px 12px; background: var(--warm-white);
+  border-left: 2px solid var(--accent); border-radius: var(--radius-sm);
+}
+.proposals-card {
+  display: grid; grid-template-columns: 136px 1fr; margin-bottom: 16px; overflow: hidden;
+  background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius);
+}
+/* The cover as the page it is: proposals are always A4 portrait. */
+.proposals-cover {
+  align-self: start; margin: 16px 0 16px 18px; width: 100px; aspect-ratio: 595 / 842;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: var(--cream); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  color: var(--mid); text-decoration: none;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 16px;
+}
+/* One that never produced a draft holds nothing; its card stays small. */
+.proposals-card--draftless { grid-template-columns: 90px 1fr; }
+.proposals-card--draftless .proposals-cover { width: 54px; font-size: 11px; }
+.proposals-cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.proposals-body { padding: 14px 18px 8px; min-width: 0; }
+.proposals-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.proposals-name { font-size: 15px; font-weight: 600; color: var(--charcoal); text-decoration: none; }
+.proposals-name:hover { text-decoration: underline; }
+.proposals-meta { font-size: 12px; color: var(--mid); }
+.proposals-state { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mid); margin: 6px 0 10px; }
+.proposals-state--stopped { justify-content: space-between; gap: 16px; line-height: 1.5; }
+/* Earlier versions fold away under the latest. */
+.proposals-fold {
+  display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 6px 0;
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 500; color: var(--mid);
+}
+.proposals-fold:hover { color: var(--charcoal); }
+.proposals-fold-mark {
+  width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 50%; font-size: 12px; line-height: 1;
+}
+.proposals-earlier { margin-bottom: 6px; }
+.proposals-version {
+  display: grid; grid-template-columns: 96px 1fr auto; gap: 14px; align-items: center;
+  padding: 9px 0; border-top: 1px solid var(--border); font-size: 12.5px;
+}
+.proposals-vnum { font-weight: 600; color: var(--charcoal); }
+.proposals-vnum small { display: block; font-weight: 400; font-size: 11px; color: var(--mid); }
+.proposals-version:not(.latest) .proposals-vnum { font-weight: 500; }
+.proposals-vsum {
+  color: var(--mid); line-height: 1.45; min-width: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.proposals-latest {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--green); margin-right: 8px;
+}
+.proposals-vact { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.proposals-again {
+  background: none; border: none; padding: 4px 6px; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 500; color: var(--accent);
+}
+.proposals-again:hover:not(:disabled) { text-decoration: underline; }
+.proposals-again:disabled { color: var(--mid); opacity: .55; cursor: default; }
+.proposals-ask { font-size: 12px; color: var(--charcoal); margin-right: 4px; }
+@media (max-width: 700px) {
+  .proposals-card { grid-template-columns: 76px 1fr; }
+  .proposals-cover { width: 60px; margin: 14px 0 14px 14px; font-size: 12px; }
+  .proposals-body { padding: 12px 14px 6px; }
+  .proposals-empty-state { flex-direction: column; align-items: flex-start; gap: 24px; padding: 24px 20px; }
+  .proposals-empty-sheet { width: 110px; }
+  .proposals-state--stopped { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .proposals-version { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* Phones: the header wraps — back and the version menu on one line, the
+   buttons on the next — and every field is 16px so iOS does not zoom the
+   page when it is tapped. */
+@media (max-width: 640px) {
+  .proposal-screen { height: 100dvh; }
+  .proposal-header { height: auto; flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
+  .proposal-title { flex-wrap: wrap; gap: 8px; }
+  /* The version menu says where you are; the word would push it onto a line of its own. */
+  .proposal-title-word { display: none; }
+  .proposal-actions { flex-basis: 100%; }
+  .proposal-version, .proposal-screen textarea { font-size: 16px; }
+  .proposal-pages { padding: 16px 12px 32px; gap: 16px; }
+}
 
 @media (max-width: 900px) {
   .proposal-body { flex-direction: column; }

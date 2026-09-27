@@ -16,14 +16,6 @@ interface Props {
   onClose: () => void
 }
 
-interface EarlierProposal {
-  id: string
-  status: string
-  currentVersion: number | null
-  createdAt: string
-  subtitle: string
-}
-
 const PAGE_CHOICES: Array<{ key: keyof ProposalPages; label: string; note: string }> = [
   { key: 'intro', label: 'Introduction', note: 'Contents, Our approach, Our process' },
   { key: 'aboutUs', label: 'About us', note: 'Chloe and Petra, with their full bios' },
@@ -71,16 +63,16 @@ export default function CreateProposalModal({
   const [instructions, setInstructions] = useState('')
   const [includeSetAside, setIncludeSetAside] = useState(false)
 
-  const [earlier, setEarlier] = useState<EarlierProposal[]>([])
   const [starts, setStarts] = useState<{ used: number; limit: number; left: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Only the day's starts: the proposals already made are on the Proposals view.
     fetch(`/api/proposals?projectId=${projectId}`)
-      .then(r => (r.ok ? r.json() : { proposals: [] }))
-      .then(b => { setEarlier(b.proposals ?? []); setStarts(b.starts ?? null) })
+      .then(r => (r.ok ? r.json() : { starts: null }))
+      .then(b => setStarts(b.starts ?? null))
       .catch(() => {})
   }, [projectId])
 
@@ -151,23 +143,6 @@ export default function CreateProposalModal({
               ? `Claude runs on Tom’s Claude plan, which allows ${starts.limit} starts a day. A proposal and a sitting of changes usually takes one; coming back to it after a break takes another. ${starts.left} left today.`
               : `Today’s ${starts.limit} starts on Tom’s Claude plan look to be used up, so Claude may not be able to begin until tomorrow. You can still create it: if Claude can’t start, the proposal will say so, and writing to it later starts it.`}
           </p>
-        )}
-
-        {earlier.length > 0 && (
-          <div className="field">
-            <label className="field-label">Proposals already made</label>
-            <div className="proposal-earlier">
-              {earlier.map(p => (
-                <a key={p.id} className="proposal-earlier-row" href={`/projects/${projectId}/proposals/${p.id}`}>
-                  <span>{p.subtitle || 'Proposal'}</span>
-                  <span className="export-check-note">
-                    {p.currentVersion ? `version ${p.currentVersion}` : p.status === 'failed' ? 'did not finish' : 'in progress'}
-                    {' · '}{new Date(p.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                  </span>
-                </a>
-              ))}
-            </div>
-          </div>
         )}
 
         <div className="field">
