@@ -832,6 +832,29 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     })
   }
 
+  // A wall loaded while the studio view was hidden — the project opened on
+  // Proposals — was fitted to a canvas with no size, and would appear a few
+  // pixels across. Fit it again, at the zoom it was left at, once it shows.
+  const fittedBlindRef = useRef(false)
+  function refitIfFittedBlind() {
+    const s = stateRef.current
+    if (!fittedBlindRef.current || !s.elev) return
+    fittedBlindRef.current = false
+    const fit = computeFitZoom(s.elev.origW, s.elev.origH)
+    const rel = loadRelativeZoom(optionId)
+    const zoom = Math.max(MIN_REL_ZOOM * fit, Math.min(MAX_REL_ZOOM * fit, rel * fit))
+    const elev = { ...s.elev }
+    const scale = applyZoom(zoom, elev, s.scale, s.artworks, s.masks, fit)
+    setState(st => ({ ...st, zoom, fitZoom: fit, elev, scale }))
+    requestAnimationFrame(() => {
+      const vp = vpRef.current
+      if (vp) {
+        vp.scrollLeft = (vp.scrollWidth - vp.clientWidth) / 2
+        vp.scrollTop = (vp.scrollHeight - vp.clientHeight) / 2
+      }
+    })
+  }
+
   // Snap back to fit (relative zoom = 1.0). Also recomputes fitZoom from the current viewport
   // so a window resize since load is accounted for.
   function setZoomFit(currentState: StudioState) {
@@ -1438,6 +1461,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       // to attach — so we must commit *before* waiting for the ref, then run
       // applyZoom once it's live.
       const fit = computeFitZoom(origW, origH)
+      fittedBlindRef.current = !document.getElementById('canvas-area')?.clientWidth
       const rel = loadRelativeZoom(optionId)
       const zoom = Math.max(MIN_REL_ZOOM * fit, Math.min(MAX_REL_ZOOM * fit, rel * fit))
       const scale: Scale | null = opts.scalePxPerCm
@@ -2769,6 +2793,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     onCalibMouseUp,
     changeZoom,
     setZoomFit,
+    refitIfFittedBlind,
     addArtworks,
     placeExistingWorks,
     deleteArtwork,

@@ -6,8 +6,8 @@
 .budget-view { flex: 1; overflow-y: auto; background: var(--cream); display: flex; flex-direction: column; }
 
 /* Sticky dark header bar */
+.budget-sticky { position: sticky; top: 0; z-index: 10; }
 .budget-header {
-  position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 32px; height: 52px;
   background: var(--charcoal); flex-shrink: 0;
@@ -33,13 +33,24 @@
 
 /* Preview as client button */
 .budget-preview-btn {
-  padding: 6px 14px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 500;
-  border: 1px solid rgba(255,255,255,0.3); background: transparent; color: rgba(255,255,255,0.6);
-  cursor: pointer; transition: all .15s; letter-spacing: .02em; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 13px; font-family: var(--font-karla, 'Karla'); font-size: 11.5px; font-weight: 600;
+  border: 1px solid white; background: white; color: var(--charcoal);
+  cursor: pointer; transition: opacity .15s; letter-spacing: .02em; white-space: nowrap;
   border-radius: var(--radius-sm);
 }
-.budget-preview-btn:hover { background: rgba(255,255,255,0.12); color: white; }
-.budget-preview-btn.active { background: rgba(255,255,255,0.15); color: white; border-color: rgba(255,255,255,0.5); }
+.budget-preview-btn:hover { opacity: .88; }
+/* Across the page while the budget shows what the client sees. */
+.budget-client-band {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 8px 16px; background: #EDE6DB; color: var(--accent);
+  font-family: var(--font-karla, 'Karla'); font-size: 11px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.budget-client-band button {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+  letter-spacing: .06em; color: var(--charcoal); text-decoration: underline; text-underline-offset: 3px;
+}
 
 /* Export PDF button */
 .budget-export-btn {
@@ -57,12 +68,6 @@
 .budget-project-header { margin-bottom: 36px; }
 .budget-project-name { font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 28px; font-weight: 400; margin-bottom: 3px; }
 .budget-project-client { font-size: 13px; color: var(--mid); }
-.budget-client-view-badge {
-  display: inline-block; margin-top: 8px; padding: 2px 9px;
-  font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
-  background: var(--accent-light); color: var(--accent); border: 1px solid rgba(139,111,71,.25);
-  border-radius: var(--radius-xs);
-}
 
 /* Section kicker */
 .budget-section { margin-bottom: 44px; }
@@ -293,7 +298,8 @@
   .client-tab-bar,
   .client-view-toggle,
   .budget-header,
-  .budget-view-toggle,
+  .budget-client-band,
+  .studio-places,
   .budget-export-btn,
   .budget-preview-btn,
   .budget-cost-edit,

@@ -32,29 +32,29 @@
 }
 /* The title is centred on the header, while .studio-header-right never
    shrinks, so past a certain narrowness the two collide. The right-hand group
-   is the same on every view — the view tabs, Share, Export and feedback — so
-   there is one threshold. (There used to be three: Share and Export showed on
-   the studio view only, and an approved option added a chip and an Unapprove
-   button that the sidebar already had.)
+   is the same on every view — the five places and the "⋯" menu — so there is
+   one threshold.
 
-   ┌────────────────────────────────┬────────┬──────────┬────────┐
-   │ right-hand group               │ width  │ collides │ used   │
-   ├────────────────────────────────┼────────┼──────────┼────────┤
-   │ tabs + Share + Export + feedback│  411px │  1055px  │ 1080px │
-   └────────────────────────────────┴────────┴──────────┴────────┘
+   ┌──────────────────────────────┬────────┬──────────┬──────┬────────┐
+   │ right-hand group             │ width  │ collides │ 60px │ used   │
+   ├──────────────────────────────┼────────┼──────────┼──────┼────────┤
+   │ five places + sep + ⋯        │  402px │  1037px  │ 1149 │ 1160px │
+   └──────────────────────────────┴────────┴──────────┴──────┴────────┘
 
    Title is 185px. Collision point is 2 × (title/2 + 4 + 20 + group), where 20
-   is .studio-header's padding and 4 is the slack the first version of this
-   table used. The "used" column rounds that up again.
+   is .studio-header's padding and 4 is slack. The title now shares a word
+   with the first place ("Studio" / STUDIO), and side by side at a hand's
+   breadth they read as a stutter (Tom), so it gives way while the gap is
+   still 60px: 2 × (title/2 + 60 + 20 + group). "used" rounds that up.
 
-   ── RE-MEASURE WHENEVER A BUTTON JOINS OR A LABEL CHANGES ──
+   ── RE-MEASURE WHENEVER A PLACE JOINS OR A LABEL CHANGES ──
    This has silently broken twice: the Index tab added ~59px against
    thresholds of 939/1309, and the Notes tab added another ~60px against
    1103/1434. Both times the toggle rode over the wordmark across a ~160px
    band of window widths, and both times nothing failed — it just looked
    wrong at one size. There is no test that can catch it; measure in a
    browser with the real fonts loaded and update the table above. */
-@media (max-width: 1080px) {
+@media (max-width: 1160px) {
   .header-app-title { display: none; }
 }
 .save-status--error  { color: var(--red); }
@@ -101,6 +101,10 @@
 .export-menu { min-width: 240px; }
 .export-menu button { padding: 8px 14px; }
 .export-menu-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--mid); }
+.export-menu-head {
+  padding: 6px 14px 2px; font-size: 10px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--mid);
+}
 .studio-tab-divider { width: 1px; height: 16px; background: var(--border); margin: 0 6px; flex-shrink: 0; }
 .studio-tab-add {
   padding: 8px 12px; font-size: 11px; cursor: pointer;
@@ -510,12 +514,27 @@
   border-radius: var(--radius-xs);
 }
 .studio-notice-close:hover { color: var(--charcoal); }
-/* Budget view toggle in studio header */
-.budget-view-toggle { display: flex; gap: 2px; }
-.budget-view-tab {
-  padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: var(--font-karla, 'Karla');
-  border: 1px solid var(--border); background: transparent; color: var(--mid);
-  cursor: pointer; transition: all .15s; border-radius: var(--radius-sm);
+/* The project's places, in the header: small spaced capitals like the
+   dashboard's kicker, grey until chosen, a bronze dot under the one you are
+   in. Deliberately unlike the wall tabs directly below (sentence case, an
+   underline, lettered badges): the header says where you are in the
+   project, the row below says which wall. */
+.studio-places { display: flex; gap: 20px; }
+.studio-place {
+  position: relative; padding: 6px 0; background: none; border: none; cursor: pointer;
+  font-family: var(--font-karla, 'Karla'); font-size: 11px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: #9a938b;
+  transition: color .15s;
 }
-.budget-view-tab.active { background: var(--charcoal); color: white; border-color: var(--charcoal); }
-.budget-view-tab:hover:not(.active) { color: var(--charcoal); border-color: var(--charcoal); }
+.studio-place:hover { color: var(--charcoal); }
+.studio-place.active { color: var(--charcoal); cursor: default; }
+.studio-place.active::after {
+  content: ''; position: absolute; left: 50%; bottom: -3px;
+  width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent);
+}
+.studio-header-sep { width: 1px; height: 16px; background: var(--border); margin: 0 6px 0 10px; }
+.studio-more {
+  width: 32px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: var(--radius-sm); color: var(--charcoal); cursor: pointer;
+}
+.studio-more:hover, .studio-more.open { background: var(--cream); }

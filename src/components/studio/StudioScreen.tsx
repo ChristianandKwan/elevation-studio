@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useStudio } from '@/hooks/useStudio'
 import StudioCanvas from './StudioCanvas'
 import StudioSidebar from './StudioSidebar'
-import ExportMenu from './ExportMenu'
+import ProjectMenu from './ProjectMenu'
 import ExportModal from '@/components/export/ExportModal'
 import CreateProposalModal from '@/components/export/CreateProposalModal'
 import TabBar from './TabBar'
@@ -18,7 +18,9 @@ import { DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { captureBudgetImage, PAGE_W, PAGE_PAD } from '@/components/budget/captureBudget'
 import { storedVatMode } from '@/components/budget/vatMode'
-import FeedbackButton from '@/components/feedback/FeedbackButton'
+import { FeedbackDialog } from '@/components/feedback/FeedbackButton'
+import { installFeedbackLogger } from '@/lib/feedback/logger'
+import ProposalsView from '@/components/proposals/ProposalsView'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog, Work } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
@@ -104,6 +106,8 @@ interface Props {
   initialMessages: OptionMessage[]
   /** Whether the proposal engine is configured; Create proposal is hidden until it is. */
   proposalsEnabled?: boolean
+  /** Where the project opens: Proposals when coming back from one. */
+  initialView?: 'studio' | 'proposals'
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
@@ -138,7 +142,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists, initialMessages, proposalsEnabled = false }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists, initialMessages, proposalsEnabled = false, initialView = 'studio' }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -155,7 +159,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const [projectStatus, setProjectStatus] = useState(project.status)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string> | null>(null)
   const [budget, setBudget] = useState<number | null>(project.budget)
-  const [view, setView] = useState<'studio' | 'index' | 'budget' | 'notes'>('studio')
+  const [view, setView] = useState<'studio' | 'index' | 'budget' | 'notes' | 'proposals'>(initialView)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  // The speech-bubble button used to install this on mount; the "⋯" menu's
+  // form mounts only when opened, and the report should carry what went
+  // before it.
+  useEffect(() => { installFeedbackLogger() }, [])
   const [notes, setNotes] = useState<Note[]>(initialNotes)
   const [artists, setArtists] = useState<Artist[]>(initialArtists)
   // Every work in the project, placed or not. The index reads this; the
@@ -325,6 +334,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       })
     },
   })
+
+  // Opened on Proposals, the wall loaded out of sight; fit it once it shows.
+  useEffect(() => {
+    if (view !== 'studio') return
+    const id = requestAnimationFrame(() => studio.refitIfFittedBlind())
+    return () => cancelAnimationFrame(id)
+  }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // When we call loadOption directly in handleSwitch we skip the effect for that one render
   const skipNextLoadRef = useRef(false)
@@ -1694,7 +1710,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             }}
           >
             {/* No spinner here: the full-screen C&K covers the header while this saves. */}
-            {returningToDashboard ? 'Saving…' : '← Dashboard'}
+            {returningToDashboard ? 'Saving…' : '← Projects'}
           </button>
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
           <h2 className="studio-project-name">
@@ -1713,50 +1729,43 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         </div>
         <div className="header-app-title">Elevation Studio</div>
         <div className="studio-header-right">
-          {/* Studio / Budget view toggle */}
-          <div className="budget-view-toggle">
-            <button
-              className={`budget-view-tab${view === 'studio' ? ' active' : ''}`}
-              onClick={() => { setView('studio'); setIsPreviewingClientView(false) }}
-            >
-              Studio
-            </button>
-            <button
-              className={`budget-view-tab${view === 'index' ? ' active' : ''}`}
-              onClick={() => { syncStudioIntoElevations(); setView('index'); setIsPreviewingClientView(false) }}
-            >
-              Index
-            </button>
-            <button
-              className={`budget-view-tab${view === 'notes' ? ' active' : ''}`}
-              onClick={() => { syncStudioIntoElevations(); setView('notes'); setIsPreviewingClientView(false) }}
-            >
-              Notes
-            </button>
-            <button
-              className={`budget-view-tab${view === 'budget' ? ' active' : ''}`}
-              onClick={() => { syncStudioIntoElevations(); setView('budget') }}
-            >
-              Budget
-            </button>
-          </div>
-
-          {/* On every view: the link is needed as often from the budget as
-              from the wall. Short labels, because this is the most crowded
-              row in the app — the full meaning is in the tooltip and menu. */}
-          <button className="btn btn-sm btn-ghost" title="Share this project with the client" onClick={() => studio.setShowShareModal(true)}>
-            Share
-          </button>
-          <ExportMenu
+          <nav className="studio-places" aria-label="Project">
+            {([
+              ['studio', 'Studio'],
+              ['index', 'Index'],
+              ['notes', 'Notes'],
+              ['budget', 'Budget'],
+              ['proposals', 'Proposals'],
+            ] as const).map(([place, label]) => (
+              <button
+                key={place}
+                className={`studio-place${view === place ? ' active' : ''}`}
+                aria-current={view === place ? 'page' : undefined}
+                onClick={() => {
+                  if (view === place) return
+                  // As before: every view but the wall reads the elevations, so the wall's
+                  // latest state goes into them first.
+                  if (place !== 'studio') syncStudioIntoElevations()
+                  // The client view is the budget's; leaving it ends it.
+                  if (place !== 'budget') setIsPreviewingClientView(false)
+                  setView(place)
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="studio-header-sep" />
+          <ProjectMenu
+            onShare={() => studio.setShowShareModal(true)}
             wallLabel={activeElev && activeElev.elevation_options.length > 1
               ? `${activeElev.name} · ${activeOptionTitle}`
               : activeElev?.name ?? ''}
             canExportImage={!!state.elev && !!state.scale}
             onExportImage={studio.exportPng}
             onExportPack={openPackExport}
-            onCreateProposal={proposalsEnabled ? openCreateProposal : undefined}
+            onFeedback={() => setFeedbackOpen(true)}
           />
-          <FeedbackButton />
         </div>
       </div>
 
@@ -1945,6 +1954,11 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         />
       )}
 
+      {/* Proposals view — the proposals Claude has made for this project. Mounted only when active. */}
+      {view === 'proposals' && (
+        <ProposalsView projectId={project.id} onNewProposal={proposalsEnabled ? openCreateProposal : undefined} />
+      )}
+
       {/* Index view — every work in the project, placed or not. Mounted only when active. */}
       {view === 'index' && (
         <IndexScreen
@@ -2123,6 +2137,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           </div>
         )
       })()}
+
+      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
 
       {creatingProposal && (
         <CreateProposalModal

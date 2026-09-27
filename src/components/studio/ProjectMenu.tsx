@@ -3,24 +3,25 @@
 import { useEffect, useRef, useState } from 'react'
 
 interface Props {
+  onShare: () => void
   /** The wall on screen, as the menu names it: "Living Room · Option B". */
   wallLabel: string
   /** False until the wall has a scale — a picture of it could not be sized. */
   canExportImage: boolean
   onExportImage: () => void
   onExportPack: () => void
-  /** Absent until the proposal engine is set up, which hides the item. */
-  onCreateProposal?: () => void
+  onFeedback: () => void
 }
 
 /**
- * The header's one Export button. There are three things to take out of a
- * project — a proposal Claude lays out, the whole proposal as a pack to lay
- * out by hand, or the wall on screen as a picture. They share one button
- * rather than crowding the header, whose right-hand group is measured by hand
- * (see studio.css).
+ * The header's "⋯": everything done to a project now and then, rather than
+ * moved between. Sharing with the client happens about once per project,
+ * exports now and again, feedback when something is wrong. The places —
+ * Studio, Index, Notes, Budget, Proposals — stay in the header itself, whose
+ * right-hand group is measured by hand (see studio.css). Create proposal
+ * lives on the Proposals view, beside the proposals already made.
  */
-export default function ExportMenu({ wallLabel, canExportImage, onExportImage, onExportPack, onCreateProposal }: Props) {
+export default function ProjectMenu({ onShare, wallLabel, canExportImage, onExportImage, onExportPack, onFeedback }: Props) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -52,7 +53,9 @@ export default function ExportMenu({ wallLabel, canExportImage, onExportImage, o
     <>
       <button
         ref={buttonRef}
-        className="btn btn-sm"
+        className={`studio-more${at ? ' open' : ''}`}
+        title="Share, export and feedback"
+        aria-label="Share, export and feedback"
         aria-haspopup="menu"
         aria-expanded={!!at}
         onClick={e => {
@@ -62,7 +65,9 @@ export default function ExportMenu({ wallLabel, canExportImage, onExportImage, o
           setAt({ x: window.innerWidth - r.right, y: r.bottom + 4 })
         }}
       >
-        Export
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" />
+        </svg>
       </button>
       {at && (
         <div
@@ -71,16 +76,12 @@ export default function ExportMenu({ wallLabel, canExportImage, onExportImage, o
           role="menu"
           style={{ right: at.x, top: at.y }}
         >
-          {onCreateProposal && (
-            <button role="menuitem" onClick={() => { setAt(null); onCreateProposal() }}>
-              Create proposal…
-              <span className="export-menu-sub">Claude lays it out in the C&amp;K style; refine it by chat</span>
-            </button>
-          )}
-          <button role="menuitem" onClick={() => { setAt(null); onExportPack() }}>
-            Proposal pack…
-            <span className="export-menu-sub">Every elevation, the works and the budget</span>
+          <button role="menuitem" onClick={() => { setAt(null); onShare() }}>
+            Share with the client…
+            <span className="export-menu-sub">The client’s link, and a new one if it’s needed</span>
           </button>
+          <div className="studio-tab-menu-sep" />
+          <div className="export-menu-head">Export</div>
           <button
             role="menuitem"
             disabled={!canExportImage}
@@ -90,6 +91,15 @@ export default function ExportMenu({ wallLabel, canExportImage, onExportImage, o
             <span className="export-menu-sub">
               {canExportImage ? `${wallLabel} · PNG` : 'Set the wall’s scale first'}
             </span>
+          </button>
+          <button role="menuitem" onClick={() => { setAt(null); onExportPack() }}>
+            Proposal pack…
+            <span className="export-menu-sub">Every elevation, the works and the budget</span>
+          </button>
+          <div className="studio-tab-menu-sep" />
+          <button role="menuitem" onClick={() => { setAt(null); onFeedback() }}>
+            Report a problem or an idea
+            <span className="export-menu-sub">Sent with a picture of the screen</span>
           </button>
         </div>
       )}

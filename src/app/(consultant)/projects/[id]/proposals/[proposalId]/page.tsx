@@ -5,6 +5,7 @@ import ProposalScreen from '@/components/proposals/ProposalScreen'
 
 interface Props {
   params: Promise<{ id: string; proposalId: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
 /**
@@ -12,8 +13,9 @@ interface Props {
  * Everything live comes from /api/proposals/[id]; this only establishes that
  * the project is the consultant's and hands over the names.
  */
-export default async function ProposalPage({ params }: Props) {
+export default async function ProposalPage({ params, searchParams }: Props) {
   const { id, proposalId } = await params
+  const v = Number((await searchParams).version)
   const supabase = await createClient()
   const user = await getCurrentUser()
 
@@ -23,5 +25,6 @@ export default async function ProposalPage({ params }: Props) {
   ])
   if (!project || !proposal || proposal.project_id !== project.id) notFound()
 
-  return <ProposalScreen projectId={project.id} projectName={project.name} proposalId={proposal.id} />
+  return <ProposalScreen projectId={project.id} projectName={project.name} proposalId={proposal.id}
+    initialVersion={Number.isInteger(v) && v > 0 ? v : null} />
 }

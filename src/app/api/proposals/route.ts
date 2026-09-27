@@ -1,11 +1,12 @@
 /**
  * POST { projectId, brief } — Create proposal: build and freeze the export
  * pack, save the proposal, start the engine. Returns { id }.
- * GET ?projectId= — the project's proposals, newest first.
+ * GET ?projectId= — the project's proposals, newest first, with their versions
+ * (the project's Proposals view).
  */
 import { NextResponse } from 'next/server'
 import { readBrief } from '@/lib/proposals/brief'
-import { createProposal, startsToday } from '@/lib/proposals/store'
+import { createProposal, projectProposals, startsToday } from '@/lib/proposals/store'
 import { studioUrlFor } from '@/lib/proposals/fire'
 import { consultant, failure } from '@/lib/proposals/consultantRoute'
 
@@ -38,14 +39,6 @@ export async function GET(request: Request) {
   if (!projectId) return NextResponse.json({ error: 'Bad request' }, { status: 400 })
   const who = await consultant(projectId)
   if (who instanceof NextResponse) return who
-  const { data } = await who.db.from('proposals')
-    .select('id, status, current_version, created_at, brief')
-    .eq('project_id', projectId).order('created_at', { ascending: false })
-  return NextResponse.json({
-    starts: await startsToday(who.db),
-    proposals: (data ?? []).map(p => ({
-      id: p.id, status: p.status, currentVersion: p.current_version, createdAt: p.created_at,
-      subtitle: (p.brief as { subtitle?: string } | null)?.subtitle ?? '',
-    })),
-  })
+  const [starts, proposals] = await Promise.all([startsToday(who.db), projectProposals(who.db, projectId)])
+  return NextResponse.json({ starts, proposals })
 }
