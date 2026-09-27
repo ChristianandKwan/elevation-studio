@@ -1,6 +1,7 @@
 /** POST { body, page } — the consultant writes to Claude about the proposal. */
 import { NextResponse } from 'next/server'
 import { addConsultantMessage } from '@/lib/proposals/store'
+import { studioUrlFor } from '@/lib/proposals/fire'
 import { consultantAndProposal, failure } from '@/lib/proposals/consultantRoute'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const found = await consultantAndProposal(id)
   if (found instanceof NextResponse) return found
   try {
-    return NextResponse.json(await addConsultantMessage(found.who.db, found.proposal, { body: text, page }, new URL(request.url).origin))
+    return NextResponse.json(await addConsultantMessage(found.who.db, found.proposal, { body: text, page }, studioUrlFor(request)))
   } catch (err) {
     return failure(err, 'The message could not be sent.')
   }
