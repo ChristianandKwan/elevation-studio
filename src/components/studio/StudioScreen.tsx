@@ -8,6 +8,7 @@ import StudioCanvas from './StudioCanvas'
 import StudioSidebar from './StudioSidebar'
 import ExportMenu from './ExportMenu'
 import ExportModal from '@/components/export/ExportModal'
+import CreateProposalModal from '@/components/export/CreateProposalModal'
 import TabBar from './TabBar'
 import CalibrationModal from './CalibrationModal'
 import AddArtworkModal from './AddArtworkModal'
@@ -101,6 +102,8 @@ interface Props {
   initialArtists: Artist[]
   /** Every message on every option, client's and C&K's (038). */
   initialMessages: OptionMessage[]
+  /** Whether the proposal engine is configured; Create proposal is hidden until it is. */
+  proposalsEnabled?: boolean
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
@@ -135,7 +138,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists, initialMessages }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists, initialMessages, proposalsEnabled = false }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -1510,6 +1513,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const budgetCaptureResolve = useRef<((url: string | null) => void) | null>(null)
 
   const [exportingPack, setExportingPack] = useState(false)
+  const [creatingProposal, setCreatingProposal] = useState(false)
 
   /**
    * Write everything still waiting to save — the last artwork moved, a price
@@ -1539,6 +1543,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     syncStudioIntoElevations()
     await flushAllPending()
     setExportingPack(true)
+  }
+
+  /** The same, for a proposal: it is built from the pack, from what is saved. */
+  async function openCreateProposal() {
+    syncStudioIntoElevations()
+    await flushAllPending()
+    setCreatingProposal(true)
   }
 
   // ─── WHILE THE CLIENT IS IN THE PORTAL ───────────────────────────
@@ -1749,6 +1760,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             canExportImage={!!state.elev && !!state.scale}
             onExportImage={studio.exportPng}
             onExportPack={openPackExport}
+            onCreateProposal={proposalsEnabled ? openCreateProposal : undefined}
           />
           <FeedbackButton />
         </div>
@@ -2117,6 +2129,17 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           </div>
         )
       })()}
+
+      {creatingProposal && (
+        <CreateProposalModal
+          projectId={project.id}
+          projectName={project.name}
+          elevations={indexElevations}
+          works={works.map(w => ({ id: w.id, name: w.name, artist: w.artist }))}
+          setAsideCount={works.filter(w => w.setAside).length}
+          onClose={() => setCreatingProposal(false)}
+        />
+      )}
 
       {exportingPack && (
         <ExportModal

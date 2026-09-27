@@ -8,6 +8,7 @@ import './budget.css'
 import './index-view.css'
 import './notes.css'
 import './conversation.css'
+import './proposal.css'
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
