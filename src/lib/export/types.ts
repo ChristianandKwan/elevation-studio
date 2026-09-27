@@ -134,8 +134,18 @@ export interface ExportOption {
   /** Paths inside the zip. */
   renderFile: string | null
   thumbnailFile: string | null
-  /** Works on this wall, in the order they were placed. */
+  /**
+   * Works on this wall, left to right as they hang. A caption that lists
+   * them in any other order describes a picture the reader is not looking at.
+   */
   workIds: string[]
+  /**
+   * The option's own cost ex VAT — its works, their framing and extras —
+   * from `budgetCalc.ts`'s `getOptionTotals`, the figure the budget screen
+   * puts on the option. Installation and the consultant fee belong to the
+   * project and are not in it.
+   */
+  cost: number
   notes: ExportNote[]
   budgetNote: ExportBudgetNote | null
   /** The conversation with the client on this option, oldest first. */

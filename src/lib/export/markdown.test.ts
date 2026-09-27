@@ -14,7 +14,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { UNSHOWN_BUDGET_NOTE, buildMarkdown, fileSlug, money } from './markdown.ts'
+import { SIZE_CONVENTION, UNSHOWN_BUDGET_NOTE, buildMarkdown, fileSlug, money } from './markdown.ts'
 import type {
   ExportChoices, ExportElevation, ExportSnapshot, ExportWork,
 } from './types.ts'
@@ -45,7 +45,7 @@ function option(over: Partial<ExportElevation['options'][number]> = {}) {
   return {
     id: 'opt1', title: 'Option A', picked: true,
     renderFile: 'images/elevations/living-room-option-a.jpg', thumbnailFile: null,
-    workIds: ['w1'], notes: [], budgetNote: null, conversation: [],
+    workIds: ['w1'], cost: 0, notes: [], budgetNote: null, conversation: [],
     ...over,
   }
 }
@@ -117,7 +117,7 @@ describe('the document holds its shape', () => {
       elevations: [elevation({ options: [option({ workIds: ['w1', 'w2'] })] })],
     }))
     const list = md.slice(md.indexOf('**On this wall**'))
-    assert.ok(list.includes('- Julian Opie — Street 1 (100 × 70 cm)\n- Julian Opie — Sprinters 1'))
+    assert.ok(list.includes('- Julian Opie — Street 1 (70 × 100 cm)\n- Julian Opie — Sprinters 1'))
   })
 })
 
@@ -184,7 +184,7 @@ describe('works', () => {
 
   test('facts are labelled, so they survive being reordered downstream', () => {
     const md = buildMarkdown(snapshot())
-    assert.ok(md.includes('**Size** 100 × 70 cm'))
+    assert.ok(md.includes('**Size** 70 × 100 cm'))
     assert.ok(md.includes('**Medium** Screenprint'))
     assert.ok(md.includes('**Edition** 12/50'))
     assert.ok(md.includes('**Price** £4,500 ex VAT'))
@@ -295,7 +295,7 @@ describe('elevations', () => {
     }))
     assert.equal(md.match(/^### Living Room$/gm)?.length, 1)
     assert.equal(md.match(/^#### Option /gm)?.length, 2)
-    assert.equal(md.match(/\*\*Wall\*\* 320 × 240 cm/g)?.length, 1)
+    assert.equal(md.match(/\*\*Wall\*\* 240 × 320 cm/g)?.length, 1)
     assert.ok(md.includes('**Options** 2'))
   })
 
@@ -472,5 +472,40 @@ describe('budget notes and conversations (038)', () => {
 
   test('no conversation, no heading', () => {
     assert.ok(!buildMarkdown(snapshot()).includes('Conversation with the client'))
+  })
+})
+
+describe('what the proposal builder copies verbatim', () => {
+  // The design system tells whoever builds the proposal to copy sizes and
+  // prices exactly and never to add anything up. These pin the two things
+  // the Nepean trial found it could not copy as they were.
+
+  test('sizes run height × width, as C&K write them, and the top says so', () => {
+    const md = buildMarkdown(snapshot({ works: [work({ wCm: 114.3, hCm: 101.6 })] }))
+    assert.ok(md.includes('**Size** 101.6 × 114.3 cm'))
+    assert.ok(md.includes('(101.6 × 114.3 cm)'), 'the list of works on a wall too')
+    const top = md.split('## The project')[0]
+    assert.ok(top.includes(SIZE_CONVENTION))
+  })
+
+  test('every option carries its own cost, not only the picked one', () => {
+    const md = buildMarkdown(snapshot({
+      elevations: [elevation({
+        options: [
+          option({ id: 'a', title: 'Option A', picked: true, cost: 17986 }),
+          option({ id: 'b', title: 'Option B', picked: false, cost: 10085 }),
+        ],
+      })],
+    }))
+    const a = md.split('#### Option A')[1].split('#### Option B')[0]
+    const b = md.split('#### Option B')[1]
+    assert.ok(a.includes('**Cost** £17,986 ex VAT, before installation and fee'))
+    assert.ok(b.includes('**Cost** £10,085 ex VAT, before installation and fee'))
+  })
+
+  test('an option with nothing priced says nothing about cost', () => {
+    // "£0" would read as a free option rather than an unpriced one.
+    const md = buildMarkdown(snapshot({ elevations: [elevation({ options: [option({ cost: 0 })] })] }))
+    assert.ok(!md.includes('**Cost**'))
   })
 })

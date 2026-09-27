@@ -74,10 +74,20 @@ export function moneyRange(min: number, max?: number): string {
   return `${money(min)} – ${money(max)}`
 }
 
-/** 100 × 70 cm, with the multiplication sign rather than a letter x. */
+/**
+ * 70 × 100 cm: height first, with the multiplication sign.
+ *
+ * Height × width is how Christian & Kwan write every size in their proposals
+ * ("Sheet: 101.6 x 114.3 cm"), and the art world with them. The studio
+ * stores width and height, so a caption copied from this file verbatim — as
+ * the design system tells the proposal builder to — came out the wrong way
+ * round. The top of the document says which way these run.
+ */
 function size(wCm: number, hCm: number): string {
-  return `${wCm} × ${hCm} cm`
+  return `${hCm} × ${wCm} cm`
 }
+
+export const SIZE_CONVENTION = 'Sizes are height × width.'
 
 /** `**Label** value · **Label** value` — the fact line used throughout. */
 function facts(pairs: Array<[string, string | null | undefined]>): string {
@@ -248,9 +258,14 @@ function optionSection(
 ): string[] {
   const out: string[] = [`#### ${opt.title}`]
 
+  // The option's own cost, costed by the budget screen's arithmetic in
+  // pack.ts. Without it only the picked option carried a figure (in the
+  // budget table), and the proposal builder is told never to add prices up
+  // itself — so every other option went out with no total.
   out.push(facts([
     ['Picked by the client', opt.picked ? 'yes' : null],
     ['Works', String(opt.workIds.length)],
+    ['Cost', opt.cost > 0 ? `${money(opt.cost)} ex VAT, before installation and fee` : null],
   ]))
 
   if (opt.renderFile) out.push(`![${elev.name}, ${opt.title}](${opt.renderFile})`)
@@ -337,6 +352,7 @@ export function buildMarkdown(snap: ExportSnapshot): string {
       ['Consultant', snap.consultantName],
       ['Exported', snap.exportedAt],
     ]),
+    `*${SIZE_CONVENTION} Works on a wall are listed left to right as they hang.*`,
     ...(hasUnshownBudgetNote(snap)
       ? [`*Every note Christian & Kwan wrote is in this pack. Budget notes marked “${UNSHOWN_BUDGET_NOTE}” were kept from the client in the portal.*`]
       : []),

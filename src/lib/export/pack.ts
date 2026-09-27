@@ -41,6 +41,7 @@ import { parseSubLineItems, parseDiscountStatus, parseDiscountPercent } from '@/
 import { parseSetAside } from '@/lib/works'
 import type { BudgetConsultantFee, BudgetCustomLineItem, BudgetInstallation } from '@/types'
 import { buildMarkdown, fileSlug } from './markdown'
+import { hangingOrder } from './order'
 import { decodeCapturedImage } from './capturedImage'
 import { EXPORTS_BUCKET, exportObjectPath } from './bucket'
 import type {
@@ -401,6 +402,31 @@ async function renderWall(
 // ── The budget ─────────────────────────────────────────────────────────────
 
 /**
+ * A placement as the budget screen's arithmetic sees it. Shared by the
+ * budget table and each option's own cost, so the two cannot disagree.
+ */
+function toBudgetArtwork(a: PlacementRow, byId: Map<string, WorkRow>): BudgetArtwork | null {
+  const w = byId.get(a.work_id)
+  if (!w) return null
+  return {
+    id: a.id,
+    workId: w.id,
+    name: w.name ?? 'Untitled',
+    artist: w.artist ?? '',
+    wCm: w.w_cm,
+    hCm: w.h_cm,
+    price: w.price ?? 0,
+    visible: a.visible,
+    note: '',
+    noteShownToClient: true,
+    vatApplies: w.vat_applies ?? true,
+    discountStatus: parseDiscountStatus(w.discount_status),
+    discountPercent: parseDiscountPercent(w.discount_percent),
+    subLineItems: parseSubLineItems(w.sub_line_items),
+  }
+}
+
+/**
  * The money, using the budget screen's own arithmetic.
  *
  * Every figure here comes from `budgetCalc.ts`. Nothing is recomputed: there
@@ -433,27 +459,7 @@ function buildBudget(
   imageFile: string | null,
 ) {
   const byId = new Map(works.map(w => [w.id, w]))
-
-  const asBudgetArtwork = (a: PlacementRow): BudgetArtwork | null => {
-    const w = byId.get(a.work_id)
-    if (!w) return null
-    return {
-      id: a.id,
-      workId: w.id,
-      name: w.name ?? 'Untitled',
-      artist: w.artist ?? '',
-      wCm: w.w_cm,
-      hCm: w.h_cm,
-      price: w.price ?? 0,
-      visible: a.visible,
-      note: '',
-      noteShownToClient: true,
-      vatApplies: w.vat_applies ?? true,
-      discountStatus: parseDiscountStatus(w.discount_status),
-      discountPercent: parseDiscountPercent(w.discount_percent),
-      subLineItems: parseSubLineItems(w.sub_line_items),
-    }
-  }
+  const asBudgetArtwork = (a: PlacementRow) => toBudgetArtwork(a, byId)
 
   const budgetElevations: BudgetElevationData[] = chosen.map(({ elev, opts, options }) => ({
     id: elev.id,
@@ -787,9 +793,17 @@ export async function assemblePack(
     bareWallFile: bareWallPaths.get(elev.id) ?? null,
     notes: notesFor(visible, 'elevation', elev.id, nameOf),
     options: opts.map(opt => {
-      const placed = (opt.artworks ?? [])
-        .filter(pl => pl.visible && workById.has(pl.work_id))
-        .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+      // Left to right as they hang. This used to be the order they were
+      // placed in — the order the consultant happened to drag them on — so
+      // Nepean's third Scher option, hung Berlin, World Trade Routes, London,
+      // was listed London first.
+      const placed = hangingOrder((opt.artworks ?? [])
+        .filter(pl => pl.visible && workById.has(pl.work_id)))
+      const cost = bucketTotal(getOptionTotals(
+        (opt.artworks ?? [])
+          .map(pl => toBudgetArtwork(pl, workById))
+          .filter((a): a is BudgetArtwork => a !== null),
+      ), false)
       return {
         id: opt.id,
         // The letter is a position among *all* the siblings, never the
@@ -800,6 +814,7 @@ export async function assemblePack(
         renderFile: renderPaths.get(opt.id) ?? null,
         thumbnailFile: thumbPaths.get(opt.id) ?? null,
         workIds: placed.map(pl => pl.work_id),
+        cost,
         notes: notesFor(visible, 'option', opt.id, nameOf),
         budgetNote: budgetNote(opt.consultant_note, opt.consultant_note_shown_to_client),
         conversation: (conversations[opt.id] ?? []).map(toExportMessage),
