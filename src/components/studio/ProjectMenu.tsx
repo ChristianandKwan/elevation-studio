@@ -78,7 +78,7 @@ export default function ProjectMenu({ onShare, wallLabel, canExportImage, onExpo
         >
           <button role="menuitem" onClick={() => { setAt(null); onShare() }}>
             Share with the client…
-            <span className="export-menu-sub">The client’s link, and a new one if it’s needed</span>
+            <span className="export-menu-sub">The client’s link, and the portal guide to send with it</span>
           </button>
           <div className="studio-tab-menu-sep" />
           <div className="export-menu-head">Export</div>

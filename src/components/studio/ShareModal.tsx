@@ -105,9 +105,29 @@ export default function ShareModal({ projectName, onGetToken, onRegenerateToken,
 
         <div style={{ fontSize: 11.5, color: 'var(--mid)', lineHeight: 1.7 }}>
           <strong style={{ color: 'var(--charcoal)' }}>What clients can do:</strong><br />
-          ✓ View all elevations &amp; options<br />
-          ✓ See artwork details and pricing<br />
-          ✓ Approve (locks artwork positions)
+          ✓ View every elevation and option, and the budget<br />
+          ✓ Message you about each option<br />
+          ✓ Pick and approve (approving locks the wall)
+        </div>
+
+        {/* The guide ships with the site (public/), so this is always the
+            version in the current release. Edit it there. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          marginTop: 14, padding: '10px 12px', background: 'var(--cream)',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+        }}>
+          <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+            <strong>Client portal guide</strong>
+            <div style={{ fontSize: 11.5, color: 'var(--mid)' }}>A short Word guide to send with the link.</div>
+          </div>
+          <a
+            className="btn btn-sm"
+            href="/client-portal-guide.docx"
+            download="Christian & Kwan — Your Artwork Proposal guide.docx"
+          >
+            Download
+          </a>
         </div>
 
         <div className="modal-footer">
