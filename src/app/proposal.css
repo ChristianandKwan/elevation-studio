@@ -102,22 +102,23 @@
 .proposals-content { max-width: 900px; }
 .proposals-loading { display: flex; justify-content: center; padding: 48px 0; color: var(--mid); }
 .proposals-empty { font-size: 13px; line-height: 1.6; color: var(--mid); max-width: 520px; }
-/* No proposals yet: a blank A4 page beside what a proposal is and how it goes. */
+/* No proposals yet: a blank A4 page — cream, with a bronze rule under the
+   mark — beside what a proposal is and how it goes. */
 .proposals-empty-state {
   display: flex; gap: 40px; align-items: center; padding: 36px 40px;
   background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius);
 }
 .proposals-empty-sheet {
   flex-shrink: 0; width: 150px; aspect-ratio: 595 / 842; position: relative;
-  background: #223153; box-shadow: 0 10px 28px rgba(28,26,24,.18);
+  background: var(--warm-white); border: 1px solid var(--border); box-shadow: 0 10px 28px rgba(28,26,24,.10);
   display: flex; flex-direction: column; justify-content: flex-end; padding: 14px;
 }
-.proposals-empty-rule { position: absolute; left: 14px; right: 14px; top: 14px; height: 54%; background: rgba(247,244,239,.14); }
+.proposals-empty-rule { position: absolute; left: 14px; right: 14px; top: 14px; height: 54%; background: #EDE6DB; }
 .proposals-empty-mark {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 20px;
-  letter-spacing: .06em; color: var(--warm-white);
+  letter-spacing: .06em; color: var(--charcoal);
 }
-.proposals-empty-lines { display: block; margin-top: 6px; height: 2px; width: 55%; background: rgba(247,244,239,.4); box-shadow: 0 6px 0 rgba(247,244,239,.25); }
+.proposals-empty-lines { display: block; margin-top: 6px; height: 2px; width: 55%; background: var(--accent); box-shadow: 0 6px 0 rgba(139,111,71,.35); }
 .proposals-empty-text h2 {
   font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 26px; font-weight: 400; margin: 0 0 6px;
 }
