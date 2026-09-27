@@ -9,15 +9,17 @@ interface Props {
   canExportImage: boolean
   onExportImage: () => void
   onExportPack: () => void
+  onCreateProposal: () => void
 }
 
 /**
- * The header's one Export button. There are two things to take out of a
- * project — the whole proposal as a pack, or the wall on screen as a picture
- * — and they used to be two buttons in two places, both called "Export". One
- * button that asks is shorter than either label that would tell them apart.
+ * The header's one Export button. There are three things to take out of a
+ * project — a proposal Claude lays out, the whole proposal as a pack to lay
+ * out by hand, or the wall on screen as a picture. They share one button
+ * rather than crowding the header, whose right-hand group is measured by hand
+ * (see studio.css).
  */
-export default function ExportMenu({ wallLabel, canExportImage, onExportImage, onExportPack }: Props) {
+export default function ExportMenu({ wallLabel, canExportImage, onExportImage, onExportPack, onCreateProposal }: Props) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -68,6 +70,10 @@ export default function ExportMenu({ wallLabel, canExportImage, onExportImage, o
           role="menu"
           style={{ right: at.x, top: at.y }}
         >
+          <button role="menuitem" onClick={() => { setAt(null); onCreateProposal() }}>
+            Create proposal…
+            <span className="export-menu-sub">Claude lays it out in the C&amp;K style; refine it by chat</span>
+          </button>
           <button role="menuitem" onClick={() => { setAt(null); onExportPack() }}>
             Proposal pack…
             <span className="export-menu-sub">Every elevation, the works and the budget</span>

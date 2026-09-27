@@ -8,6 +8,7 @@ import StudioCanvas from './StudioCanvas'
 import StudioSidebar from './StudioSidebar'
 import ExportMenu from './ExportMenu'
 import ExportModal from '@/components/export/ExportModal'
+import CreateProposalModal from '@/components/export/CreateProposalModal'
 import TabBar from './TabBar'
 import CalibrationModal from './CalibrationModal'
 import AddArtworkModal from './AddArtworkModal'
@@ -1510,6 +1511,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const budgetCaptureResolve = useRef<((url: string | null) => void) | null>(null)
 
   const [exportingPack, setExportingPack] = useState(false)
+  const [creatingProposal, setCreatingProposal] = useState(false)
 
   /**
    * Write everything still waiting to save — the last artwork moved, a price
@@ -1539,6 +1541,13 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     syncStudioIntoElevations()
     await flushAllPending()
     setExportingPack(true)
+  }
+
+  /** The same, for a proposal: it is built from the pack, from what is saved. */
+  async function openCreateProposal() {
+    syncStudioIntoElevations()
+    await flushAllPending()
+    setCreatingProposal(true)
   }
 
   // ─── WHILE THE CLIENT IS IN THE PORTAL ───────────────────────────
@@ -1749,6 +1758,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             canExportImage={!!state.elev && !!state.scale}
             onExportImage={studio.exportPng}
             onExportPack={openPackExport}
+            onCreateProposal={openCreateProposal}
           />
           <FeedbackButton />
         </div>
@@ -2117,6 +2127,17 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           </div>
         )
       })()}
+
+      {creatingProposal && (
+        <CreateProposalModal
+          projectId={project.id}
+          projectName={project.name}
+          elevations={indexElevations}
+          works={works.map(w => ({ id: w.id, name: w.name, artist: w.artist }))}
+          setAsideCount={works.filter(w => w.setAside).length}
+          onClose={() => setCreatingProposal(false)}
+        />
+      )}
 
       {exportingPack && (
         <ExportModal

@@ -1,0 +1,114 @@
+/* ── The proposal screen: pages on the left, the conversation on the right ── */
+
+.proposal-screen { height: 100vh; display: flex; flex-direction: column; background: var(--cream); }
+
+.proposal-header {
+  height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 16px;
+  padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--warm-white);
+}
+.proposal-title {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-cormorant, 'Cormorant Garamond'), serif; font-size: 22px; font-weight: 400;
+}
+.proposal-version {
+  font-family: var(--font-karla, 'Karla'), sans-serif; font-size: 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--warm-white);
+  padding: 4px 8px; color: var(--charcoal);
+}
+.proposal-actions { display: flex; gap: 8px; }
+
+.proposal-body { flex: 1; min-height: 0; display: flex; }
+
+.proposal-pages {
+  flex: 1; overflow-y: auto; padding: 32px 24px 64px;
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+  background: #E5E0D8;
+}
+.proposal-page {
+  position: relative; display: block; padding: 0; border: 2px solid transparent;
+  background: none; cursor: pointer; width: min(560px, 100%);
+  box-shadow: 0 2px 14px rgba(0,0,0,.14); transition: border-color .15s;
+}
+.proposal-page img { display: block; width: 100%; height: auto; aspect-ratio: 595 / 842; background: var(--warm-white); }
+.proposal-page:hover { border-color: var(--border); }
+.proposal-page.selected { border-color: var(--accent); }
+.proposal-page-n {
+  position: absolute; left: -34px; top: 0; font-size: 11px; color: var(--mid);
+  font-variant-numeric: tabular-nums;
+}
+.proposal-page.selected .proposal-page-n { color: var(--accent); font-weight: 700; }
+
+.proposal-empty, .proposal-loading {
+  margin: auto; max-width: 360px; text-align: center; color: var(--mid);
+  display: flex; flex-direction: column; align-items: center; gap: 14px; font-size: 13px; line-height: 1.5;
+}
+.proposal-loading { height: 100vh; justify-content: center; }
+
+.proposal-warnings {
+  width: min(560px, 100%); margin: 0; padding: 10px 14px 10px 28px;
+  background: var(--amber-light); border: 1px solid rgba(139,111,71,.2); border-radius: var(--radius);
+  font-size: 12px; line-height: 1.5; color: var(--charcoal);
+}
+
+.proposal-chat {
+  width: 360px; flex-shrink: 0; display: flex; flex-direction: column;
+  border-left: 1px solid var(--border); background: var(--warm-white);
+}
+.proposal-status {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  font-size: 12px; line-height: 1.5; color: var(--mid);
+}
+.proposal-status span { display: inline-flex; align-items: center; gap: 8px; }
+.proposal-status-failed { color: var(--red); }
+
+.proposal-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.proposal-hint { font-size: 12px; line-height: 1.6; color: var(--mid); margin: 0; }
+.proposal-msg { max-width: 92%; font-size: 13px; line-height: 1.5; }
+.proposal-msg.consultant { align-self: flex-end; }
+.proposal-msg-who {
+  font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--mid); margin-bottom: 3px;
+}
+.proposal-msg.consultant .proposal-msg-who { text-align: right; }
+.proposal-msg-page { text-transform: none; letter-spacing: 0; color: var(--accent); }
+.proposal-msg-body {
+  white-space: pre-wrap; padding: 8px 11px; border-radius: var(--radius);
+  background: var(--cream); border: 1px solid var(--border);
+}
+.proposal-msg.consultant .proposal-msg-body { background: var(--charcoal); color: white; border-color: var(--charcoal); }
+
+.proposal-rule {
+  padding: 12px; border: 1px solid rgba(139,111,71,.2); border-left: 2px solid var(--accent);
+  border-radius: var(--radius); background: var(--accent-light); font-size: 13px; line-height: 1.5;
+}
+.proposal-rule p { margin: 4px 0; }
+.proposal-rule-why { font-size: 12px; color: var(--mid); }
+.proposal-rule-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+.proposal-composer {
+  padding: 12px 16px 16px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.proposal-composer textarea { resize: vertical; min-height: 64px; font-size: 13px; }
+.proposal-composer .btn { align-self: flex-end; }
+.proposal-chip {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; padding: 3px 4px 3px 8px; border-radius: var(--radius-xs);
+  background: var(--accent-light); border: 1px solid rgba(139,111,71,.2); color: var(--accent);
+}
+.proposal-chip button { border: none; background: none; cursor: pointer; color: inherit; font-size: 13px; line-height: 1; }
+
+/* Create proposal: the proposals already made on this project. */
+.proposal-earlier { display: flex; flex-direction: column; gap: 4px; }
+.proposal-earlier-row {
+  display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--charcoal); text-decoration: none; transition: border-color .15s;
+}
+.proposal-earlier-row:hover { border-color: var(--accent); }
+
+@media (max-width: 900px) {
+  .proposal-body { flex-direction: column; }
+  .proposal-chat { width: auto; height: 45vh; border-left: none; border-top: 1px solid var(--border); }
+  .proposal-page-n { display: none; }
+}
