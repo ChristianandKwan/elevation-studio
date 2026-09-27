@@ -87,3 +87,21 @@ export function engineIsAlive(
   )
   return last > 0 && now - last < ENGINE_ALIVE_MS
 }
+
+/**
+ * The address the engine should call back: the one the consultant is using.
+ *
+ * Not `new URL(request.url).origin` — on Vercel that is the deployment's own
+ * address (elevation-studio-<hash>-….vercel.app), which sits behind Vercel's
+ * login and is not the host the engine's credential is attached to. The
+ * first real run was handed exactly that and could not have reached it. The
+ * domain the browser asked for arrives as x-forwarded-host.
+ * PROPOSAL_STUDIO_URL overrides both.
+ */
+export function studioUrlFor(request: Request): string {
+  const configured = process.env.PROPOSAL_STUDIO_URL?.replace(/\/+$/, '')
+  if (configured) return configured
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
+  if (host) return `https://${host.split(',')[0].trim()}`
+  return new URL(request.url).origin
+}

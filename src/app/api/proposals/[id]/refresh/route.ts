@@ -5,6 +5,7 @@
  */
 import { NextResponse } from 'next/server'
 import { refreshFigures } from '@/lib/proposals/store'
+import { studioUrlFor } from '@/lib/proposals/fire'
 import { consultantAndProposal, failure } from '@/lib/proposals/consultantRoute'
 
 export const runtime = 'nodejs'
@@ -16,7 +17,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const found = await consultantAndProposal(id)
   if (found instanceof NextResponse) return found
   try {
-    await refreshFigures(found.who.db, found.proposal, found.who.name, new URL(request.url).origin)
+    await refreshFigures(found.who.db, found.proposal, found.who.name, studioUrlFor(request))
     return NextResponse.json({ ok: true })
   } catch (err) {
     return failure(err, 'The figures could not be refreshed.')

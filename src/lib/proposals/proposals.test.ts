@@ -78,3 +78,13 @@ describe('what the engine may upload', () => {
     }
   })
 })
+
+describe('the address the engine calls back', () => {
+  test('is the domain the consultant used, not the deployment behind it', async () => {
+    const { studioUrlFor } = await import('./fire.ts')
+    const req = new Request('https://elevation-studio-n4m668y6z-christianandkwans-projects.vercel.app/api/proposals', {
+      headers: { 'x-forwarded-host': 'studio.christianandkwan.com', host: 'elevation-studio-n4m668y6z-christianandkwans-projects.vercel.app' },
+    })
+    assert.equal(studioUrlFor(req), 'https://studio.christianandkwan.com')
+  })
+})

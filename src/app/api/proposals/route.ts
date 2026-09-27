@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { readBrief } from '@/lib/proposals/brief'
 import { createProposal, startsToday } from '@/lib/proposals/store'
+import { studioUrlFor } from '@/lib/proposals/fire'
 import { consultant, failure } from '@/lib/proposals/consultantRoute'
 
 // Building the pack renders walls with sharp.
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   try {
     const id = await createProposal(who.db, {
       projectId, brief, userId: who.userId, consultantName: who.name,
-      studioUrl: new URL(request.url).origin,
+      studioUrl: studioUrlFor(request),
     })
     return NextResponse.json({ id })
   } catch (err) {
