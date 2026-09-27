@@ -71,7 +71,8 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
     try {
       const res = await fetch(`/api/proposals/${proposalId}${q}`, { cache: 'no-store' })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'The proposal could not be loaded.')
-      setView(await res.json())
+      const next = await res.json() as View
+      setView(prev => keepSignedPages(prev, next))
       setLoadError(null)
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'The proposal could not be loaded.')
@@ -209,7 +210,7 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
                 const n = i + 1
                 return (
                   <button
-                    key={src}
+                    key={`${shown.number}-${n}`}
                     type="button"
                     className={`proposal-page${selectedPage === n ? ' selected' : ''}`}
                     onClick={() => setSelectedPage(selectedPage === n ? null : n)}
@@ -286,6 +287,39 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
       </div>
     </div>
   )
+}
+
+/**
+ * How long the page links are kept before fresh ones are taken. The studio
+ * signs them for an hour; swapping a little before then means a screen left
+ * open all afternoon never shows broken pages.
+ */
+const KEEP_SIGNED_MS = 45 * 60_000
+const signedAt = new WeakMap<object, number>()
+
+/**
+ * The same version's pages, kept as they are.
+ *
+ * Every poll brings back freshly signed links to the page pictures: the same
+ * pictures, but new addresses. Swapping them in made the browser drop every
+ * page and load it again — a white flash every few seconds (Tom). So while
+ * the version on screen is unchanged, the links it was first given stay.
+ */
+function keepSignedPages(prev: View | null, next: View): View {
+  const before = prev?.shown
+  const after = next.shown
+  if (!before || !after || before.number !== after.number) {
+    if (after) signedAt.set(after, Date.now())
+    return next
+  }
+  const age = Date.now() - (signedAt.get(before) ?? 0)
+  if (age > KEEP_SIGNED_MS) {
+    signedAt.set(after, Date.now())
+    return next
+  }
+  const kept = { ...after, pages: before.pages, pdfUrl: before.pdfUrl }
+  signedAt.set(kept, signedAt.get(before) ?? Date.now())
+  return { ...next, shown: kept }
 }
 
 /** What Claude is doing, in a sentence — never "on its way" when it has stopped. */
