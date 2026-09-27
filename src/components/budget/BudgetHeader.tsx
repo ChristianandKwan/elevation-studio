@@ -1,7 +1,6 @@
 'use client'
 
 import type { SaveStatus } from './useBudgetState'
-import FeedbackButton from '@/components/feedback/FeedbackButton'
 
 interface Props {
   vatMode: boolean
@@ -60,7 +59,6 @@ export default function BudgetHeader({
             {isPreviewingClientView ? 'Exit preview' : 'Preview as client'}
           </button>
         )}
-        {isConsultant && <FeedbackButton variant="dark" />}
         <button className="budget-export-btn" onClick={onExportPdf}>
           Export PDF
         </button>
