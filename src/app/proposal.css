@@ -112,3 +112,4 @@
   .proposal-chat { width: auto; height: 45vh; border-left: none; border-top: 1px solid var(--border); }
   .proposal-page-n { display: none; }
 }
+.proposal-starts-out { color: var(--red); }

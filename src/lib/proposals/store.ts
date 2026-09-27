@@ -9,7 +9,7 @@ import { assemblePack } from '@/lib/export/pack'
 import type { ExportChoices } from '@/lib/export/types'
 import { briefForEngine, type ProposalBrief } from './brief'
 import { PROPOSALS_BUCKET, packPath, versionPrefix, isVersionFile } from './bucket'
-import { engineIsAlive, fireEngine } from './fire'
+import { DAILY_LIMIT_MESSAGE, dailyStartLimit, engineIsAlive, fireEngine } from './fire'
 import { tellTomTheEngineStopped } from './notify'
 
 /** Signed links last an hour: long enough to read and download, no longer. */
@@ -92,13 +92,18 @@ async function tellTomAbout(db: SupabaseClient, proposalId: string, reason: stri
 async function startEngine(db: SupabaseClient, proposalId: string, studioUrl: string) {
   const fired = await fireEngine(proposalId, studioUrl)
   const now = new Date().toISOString()
+  await db.from('proposal_engine_starts').insert({ proposal_id: proposalId, ok: fired.ok, error: fired.error ?? null })
   if (fired.ok) {
     await db.from('proposals').update({
       engine_fired_at: now, engine_run_url: fired.runUrl ?? null, error: null, updated_at: now,
     }).eq('id', proposalId)
   } else {
     await db.from('proposals').update({ status: 'failed', error: fired.error, updated_at: now }).eq('id', proposalId)
-    await tellTomAbout(db, proposalId, fired.error ?? 'The engine could not be started.')
+    // Running out of starts is the plan working as sold, not a fault; the
+    // consultant is told, and Tom is not emailed about it.
+    if (fired.error !== DAILY_LIMIT_MESSAGE) {
+      await tellTomAbout(db, proposalId, fired.error ?? 'The engine could not be started.')
+    }
   }
   return fired
 }
@@ -151,6 +156,21 @@ export async function refreshFigures(
   }, studioUrl)
 }
 
+/**
+ * How many of today's starts the studio has used, of the plan's allowance.
+ * "Today" is the last 24 hours — near enough to Anthropic's own window, and
+ * it only ever errs towards saying fewer are left. Counts the studio's own
+ * starts; anything else on Tom's account is not seen here.
+ */
+export async function startsToday(db: SupabaseClient) {
+  const since = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
+  const { count } = await db.from('proposal_engine_starts')
+    .select('id', { count: 'exact', head: true }).eq('ok', true).gte('fired_at', since)
+  const limit = dailyStartLimit()
+  const used = count ?? 0
+  return { used, limit, left: Math.max(0, limit - used) }
+}
+
 /** A consultant's message. Starts the engine if no run has the proposal. */
 export async function addConsultantMessage(
   db: SupabaseClient, proposal: ProposalRow, msg: { body: string; page: number | null }, studioUrl: string,
@@ -176,13 +196,14 @@ export async function getProposal(db: SupabaseClient, id: string): Promise<Propo
 
 /** Everything the proposal screen shows, with signed links to one version. */
 export async function proposalView(db: SupabaseClient, proposal: ProposalRow, versionNumber?: number) {
-  const [{ data: versions }, { data: messages }, { data: rules }, { data: project }] = await Promise.all([
+  const [{ data: versions }, { data: messages }, { data: rules }, { data: project }, starts] = await Promise.all([
     db.from('proposal_versions').select('number, summary, page_count, warnings, files, finished, created_at')
       .eq('proposal_id', proposal.id).eq('finished', true).order('number'),
     db.from('proposal_messages').select(MESSAGE_COLUMNS).eq('proposal_id', proposal.id).order('created_at'),
     db.from('house_style_rules').select('id, rule, why, status, decided_by, created_at')
       .eq('proposal_id', proposal.id).order('created_at'),
     db.from('projects').select('name').eq('id', proposal.project_id).maybeSingle(),
+    startsToday(db),
   ])
 
   const all = (versions ?? []) as VersionRow[]
@@ -211,6 +232,7 @@ export async function proposalView(db: SupabaseClient, proposal: ProposalRow, ve
     error: proposal.error,
     brief: proposal.brief,
     engineAlive: engineIsAlive(proposal.status, proposal.engine_seen_at, proposal.engine_fired_at),
+    starts,
     currentVersion: proposal.current_version,
     versions: all.map(v => ({ number: v.number, summary: v.summary, pageCount: v.page_count, createdAt: v.created_at })),
     shown: shown ? { number: shown.number, summary: shown.summary, warnings: shown.warnings, pages, pdfUrl } : null,

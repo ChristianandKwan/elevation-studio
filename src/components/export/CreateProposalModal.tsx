@@ -72,6 +72,7 @@ export default function CreateProposalModal({
   const [includeSetAside, setIncludeSetAside] = useState(false)
 
   const [earlier, setEarlier] = useState<EarlierProposal[]>([])
+  const [starts, setStarts] = useState<{ used: number; limit: number; left: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -79,7 +80,7 @@ export default function CreateProposalModal({
   useEffect(() => {
     fetch(`/api/proposals?projectId=${projectId}`)
       .then(r => (r.ok ? r.json() : { proposals: [] }))
-      .then(b => setEarlier(b.proposals ?? []))
+      .then(b => { setEarlier(b.proposals ?? []); setStarts(b.starts ?? null) })
       .catch(() => {})
   }, [projectId])
 
@@ -141,6 +142,16 @@ export default function CreateProposalModal({
         <div className="modal-sub">
           Claude lays it out in the Christian &amp; Kwan style. You can then ask for changes and download the PDF.
         </div>
+        {starts && (
+          // Said plainly, because it is Tom's own plan (Tom): a proposal and
+          // a sitting of changes is usually one start; coming back after a
+          // break is another.
+          <p className={`export-hint${starts.left === 0 ? ' proposal-starts-out' : ''}`}>
+            {starts.left > 0
+              ? `Claude runs on Tom’s Claude plan, which allows ${starts.limit} starts a day. A proposal and a sitting of changes usually takes one; coming back to it after a break takes another. ${starts.left} left today.`
+              : `Today’s ${starts.limit} starts on Tom’s Claude plan look to be used up, so Claude may not be able to begin until tomorrow. You can still create it: if Claude can’t start, the proposal will say so, and writing to it later starts it.`}
+          </p>
+        )}
 
         {earlier.length > 0 && (
           <div className="field">

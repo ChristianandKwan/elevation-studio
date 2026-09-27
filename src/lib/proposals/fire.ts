@@ -11,6 +11,21 @@
  * proposal, or a message after the engine has gone quiet. A running engine
  * picks messages up itself.
  */
+/**
+ * Said to the consultant when Anthropic refuses another start. The daily
+ * cap and the hourly one both answer 429, and "for now" is true of both.
+ * Honest and unembarrassed, as Tom asked: this is a small practice on
+ * Tom's own Claude plan.
+ */
+export const DAILY_LIMIT_MESSAGE =
+  'Claude can’t start again just now — Tom’s Claude plan allows a limited number of starts a day, and they’re used up. Your message is saved: write again later (or tomorrow) and Claude will pick everything up.'
+
+/** Starts a day on Tom's plan: 5 on Pro, 15 on Max. Set PROPOSAL_DAILY_STARTS after an upgrade. */
+export function dailyStartLimit(): number {
+  const n = Number(process.env.PROPOSAL_DAILY_STARTS)
+  return Number.isInteger(n) && n > 0 ? n : 5
+}
+
 export interface FireResult {
   ok: boolean
   runUrl?: string
@@ -37,7 +52,7 @@ export async function fireEngine(proposalId: string, studioUrl: string): Promise
     if (!res.ok) {
       const err = (body.error as { message?: string } | undefined)?.message
       if (res.status === 429) {
-        return { ok: false, error: 'The proposal engine has been started too often this hour. Try again shortly.' }
+        return { ok: false, error: DAILY_LIMIT_MESSAGE }
       }
       return { ok: false, error: err ?? `The proposal engine could not be started (${res.status}).` }
     }

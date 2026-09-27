@@ -26,6 +26,8 @@ interface View {
   status: 'queued' | 'working' | 'ready' | 'resting' | 'failed'
   error: string | null
   engineAlive: boolean
+  /** Starts of the engine in the last day, of what Tom's plan allows. */
+  starts: { used: number; limit: number; left: number }
   currentVersion: number | null
   versions: Array<{ number: number; summary: string; pageCount: number | null; createdAt: string }>
   shown: { number: number; summary: string; warnings: string[]; pages: string[]; pdfUrl: string | null } | null
@@ -289,7 +291,7 @@ export default function ProposalScreen({ projectId, projectName, proposalId }: P
 /** What Claude is doing, in a sentence — never "on its way" when it has stopped. */
 function EngineStatus({ view, waitingOn }: { view: View; waitingOn: number }) {
   if (view.status === 'failed') {
-    return <span className="proposal-status-failed">Claude stopped: {view.error ?? 'something went wrong'}. Tom has been told; sending a message tries again.</span>
+    return <span className="proposal-status-failed">{view.error ?? 'Claude stopped.'} Sending a message tries again.</span>
   }
   if (view.status === 'queued' || view.status === 'working') {
     return <span><ArcSpinner size={14} /> {view.currentVersion ? 'Claude is working on your changes…' : 'Claude is building the first draft…'}</span>
@@ -298,7 +300,18 @@ function EngineStatus({ view, waitingOn }: { view: View; waitingOn: number }) {
     return <span><ArcSpinner size={14} /> Claude has your message{waitingOn > 1 ? 's' : ''} and is on it…</span>
   }
   if (view.status === 'resting' || !view.engineAlive) {
-    return <span>Claude has stepped away. Your next message brings it back — the first reply takes a little longer.</span>
+    const { left, limit } = view.starts
+    return left > 0 ? (
+      <span>
+        Claude has stepped away. Your next message brings it back, which uses one of the {limit} starts
+        a day on Tom’s Claude plan ({left} left today). Everything you send while it’s back is included.
+      </span>
+    ) : (
+      <span>
+        Claude has stepped away, and today’s {limit} starts on Tom’s Claude plan look to be used up. You can
+        still write — your message is saved and Claude picks it up when it next starts.
+      </span>
+    )
   }
   return <span>Claude is ready for changes.</span>
 }

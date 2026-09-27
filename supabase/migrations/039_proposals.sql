@@ -20,6 +20,7 @@
 --  proposal_messages  the chat: the consultant's requests and Claude's replies.
 --                     `page` is the page the consultant had selected, which is
 --                     what "this" and "here" mean.
+--  proposal_engine_starts  each time a run was started, for the daily count.
 --  house_style_rules  preferences a consultant said apply to every proposal.
 --                     Christian & Kwan or Tom approve them; the engine then
 --                     writes them into the design system and records the
@@ -148,12 +149,30 @@ create table if not exists house_style_rules (
 comment on table house_style_rules is
   'Proposal preferences a consultant said apply always. Approved ones are written into the design system by the engine. See 039.';
 
--- ── 5. Who may see them ───────────────────────────────────
+-- ── 5. Every time the studio started the engine ───────────
+--
+-- Routines are capped per account per day (five on Pro). Each row is one
+-- start, so the proposal screen can say honestly how many are left today —
+-- counting the studio's own starts; Tom's account may use some elsewhere.
+
+create table if not exists proposal_engine_starts (
+  id           uuid primary key default gen_random_uuid(),
+  proposal_id  uuid null references proposals(id) on delete set null,
+  fired_at     timestamptz not null default now(),
+  ok           boolean not null,
+  error        text null
+);
+
+create index if not exists proposal_engine_starts_fired_idx on proposal_engine_starts (fired_at desc);
+
+-- ── 6. Who may see them ───────────────────────────────────
 
 alter table proposals enable row level security;
 alter table proposal_versions enable row level security;
 alter table proposal_messages enable row level security;
 alter table house_style_rules enable row level security;
+-- Written and read by the server only (service role); no policy needed.
+alter table proposal_engine_starts enable row level security;
 
 drop policy if exists "Consultants manage proposals via project" on proposals;
 create policy "Consultants manage proposals via project"
@@ -189,7 +208,7 @@ drop policy if exists "Consultants decide house-style rules" on house_style_rule
 create policy "Consultants decide house-style rules"
   on house_style_rules for update using (auth.uid() is not null);
 
--- ── 6. The bucket ─────────────────────────────────────────
+-- ── 7. The bucket ─────────────────────────────────────────
 
 insert into storage.buckets (id, name, public)
 values ('proposals', 'proposals', false)

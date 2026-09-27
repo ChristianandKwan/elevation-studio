@@ -5,7 +5,7 @@
  */
 import { NextResponse } from 'next/server'
 import { readBrief } from '@/lib/proposals/brief'
-import { createProposal } from '@/lib/proposals/store'
+import { createProposal, startsToday } from '@/lib/proposals/store'
 import { consultant, failure } from '@/lib/proposals/consultantRoute'
 
 // Building the pack renders walls with sharp.
@@ -41,6 +41,7 @@ export async function GET(request: Request) {
     .select('id, status, current_version, created_at, brief')
     .eq('project_id', projectId).order('created_at', { ascending: false })
   return NextResponse.json({
+    starts: await startsToday(who.db),
     proposals: (data ?? []).map(p => ({
       id: p.id, status: p.status, currentVersion: p.current_version, createdAt: p.created_at,
       subtitle: (p.brief as { subtitle?: string } | null)?.subtitle ?? '',
