@@ -102,6 +102,8 @@ interface Props {
   initialArtists: Artist[]
   /** Every message on every option, client's and C&K's (038). */
   initialMessages: OptionMessage[]
+  /** Whether the proposal engine is configured; Create proposal is hidden until it is. */
+  proposalsEnabled?: boolean
 }
 
 type SkewOptData = Pick<DbElevation['elevation_options'][number],
@@ -136,7 +138,7 @@ function buildSkewCorners(opt: SkewOptData): import('@/hooks/useStudio').SkewCor
   return [[tlx, tly], [trx, try_], [brx, bry], [blx, bly]]
 }
 
-export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists, initialMessages }: Props) {
+export default function StudioScreen({ project, elevations: initialElevations, existingToken, clientLinkExpired, activityLogs, initialWorks, initialNotes, initialArtists, initialMessages, proposalsEnabled = false }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
   const [elevations, setElevations] = useState(initialElevations)
@@ -1758,7 +1760,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             canExportImage={!!state.elev && !!state.scale}
             onExportImage={studio.exportPng}
             onExportPack={openPackExport}
-            onCreateProposal={openCreateProposal}
+            onCreateProposal={proposalsEnabled ? openCreateProposal : undefined}
           />
           <FeedbackButton />
         </div>

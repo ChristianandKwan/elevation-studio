@@ -9,7 +9,8 @@ interface Props {
   canExportImage: boolean
   onExportImage: () => void
   onExportPack: () => void
-  onCreateProposal: () => void
+  /** Absent until the proposal engine is set up, which hides the item. */
+  onCreateProposal?: () => void
 }
 
 /**
@@ -70,10 +71,12 @@ export default function ExportMenu({ wallLabel, canExportImage, onExportImage, o
           role="menu"
           style={{ right: at.x, top: at.y }}
         >
-          <button role="menuitem" onClick={() => { setAt(null); onCreateProposal() }}>
-            Create proposal…
-            <span className="export-menu-sub">Claude lays it out in the C&amp;K style; refine it by chat</span>
-          </button>
+          {onCreateProposal && (
+            <button role="menuitem" onClick={() => { setAt(null); onCreateProposal() }}>
+              Create proposal…
+              <span className="export-menu-sub">Claude lays it out in the C&amp;K style; refine it by chat</span>
+            </button>
+          )}
           <button role="menuitem" onClick={() => { setAt(null); onExportPack() }}>
             Proposal pack…
             <span className="export-menu-sub">Every elevation, the works and the budget</span>

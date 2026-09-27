@@ -226,6 +226,9 @@ export default async function ProjectPage({ params }: Props) {
       initialNotes={notes}
       initialArtists={artists}
       initialMessages={messages}
+      // Create proposal is offered only once the engine can be started: a
+      // menu item that could only fail is worse than none.
+      proposalsEnabled={!!process.env.PROPOSAL_ROUTINE_URL && !!process.env.PROPOSAL_ROUTINE_TOKEN}
     />
   )
 }
