@@ -185,6 +185,15 @@ export default function DashboardClient({ profile, projects: initialProjects, vi
     setDeleting(true)
     const supabase = createClient()
     try {
+      // Proposal files first, while the rows that name them still exist: the
+      // browser cannot reach that bucket, and nothing sweeps it. Best-effort,
+      // like the storage removes below — it must not stop the delete.
+      await fetch('/api/proposals/files', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId: id }),
+      }).catch(() => {})
+
       const { data, error } = await supabase.rpc('delete_project', { p_id: id })
       if (error) throw error
 
