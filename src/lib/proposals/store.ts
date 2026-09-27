@@ -280,22 +280,45 @@ export async function engineStart(db: SupabaseClient, proposal: ProposalRow) {
   }
 }
 
-/** New consultant messages, waiting up to `waitSeconds` for one to arrive. */
+/**
+ * The longest a wait may hold. Claude Code's cloud proxy cuts a request off
+ * at about 30 seconds and answers 502, so a longer hold lost the response —
+ * and with it, once, a consultant's message.
+ */
+export const MAX_WAIT_SECONDS = 25
+
+/**
+ * New consultant messages, waiting up to `waitSeconds` for one to arrive.
+ *
+ * Reading does not collect them. A message counts as collected only when the
+ * engine acknowledges it (`engineAck`), so a response lost on the way — a
+ * proxy timeout, a dropped connection — leaves the message waiting to be
+ * handed over again, rather than marked taken and never seen. On the first
+ * live test a probe's response was thrown away with Tom's message in it.
+ */
 export async function engineNext(db: SupabaseClient, proposalId: string, waitSeconds: number) {
-  const until = Date.now() + Math.min(Math.max(waitSeconds, 0), 50) * 1000
+  const until = Date.now() + Math.min(Math.max(waitSeconds, 0), MAX_WAIT_SECONDS) * 1000
   for (;;) {
     await heard(db, proposalId)
     const { data } = await db.from('proposal_messages').select(MESSAGE_COLUMNS)
-      .eq('proposal_id', proposalId).eq('author', 'consultant').is('taken_at', null).order('created_at')
+      .eq('proposal_id', proposalId).eq('author', 'consultant')
+      .is('taken_at', null).is('answered_at', null).order('created_at')
     const fresh = (data ?? []) as MessageRow[]
-    if (fresh.length) {
-      await db.from('proposal_messages').update({ taken_at: new Date().toISOString() })
-        .in('id', fresh.map(m => m.id))
-      return fresh.map(m => ({ id: m.id, body: m.body, page: m.page }))
-    }
+    if (fresh.length) return fresh.map(m => ({ id: m.id, body: m.body, page: m.page }))
     if (Date.now() >= until) return []
     await new Promise(r => setTimeout(r, 2500))
   }
+}
+
+/** The engine has these messages: collected, and not to be handed over again. */
+export async function engineAck(db: SupabaseClient, proposalId: string, ids: unknown) {
+  const list = Array.isArray(ids) ? ids.filter((i): i is string => typeof i === 'string') : []
+  if (list.length) {
+    await db.from('proposal_messages').update({ taken_at: new Date().toISOString() })
+      .eq('proposal_id', proposalId).in('id', list).is('taken_at', null)
+  }
+  await heard(db, proposalId)
+  return { ok: true, acknowledged: list.length }
 }
 
 /** Open a new version and hand back a signed upload link for each of its files. */

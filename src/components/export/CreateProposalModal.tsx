@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { IndexElevation } from '@/lib/works'
 import { defaultPages, defaultSubtitle, type ClientType, type ProposalPages } from '@/lib/proposals/brief'
-import { ArcSpinner } from '@/components/ui/Spinner'
+import { InlineSpinner } from '@/components/ui/InlineSpinner'
 import OptionPicker from './OptionPicker'
 
 interface Props {
@@ -242,7 +242,7 @@ export default function CreateProposalModal({
         </div>
         {busy && (
           <div className="export-progress" role="status" aria-live="polite">
-            <ArcSpinner size={28} />
+            <InlineSpinner size={28} />
             <div>
               <p className="export-progress-stage">
                 Gathering {optionIds.length} wall{optionIds.length === 1 ? '' : 's'} and the works for Claude…
