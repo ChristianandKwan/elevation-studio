@@ -88,19 +88,24 @@ export function engineIsAlive(
   return last > 0 && now - last < ENGINE_ALIVE_MS
 }
 
+/** The live studio. The engine's credential is attached to this host only. */
+export const PRODUCTION_STUDIO_URL = 'https://studio.christianandkwan.com'
+
 /**
- * The address the engine should call back: the one the consultant is using.
+ * The address the engine should call back.
  *
- * Not `new URL(request.url).origin` — on Vercel that is the deployment's own
- * address (elevation-studio-<hash>-….vercel.app), which sits behind Vercel's
- * login and is not the host the engine's credential is attached to. The
- * first real run was handed exactly that and could not have reached it. The
- * domain the browser asked for arrives as x-forwarded-host.
- * PROPOSAL_STUDIO_URL overrides both.
+ * On the live site it is always the studio's own domain. It cannot be read
+ * from the request: on Vercel both request.url and the forwarded host arrive
+ * as the deployment's own address (elevation-studio-<hash>-….vercel.app) —
+ * the first two real runs were handed exactly that, twice — and that host is
+ * behind Vercel's login, with no credential for the engine. Elsewhere (a
+ * preview, a laptop) the request's own host is the best there is.
+ * PROPOSAL_STUDIO_URL overrides everything.
  */
-export function studioUrlFor(request: Request): string {
-  const configured = process.env.PROPOSAL_STUDIO_URL?.replace(/\/+$/, '')
+export function studioUrlFor(request: Request, env: Record<string, string | undefined> = process.env): string {
+  const configured = env.PROPOSAL_STUDIO_URL?.replace(/\/+$/, '')
   if (configured) return configured
+  if (env.VERCEL_ENV === 'production') return PRODUCTION_STUDIO_URL
   const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
   if (host) return `https://${host.split(',')[0].trim()}`
   return new URL(request.url).origin

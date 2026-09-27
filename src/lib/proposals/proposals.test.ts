@@ -80,11 +80,24 @@ describe('what the engine may upload', () => {
 })
 
 describe('the address the engine calls back', () => {
-  test('is the domain the consultant used, not the deployment behind it', async () => {
+  const deployment = 'elevation-studio-b0p8xo6t5-christianandkwans-projects.vercel.app'
+  const req = new Request(`https://${deployment}/api/proposals`, {
+    // What Vercel actually sent on the second real run: the deployment, both ways.
+    headers: { 'x-forwarded-host': deployment, host: deployment },
+  })
+
+  test('on the live site it is the studio’s own domain, whatever the request says', async () => {
     const { studioUrlFor } = await import('./fire.ts')
-    const req = new Request('https://elevation-studio-n4m668y6z-christianandkwans-projects.vercel.app/api/proposals', {
-      headers: { 'x-forwarded-host': 'studio.christianandkwan.com', host: 'elevation-studio-n4m668y6z-christianandkwans-projects.vercel.app' },
-    })
-    assert.equal(studioUrlFor(req), 'https://studio.christianandkwan.com')
+    assert.equal(studioUrlFor(req, { VERCEL_ENV: 'production' }), 'https://studio.christianandkwan.com')
+  })
+
+  test('PROPOSAL_STUDIO_URL wins over everything', async () => {
+    const { studioUrlFor } = await import('./fire.ts')
+    assert.equal(studioUrlFor(req, { VERCEL_ENV: 'production', PROPOSAL_STUDIO_URL: 'https://x.example/' }), 'https://x.example')
+  })
+
+  test('elsewhere, the host that was asked for', async () => {
+    const { studioUrlFor } = await import('./fire.ts')
+    assert.equal(studioUrlFor(req, {}), `https://${deployment}`)
   })
 })
