@@ -290,6 +290,7 @@ export async function projectProposals(db: SupabaseClient, projectId: string) {
   return proposals.map(p => {
     const unanswered = (waiting ?? []).filter(m => m.proposal_id === p.id).length
     const cover = coverPaths.get(p.id)
+    const hasVersions = versions.some(v => v.proposal_id === p.id)
     return {
       id: p.id,
       subtitle: p.brief?.subtitle ?? '',
@@ -299,11 +300,34 @@ export async function projectProposals(db: SupabaseClient, projectId: string) {
       currentVersion: p.current_version,
       coverUrl: cover ? covers.get(cover) ?? null : null,
       startAgainBlocked: startAgainBlocked(p, unanswered),
+      // No first draft, and no run working on one: it stopped (the first
+      // live runs did, in the cloud environment's setup). Such a proposal
+      // holds nothing, and may be removed.
+      stalled: !hasVersions && !engineIsAlive(p.status, p.engine_seen_at, p.engine_fired_at),
       versions: versions.filter(v => v.proposal_id === p.id).map(v => ({
         number: v.number, summary: v.summary, pageCount: v.page_count, createdAt: v.created_at,
       })),
     }
   })
+}
+
+/**
+ * Remove a proposal that never produced a version — one that stalled or
+ * failed before its first draft. One with versions is kept: a draft is work,
+ * and nothing about it needs clearing away.
+ */
+export async function removeUnfinishedProposal(db: SupabaseClient, proposal: ProposalRow) {
+  const { count } = await db.from('proposal_versions').select('id', { count: 'exact', head: true })
+    .eq('proposal_id', proposal.id)
+  if ((count ?? 0) > 0) throw new Refused('This proposal has drafts, so it is kept.')
+  if (engineIsAlive(proposal.status, proposal.engine_seen_at, proposal.engine_fired_at)) {
+    throw new Refused('Claude is still working on this one. Try again in a few minutes if it stays stuck.')
+  }
+  if (proposal.pack_path) await db.storage.from(PROPOSALS_BUCKET).remove([proposal.pack_path])
+  // Versions and messages go with it (039's cascades).
+  const { error } = await db.from('proposals').delete().eq('id', proposal.id)
+  if (error) throw new Error(`The proposal could not be removed: ${error.message}`)
+  return { ok: true }
 }
 
 /** A signed link that downloads one version's PDF under a readable name. */
