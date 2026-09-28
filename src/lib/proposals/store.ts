@@ -618,9 +618,16 @@ export async function engineStatus(db: SupabaseClient, proposalId: string, statu
   throw new Error('status must be resting or failed')
 }
 
-export async function approvedRules(db: SupabaseClient) {
+/**
+ * Every house-style rule in force: approved by Christian & Kwan and not
+ * retired. The engine reads these at the start of every run and follows
+ * them (040) — they live in the studio, not in the design system's README.
+ * `applied` rules were written into the README by an earlier engine, and
+ * are still in force.
+ */
+export async function rulesInForce(db: SupabaseClient) {
   const { data } = await db.from('house_style_rules').select('id, rule, why, decided_by, decided_at')
-    .eq('status', 'approved').order('decided_at')
+    .in('status', ['approved', 'applied']).order('decided_at')
   return { rules: data ?? [] }
 }
 
@@ -641,6 +648,9 @@ export async function removeProjectProposalFiles(db: SupabaseClient, projectId: 
     for (const v of versions ?? []) {
       for (const f of v.files as string[]) paths.push(`${versionPrefix(id, v.number)}/${f}`)
     }
+    // The PDFs consultants sent, including any uploaded and not recorded.
+    const { data: sent } = await db.storage.from(PROPOSALS_BUCKET).list(`${id}/sent`, { limit: 1000 })
+    for (const f of sent ?? []) paths.push(`${id}/sent/${f.name}`)
     for (let i = 0; i < paths.length; i += 100) {
       await db.storage.from(PROPOSALS_BUCKET).remove(paths.slice(i, i + 100))
     }

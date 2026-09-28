@@ -5,6 +5,7 @@ import { sortOptions } from '@/lib/options'
 import { blankWallDataUrl } from '@/lib/wall'
 import { firstLoadFailure, looksLikeSchemaDrift } from '@/lib/loadGuard'
 import LoadFailed from '@/components/ui/LoadFailed'
+import { rulesWaiting } from '@/lib/proposals/sends'
 
 /**
  * Dashboard project thumbnails used to be composited inline on every
@@ -130,11 +131,16 @@ export default async function DashboardPage({
     }
   })
 
+  // House-style rules waiting for C&K, shown on the House style link. Never
+  // a reason for the dashboard to fail.
+  const houseRulesWaiting = await rulesWaiting(supabaseService).catch(() => 0)
+
   return (
     <DashboardClient
       profile={profile ?? { id: user!.id, name: user!.email ?? 'Consultant', initials: 'CK', role: 'consultant' }}
       projects={projectsWithThumbs}
       view={view}
+      houseRulesWaiting={houseRulesWaiting}
     />
   )
 }

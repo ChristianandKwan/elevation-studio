@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 
 import { readBrief, defaultPages, defaultSubtitle, briefForEngine } from './brief.ts'
 import { engineIsAlive, ENGINE_ALIVE_MS } from './fire.ts'
-import { isVersionFile } from './bucket.ts'
+import { isVersionFile, isSentPdfPath, sentPdfPath } from './bucket.ts'
+import { reviewState } from './review.ts'
 
 describe('the brief', () => {
   test('a new client gets the intro pages and About Us; an existing one does not', () => {
@@ -99,5 +100,31 @@ describe('the address the engine calls back', () => {
   test('elsewhere, the host that was asked for', async () => {
     const { studioUrlFor } = await import('./fire.ts')
     assert.equal(studioUrlFor(req, {}), `https://${deployment}`)
+  })
+})
+
+describe('sent to the client', () => {
+  const id = '3f1c2b4a-1111-4222-8333-444455556666'
+  const name = '9a8b7c6d-aaaa-4bbb-8ccc-ddddeeeeffff'
+
+  test('only a sent PDF of this proposal, by its generated name, is accepted', () => {
+    assert.equal(isSentPdfPath(id, sentPdfPath(id, name)), true)
+    assert.equal(isSentPdfPath(id, `${id}/v1/proposal.pdf`), false)
+    assert.equal(isSentPdfPath(id, `${id}/sent/../pack.zip`), false)
+    assert.equal(isSentPdfPath(id, `${id}/sent/anything.pdf`), false)
+    assert.equal(isSentPdfPath('another', sentPdfPath(id, name)), false)
+    assert.equal(isSentPdfPath(id, null), false)
+  })
+
+  test('the look back is done only when it reported after it was last asked', () => {
+    const now = Date.parse('2026-09-28T12:00:00Z')
+    const asked = '2026-09-28T11:50:00Z'
+    assert.equal(reviewState({ review_asked_at: null, reviewed_at: null, review_error: null }, now), 'not-started')
+    assert.equal(reviewState({ review_asked_at: asked, reviewed_at: null, review_error: null }, now), 'working')
+    assert.equal(reviewState({ review_asked_at: asked, reviewed_at: '2026-09-28T11:58:00Z', review_error: null }, now), 'done')
+    // Their own PDF arrived after the first look: asked again, not done yet.
+    assert.equal(reviewState({ review_asked_at: asked, reviewed_at: '2026-09-28T11:00:00Z', review_error: null }, now), 'working')
+    assert.equal(reviewState({ review_asked_at: asked, reviewed_at: null, review_error: 'No starts left' }, now), 'waiting')
+    assert.equal(reviewState({ review_asked_at: '2026-09-28T10:00:00Z', reviewed_at: null, review_error: null }, now), 'waiting')
   })
 })

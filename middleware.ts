@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Protect consultant routes
-  const protectedPaths = ['/dashboard', '/projects']
+  const protectedPaths = ['/dashboard', '/projects', '/house-style']
   const isProtected = protectedPaths.some(p => pathname.startsWith(p))
 
   if (isProtected && !user) {
