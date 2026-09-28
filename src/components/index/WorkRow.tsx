@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import WorkEditor from './WorkEditor'
+import BudgetNoteRef from '@/components/notes/BudgetNoteRef'
 import { fmtGbp, netPrice, tbcNetPrice } from '@/components/budget/budgetCalc'
 import { SET_ASIDE_BADGE } from '@/lib/works'
 import type { IndexElevation, Placed, WorkPatch } from '@/lib/works'
@@ -20,9 +21,11 @@ interface Props {
    */
   onArtistChange: (name: string) => void
   onDelete: () => void
+  /** Opens the budget at this work's line. Null when no line the budget shows carries it. */
+  onEditOnBudget?: (() => void) | null
 }
 
-export default function WorkRow({ work, placed, elevations, onChange, onArtistChange, onDelete }: Props) {
+export default function WorkRow({ work, placed, elevations, onChange, onArtistChange, onDelete, onEditOnBudget }: Props) {
   const [editing, setEditing] = useState(false)
 
   if (editing) {
@@ -45,7 +48,6 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
   const consideredFor = placed.length === 0 && work.consideredFor
     ? elevations.find(e => e.id === work.consideredFor)?.name ?? null
     : null
-  const noteHidden = !work.noteShownToClient
 
   return (
     <div className={`index-row${work.setAside ? ' index-row--aside' : ''}`}>
@@ -108,14 +110,14 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
           <p className="budget-tbc-note">Not yet agreed. Would bring this work to {fmtGbp(tbcNet)}.</p>
         )}
 
-        {work.note.trim().length > 0 && (
-          <div className={`budget-note-row${noteHidden ? ' budget-note-row--internal' : ''}`}>
-            <span className="budget-note-text">
-              {work.note}
-              {noteHidden && <span className="budget-badge budget-badge--internal">Internal</span>}
-            </span>
-          </div>
-        )}
+        <BudgetNoteRef
+          note={work.note}
+          shownToClient={work.noteShownToClient}
+          onEdit={onEditOnBudget}
+          offBudget={placed.length === 0
+            ? 'Not on the budget while it hangs nowhere'
+            : 'Not on the budget: the client picked another option'}
+        />
       </div>
     </div>
   )

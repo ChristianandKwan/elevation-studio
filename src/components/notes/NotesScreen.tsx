@@ -1,18 +1,24 @@
 'use client'
 
 import NotePanel, { type NoteChangeHandler } from './NotePanel'
+import BudgetNoteRef from './BudgetNoteRef'
 import { ANCHOR_META, notesForPortal, notesOn, notesOwnedBy, writtenCount, type Note, type NoteAnchor } from '@/lib/notes'
 import { labelOptions } from '@/lib/options'
 
 interface NotesElevation {
   id: string
   name: string
+  /** The client's pick. Once there is one, the budget shows only that option. */
+  clientPickedOption?: string | null
   elevation_options: Array<{
     id: string
     option: string
     sort_order?: number | null
     name?: string | null
     thumbnailUrl?: string | null
+    /** The option's budget note: written on the budget, quoted here. */
+    consultantNote?: string
+    consultantNoteShownToClient?: boolean
   }>
 }
 
@@ -24,6 +30,8 @@ interface Props {
   onAdd: (anchor: NoteAnchor, id: string | null) => void
   onChange: NoteChangeHandler
   onDelete: (noteId: string) => void
+  /** Opens the budget at an option's note. */
+  onEditOnBudget: (elevationId: string, optionKey: string) => void
 }
 
 /**
@@ -35,7 +43,7 @@ interface Props {
  * under two dozen headings.
  */
 export default function NotesScreen({
-  projectName, clientName, notes, elevations, onAdd, onChange, onDelete,
+  projectName, clientName, notes, elevations, onAdd, onChange, onDelete, onEditOnBudget,
 }: Props) {
   const written = writtenCount(notes)
   const shownToClient = notesForPortal(notes).length
@@ -59,6 +67,7 @@ export default function NotesScreen({
           it. A note on an option is also shown to the client in the portal,
           unless it is set to C&amp;K. Notes about artists and about
           individual works are in the index, beside the works themselves.
+          Notes about prices are written on the Budget, and quoted here.
         </p>
 
         <Section
@@ -84,6 +93,18 @@ export default function NotesScreen({
           // labelOptions is the one place option order and naming are decided
           // (src/lib/options.ts) — this screen must not invent its own.
           const options = labelOptions(elev.elevation_options ?? [])
+          const picked = options.find(o => o.option === elev.clientPickedOption)
+          // An option's budget note, quoted with the way back to its line. Once
+          // the client has picked, the budget shows only their pick, so the
+          // other options' notes have no line to go to.
+          const budgetNote = (opt: typeof options[number]) => (
+            <BudgetNoteRef
+              note={opt.consultantNote ?? ''}
+              shownToClient={opt.consultantNoteShownToClient ?? true}
+              onEdit={!picked || picked.id === opt.id ? () => onEditOnBudget(elev.id, opt.option) : null}
+              offBudget={picked ? `Not on the budget: the client picked ${picked.title}` : undefined}
+            />
+          )
           return (
             <section key={elev.id} className="index-group">
               <div className="budget-section-kicker index-kicker">
@@ -97,6 +118,8 @@ export default function NotesScreen({
                 onChange={onChange}
                 onDelete={onDelete}
               />
+              {/* A single option is the wall, so its budget note reads here. */}
+              {options.length === 1 && budgetNote(options[0])}
 
               {/* Options only get their own heading when there is a choice to
                   explain. A single option is the wall, and a note about it is
@@ -121,6 +144,7 @@ export default function NotesScreen({
                     onDelete={onDelete}
                     compact
                   />
+                  {budgetNote(opt)}
                 </div>
               ))}
             </section>

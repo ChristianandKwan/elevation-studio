@@ -147,10 +147,13 @@ wherever it has a place for them; *C&K* notes do not. Every note goes into the
 proposal pack either way.
 _Avoid_: private, share, proposal (the old names)
 
-**Budget line note**:
-A short remark on one line of the budget, shown to the client only if switched
-on. It is currently separate from Note, which is the known seam between the two
-systems.
+**Budget note**:
+A note about money, on one line of the budget: one per work, one per option.
+It is written only on the budget page, beside the figures it talks about. The
+client reads it only on the Budget tab. The Index and the Notes screen show it
+with a link back to its line. Anything about a price is a budget note, and
+everything else is a Note.
+_Avoid_: budget line note, line note
 
 ## Proposals
 

@@ -26,6 +26,7 @@ import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog, Work } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import { fmtGbp } from '@/components/budget/budgetCalc'
+import { budgetLineForWork, type BudgetFocus, type BudgetLine } from '@/components/budget/budgetFocus'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
 import { toWorkColumns, placementsOf, workFieldsOf } from '@/lib/works'
 import { createWriteQueue, enqueue } from '@/lib/writeQueue'
@@ -1667,6 +1668,20 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     })),
   })), [elevations])
 
+  // "Edit on budget", from a budget note quoted in the Index or on the Notes
+  // screen. A budget note is written only on the budget, beside its figures.
+  const [budgetFocus, setBudgetFocus] = useState<BudgetFocus | null>(null)
+  const openBudgetAt = useCallback((line: BudgetLine) => {
+    syncStudioIntoElevations()
+    setIsPreviewingClientView(false)
+    setBudgetFocus({ ...line, nonce: Date.now() })
+    setView('budget')
+  }, [syncStudioIntoElevations])
+  const budgetJumpFor = useCallback((workId: string) => {
+    const line = budgetLineForWork(budgetElevations, workId)
+    return line ? () => openBudgetAt(line) : null
+  }, [budgetElevations, openBudgetAt])
+
   // What the index needs to say where each work hangs.
   const indexElevations: IndexElevation[] = elevations.map(e => {
     const labelled = labelOptions(e.elevation_options)
@@ -1753,6 +1768,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   if (place !== 'studio') syncStudioIntoElevations()
                   // The client view is the budget's; leaving it ends it.
                   if (place !== 'budget') setIsPreviewingClientView(false)
+                  // Arriving by the header is not a jump to a line.
+                  setBudgetFocus(null)
                   setView(place)
                 }}
               >
@@ -1919,6 +1936,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onAdd={addNote}
           onChange={changeNote}
           onDelete={deleteNote}
+          onEditOnBudget={(elevationId, optionKey) => openBudgetAt({ elevationId, optionKey })}
         />
       )}
 
@@ -1967,6 +1985,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onClientBudgetChange={updateBudget}
           onArtworkChange={handleWorkChange}
           onOptionNoteChange={handleOptionNoteChange}
+          focus={budgetFocus}
         />
       )}
 
@@ -1995,6 +2014,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onSetWorkArtist={setWorkArtist}
           onRenameArtist={renameArtist}
           onArtistNoteChange={changeArtistNote}
+          budgetJumpFor={budgetJumpFor}
         />
       )}
 

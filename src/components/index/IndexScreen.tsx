@@ -40,17 +40,22 @@ interface Props {
   onMergeWorks: (workIds: string[]) => void
   onChangeNote: NoteChangeHandler
   onDeleteNote: (noteId: string) => void
+  /**
+   * How to open the budget at a work's line, for its budget note. Null when
+   * no line the budget shows carries the work.
+   */
+  budgetJumpFor: (workId: string) => (() => void) | null
 }
 
 /**
  * Every work in the project, grouped by artist — hung, considered and
- * declined alike. Where the studio shows what is on a wall and the budget
+ * set aside alike. Where the studio shows what is on a wall and the budget
  * what it costs, this is the record of what was looked at.
  */
 export default function IndexScreen({
   projectName, clientName, works, elevations, onWorkChange, onAddWork, onDeleteWork,
   notes, onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote,
-  artists, onSetWorkArtist, onRenameArtist, onArtistNoteChange,
+  artists, onSetWorkArtist, onRenameArtist, onArtistNoteChange, budgetJumpFor,
 }: Props) {
   const nameOf = useMemo(() => {
     const m = new Map(works.map(w => [w.id, w.name]))
@@ -114,6 +119,7 @@ export default function IndexScreen({
                 onMergeWorks={onMergeWorks}
                 onChangeNote={onChangeNote}
                 onDeleteNote={onDeleteNote}
+                budgetJumpFor={budgetJumpFor}
               />
             )
           })
@@ -136,7 +142,7 @@ function ArtistGroupSection({
   artist, artists, label, works, elevations, notes, nameOf,
   onRenameArtist, onArtistNoteChange, onSetWorkArtist,
   onWorkChange, onDeleteWork,
-  onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote,
+  onAddNote, onAddWorkSetNote, onMergeWorks, onChangeNote, onDeleteNote, budgetJumpFor,
 }: {
   /** Undefined for the unattributed group, which is the absence of an artist. */
   artist?: Artist
@@ -156,6 +162,7 @@ function ArtistGroupSection({
   onMergeWorks: (workIds: string[]) => void
   onChangeNote: NoteChangeHandler
   onDeleteNote: (noteId: string) => void
+  budgetJumpFor: (workId: string) => (() => void) | null
 }) {
   const artistKeyValue = artist?.id ?? ''
   // Two things are done by picking works: writing one note across several,
@@ -314,6 +321,7 @@ function ArtistGroupSection({
                 onChange={patch => onWorkChange(w.id, patch)}
                 onArtistChange={name => onSetWorkArtist(w.id, name)}
                 onDelete={() => onDeleteWork(w.id)}
+                onEditOnBudget={budgetJumpFor(w.id)}
               />
             </div>
           </div>

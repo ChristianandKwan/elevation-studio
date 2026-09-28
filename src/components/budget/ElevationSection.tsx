@@ -5,6 +5,7 @@ import OptionBlock from './OptionBlock'
 import OptionNote from './OptionNote'
 import { fmtGbp, optionTotal } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
+import { budgetOptionAnchor, type BudgetFocus } from './budgetFocus'
 
 interface Props {
   elevation: BudgetElevationData
@@ -13,6 +14,8 @@ interface Props {
   /** Keyed by work, not placement: the money belongs to the work wherever it hangs. */
   onArtworkChange?: (workId: string, patch: BudgetArtworkPatch) => void
   onNoteChange?: (elevationId: string, optionKey: string, note: string, shownToClient: boolean) => void
+  /** The line "Edit on budget" is landing on, if it is in this elevation. */
+  focus?: BudgetFocus | null
 }
 
 /**
@@ -22,7 +25,9 @@ interface Props {
  */
 const SIDE_BY_SIDE_MAX = 3
 
-export default function ElevationSection({ elevation, vatMode, isConsultant, onArtworkChange, onNoteChange }: Props) {
+export default function ElevationSection({ elevation, vatMode, isConsultant, onArtworkChange, onNoteChange, focus }: Props) {
+  const openSignal = (key: string) =>
+    focus && focus.elevationId === elevation.id && focus.optionKey === key ? focus.nonce : undefined
   const picked = elevation.clientPickedOption
   const hidden = !!elevation.hiddenFromClient
   const hiddenClass = hidden ? ' budget-elev-block--hidden' : ''
@@ -37,7 +42,10 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
     const displayTotal = opt ? optionTotal(opt.artworks, vatMode) : 0
 
     return (
-      <div className={`budget-elev-block budget-elev-block--picked${hiddenClass}`}>
+      <div
+        className={`budget-elev-block budget-elev-block--picked${hiddenClass}`}
+        data-budget-option={budgetOptionAnchor(elevation.id, picked)}
+      >
         <div className="budget-elev-header budget-elev-header--picked">
           <span className="budget-elev-name">{elevation.name}</span>
           {hiddenBadge}
@@ -90,6 +98,8 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
               isConsultant={isConsultant}
               onArtworkChange={onArtworkChange}
               onNoteChange={onNoteChange && ((k, n, shown) => onNoteChange(elevation.id, k, n, shown))}
+              anchor={budgetOptionAnchor(elevation.id, opt.key)}
+              openSignal={openSignal(opt.key)}
             />
           ))}
         </div>
@@ -103,6 +113,8 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
               isConsultant={isConsultant}
               onArtworkChange={onArtworkChange}
               onNoteChange={onNoteChange && ((k, n, shown) => onNoteChange(elevation.id, k, n, shown))}
+              anchor={budgetOptionAnchor(elevation.id, opt.key)}
+              openSignal={openSignal(opt.key)}
               layout="card"
             />
           ))}

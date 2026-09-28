@@ -11,6 +11,7 @@ import { useBudgetState } from './useBudgetState'
 import { rememberVatMode, storedVatMode } from './vatMode'
 import { computeProjectTotals } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
+import { budgetOptionAnchor, type BudgetFocus } from './budgetFocus'
 import type { ProjectBudget } from '@/types'
 import { InlineSpinner } from '@/components/ui/InlineSpinner'
 
@@ -43,6 +44,11 @@ interface Props {
    * vatMode.ts for why it exists.
    */
   initialVatMode?: boolean
+  /**
+   * A line to scroll to and highlight: "Edit on budget" from the Index or the
+   * Notes screen. A budget note is written only here, beside its figures.
+   */
+  focus?: BudgetFocus | null
 }
 
 /**
@@ -73,6 +79,7 @@ export default function BudgetScreen({
   onArtworkChange,
   onOptionNoteChange,
   initialVatMode,
+  focus,
 }: Props) {
   // VAT toggle — persisted per project in localStorage.
   //
@@ -119,6 +126,25 @@ export default function BudgetScreen({
     document.title = prev
   }
 
+  // Lands on the line once the budget has loaded and the line is drawn. A work
+  // is looked for inside its option, since the same work can hang on several.
+  useEffect(() => {
+    if (!focus || isLoading) return
+    const block = document.querySelector<HTMLElement>(
+      `[data-budget-option="${CSS.escape(budgetOptionAnchor(focus.elevationId, focus.optionKey))}"]`,
+    )
+    if (!block) return
+    const target = focus.workId
+      ? block.querySelector<HTMLElement>(`[data-budget-work="${CSS.escape(focus.workId)}"]`) ?? block
+      : block.querySelector<HTMLElement>('.budget-note-row--option') ?? block
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    target.classList.remove('budget-focus')
+    void target.offsetWidth // restart the highlight on a second jump to the same line
+    target.classList.add('budget-focus')
+    const done = window.setTimeout(() => target.classList.remove('budget-focus'), 2600)
+    return () => window.clearTimeout(done)
+  }, [focus, isLoading])
+
   const effectiveIsConsultant = isConsultant && !isPreviewingClientView
   // "Client view" preview drops hidden elevations entirely, as the portal does.
   const listedElevations = effectiveIsConsultant ? elevations : clientElevations
@@ -164,6 +190,7 @@ export default function BudgetScreen({
                     isConsultant={effectiveIsConsultant}
                     onArtworkChange={effectiveIsConsultant ? onArtworkChange : undefined}
                     onNoteChange={effectiveIsConsultant ? onOptionNoteChange : undefined}
+                    focus={focus}
                   />
                 ))
               )}

@@ -42,6 +42,20 @@ export const SHARE_META: Record<NoteShare, { label: string; title: string }> = {
   studio: { label: 'C&K',    title: 'Not shown in the portal. Still goes into the proposal pack' },
 }
 
+/**
+ * The budget's own notes — one on a work's price, one on an option — store a
+ * plain shown/not-shown. They ask the same question as a note's share, and say
+ * it the same way: Client or C&K.
+ */
+export function budgetNoteShare(shownToClient: boolean): NoteShare {
+  return shownToClient ? 'client' : 'studio'
+}
+
+export const BUDGET_SHARE_TITLES: Record<NoteShare, string> = {
+  client: 'Shown to the client on the Budget tab, and in the proposal pack',
+  studio: 'Not shown to the client. Still goes into the proposal pack, marked as such',
+}
+
 /** New notes are for the client: most of what C&K write about an option is. */
 export const DEFAULT_SHARE: NoteShare = 'client'
 
@@ -99,12 +113,12 @@ export const ANCHOR_META: Record<NoteAnchor, {
   option: {
     label: 'Option',
     inline: 'this option',
-    prompt: 'Why this arrangement — what it does for the room, and how it differs from the alternatives.',
+    prompt: 'Why this arrangement — what it does for the room, and how it differs from the alternatives. Anything about its price goes on the Budget screen.',
   },
   work: {
     label: 'Work',
     inline: 'this work',
-    prompt: 'Why this piece, and why here. Or why it was declined.',
+    prompt: 'Why this piece, and why here. Or why it was set aside. Anything about its price goes on the Budget screen.',
   },
   artist: {
     label: 'Artist',

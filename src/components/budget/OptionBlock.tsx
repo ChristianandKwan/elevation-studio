@@ -20,10 +20,26 @@ interface Props {
    * client can see what each option holds; print forces them open.
    */
   layout?: 'block' | 'card'
+  /** Where the block can be found by a jump from the Index or Notes. */
+  anchor: string
+  /**
+   * Changes each time "Edit on budget" lands on this option. A folded card
+   * opens for it, so the line being jumped to is on screen.
+   */
+  openSignal?: number
 }
 
-export default function OptionBlock({ option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block' }: Props) {
+export default function OptionBlock({
+  option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block', anchor, openSignal,
+}: Props) {
   const [open, setOpen] = useState(true)
+  // Opened during render rather than in an effect, so the card is already
+  // unfolded when the budget screen's effect scrolls to the line inside it.
+  const [seenSignal, setSeenSignal] = useState(openSignal)
+  if (openSignal !== seenSignal) {
+    setSeenSignal(openSignal)
+    if (openSignal !== undefined) setOpen(true)
+  }
   const displayTotal = optionTotal(option.artworks, vatMode)
   const keyClass = `budget-option-key${option.name ? ' budget-option-key--named' : ''}`
   const count = option.artworks.length
@@ -48,7 +64,7 @@ export default function OptionBlock({ option, vatMode, isConsultant, onArtworkCh
 
   if (layout === 'card') {
     return (
-      <div className="budget-option-block budget-option-card">
+      <div className="budget-option-block budget-option-card" data-budget-option={anchor}>
         <button
           type="button"
           className="budget-option-header budget-option-header--toggle"
@@ -72,7 +88,7 @@ export default function OptionBlock({ option, vatMode, isConsultant, onArtworkCh
   }
 
   return (
-    <div className="budget-option-block">
+    <div className="budget-option-block" data-budget-option={anchor}>
       <div className="budget-option-header">
         <span className={keyClass}>{option.title}</span>
         <span className="budget-option-subtotal">{fmtGbp(displayTotal)}</span>

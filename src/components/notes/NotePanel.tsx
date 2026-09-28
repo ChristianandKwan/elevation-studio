@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAutosave } from '@/hooks/useAutosave'
 import NoteSaveBar from './NoteSaveBar'
+import ShareSwitch from './ShareSwitch'
 import {
-  ANCHOR_META, NOTE_SHARES, SHARE_META, showsInPortal, workSetLabel,
+  ANCHOR_META, showsInPortal, workSetLabel,
   type Note, type NoteAnchor, type NoteShare,
 } from '@/lib/notes'
 
@@ -158,21 +159,7 @@ function NoteCard({
               note goes into the pack and nowhere else, and a switch would
               change nothing. */}
           {inPortal && (
-            <div className="note-share" role="radiogroup" aria-label="Who can see this note">
-              {NOTE_SHARES.map(share => (
-                <button
-                  key={share}
-                  type="button"
-                  role="radio"
-                  aria-checked={note.share === share}
-                  className={note.share === share ? 'on' : ''}
-                  title={SHARE_META[share].title}
-                  onClick={() => { if (note.share !== share) onChange({ share }) }}
-                >
-                  {SHARE_META[share].label}
-                </button>
-              ))}
-            </div>
+            <ShareSwitch value={note.share} onChange={share => onChange({ share })} />
           )}
 
           {/* A plain "Remove" on a note being read somewhere it is not

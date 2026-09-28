@@ -498,7 +498,7 @@
   font-size: 11.5px; color: var(--mid); cursor: pointer; user-select: none; white-space: nowrap;
 }
 .ble-toggle input { accent-color: var(--charcoal); cursor: pointer; margin: 0; }
-.ble-toggle--block { display: flex; margin-top: 8px; }
+.ble-note-share { margin-top: 8px; }
 
 .ble-textarea {
   width: 100%; padding: 8px 10px; font-family: var(--font-karla, 'Karla'); font-size: 12.5px;
@@ -598,3 +598,11 @@
    that opens the total, which already does that job. */
 .budget-totals .budget-section-kicker { border-bottom: none; }
 .budget-totals-rows > .budget-totals-row:last-child { border-bottom: none; }
+
+/* "Edit on budget" from the Index or the Notes screen lands here. A ring
+   rather than a fill: the option note already has a tint of its own. */
+@keyframes budget-focus-ring {
+  0%, 40% { box-shadow: 0 0 0 2px var(--accent); }
+  100%    { box-shadow: 0 0 0 2px transparent; }
+}
+.budget-focus { animation: budget-focus-ring 2.4s ease-out; border-radius: var(--radius-xs); }
