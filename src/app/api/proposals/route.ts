@@ -2,13 +2,14 @@
  * POST { projectId, brief } — Create proposal: build and freeze the export
  * pack, save the proposal, start the engine. Returns { id }.
  * GET ?projectId= — the project's proposals, newest first, with their versions
- * (the project's Proposals view).
+ * and when each was last sent to the client (the project's Proposals view).
  */
 import { NextResponse } from 'next/server'
 import { readBrief } from '@/lib/proposals/brief'
 import { createProposal, projectProposals, startsToday } from '@/lib/proposals/store'
 import { studioUrlFor } from '@/lib/proposals/fire'
 import { consultant, failure } from '@/lib/proposals/consultantRoute'
+import { sendForView, sendsOf } from '@/lib/proposals/sends'
 
 // Building the pack renders walls with sharp.
 export const runtime = 'nodejs'
@@ -40,5 +41,13 @@ export async function GET(request: Request) {
   const who = await consultant(projectId)
   if (who instanceof NextResponse) return who
   const [starts, proposals] = await Promise.all([startsToday(who.db), projectProposals(who.db, projectId)])
-  return NextResponse.json({ starts, proposals })
+  // The latest time each was sent to the client, for its card.
+  const sends = await sendsOf(who.db, proposals.map(p => p.id))
+  return NextResponse.json({
+    starts,
+    proposals: proposals.map(p => {
+      const sent = sends.find(s => s.proposal_id === p.id)
+      return { ...p, sent: sent ? sendForView(sent) : null }
+    }),
+  })
 }

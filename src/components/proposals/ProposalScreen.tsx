@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { InlineSpinner } from '@/components/ui/InlineSpinner'
+import SentModal, { uploadSentPdf, WhyThePdfMatters } from './SentModal'
 
 interface Message {
   id: string
@@ -18,8 +19,20 @@ interface Rule {
   id: string
   rule: string
   why: string
-  status: 'suggested' | 'approved' | 'rejected' | 'applied'
+  status: 'suggested' | 'approved' | 'rejected' | 'applied' | 'retired'
   decided_by: string | null
+}
+
+/** A time this proposal was marked as sent to the client (040). */
+interface Send {
+  id: string
+  version: number
+  sentBy: string
+  sentAt: string
+  hasOwnPdf: boolean
+  /** Claude's look back over it for the house style. */
+  review: 'done' | 'working' | 'waiting' | 'not-started'
+  lesson: string | null
 }
 
 interface View {
@@ -33,6 +46,7 @@ interface View {
   shown: { number: number; summary: string; warnings: string[]; pages: string[]; pdfUrl: string | null } | null
   messages: Message[]
   rules: Rule[]
+  sends: Send[]
 }
 
 interface Props {
@@ -67,6 +81,7 @@ export default function ProposalScreen({ projectId, projectName, proposalId, ini
   const [sending, setSending] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [markingSent, setMarkingSent] = useState(false)
   const chatEnd = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -170,6 +185,11 @@ export default function ProposalScreen({ projectId, projectName, proposalId, ini
     await load()
   }
 
+  function sentNotice(n: string | null) {
+    setNotice(n ? `Marked as sent. ${n}` : null)
+    load()
+  }
+
   if (!view) {
     return (
       <div className="proposal-loading">
@@ -222,6 +242,12 @@ export default function ProposalScreen({ projectId, projectName, proposalId, ini
           {shown?.pdfUrl && (
             <a className="btn btn-sm btn-primary" href={shown.pdfUrl}>Download PDF</a>
           )}
+          {shown && (
+            <button className="btn btn-sm" onClick={() => { setNotice(null); setMarkingSent(true) }}
+              title="Record that this went to the client, so Claude can learn from it">
+              Mark as sent
+            </button>
+          )}
         </div>
       </header>
 
@@ -267,6 +293,9 @@ export default function ProposalScreen({ projectId, projectName, proposalId, ini
         </section>
 
         <aside className="proposal-chat" aria-label="Conversation with Claude">
+          {view.sends[0] && (
+            <SentStrip proposalId={proposalId} send={view.sends[0]} onChange={load} onNotice={setNotice} />
+          )}
           <div className="proposal-status" role="status">
             <EngineStatus view={view} waitingOn={waitingOn} />
           </div>
@@ -324,6 +353,106 @@ export default function ProposalScreen({ projectId, projectName, proposalId, ini
           </div>
         </aside>
       </div>
+
+      {markingSent && shown && (
+        <SentModal
+          proposalId={proposalId}
+          versions={view.versions.map(v => v.number)}
+          initialVersion={shown.number}
+          onClose={() => setMarkingSent(false)}
+          onSent={n => { setMarkingSent(false); sentNotice(n) }}
+        />
+      )}
+    </div>
+  )
+}
+
+const sentWhen = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
+/**
+ * The latest time this proposal went to the client, above the conversation:
+ * which version, and where Claude's look back over it stands. The PDF they
+ * actually sent can be added here later — edits in Acrobat often come after
+ * the record is made.
+ */
+function SentStrip({ proposalId, send, onChange, onNotice }: {
+  proposalId: string
+  send: Send
+  onChange: () => void
+  onNotice: (n: string | null) => void
+}) {
+  const [busy, setBusy] = useState<null | 'upload' | 'ask' | 'undo'>(null)
+  const [explaining, setExplaining] = useState(false)
+
+  async function act(kind: 'upload' | 'ask' | 'undo', run: () => Promise<Response>) {
+    setBusy(kind)
+    onNotice(null)
+    try {
+      const res = await run()
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? 'That did not work. Try again in a moment.')
+      if (body?.notice) onNotice(body.notice)
+      onChange()
+    } catch (err) {
+      onNotice(err instanceof Error ? err.message : 'That did not work. Try again in a moment.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function addPdf(file: File) {
+    await act('upload', async () => {
+      const pdfPath = await uploadSentPdf(proposalId, file)
+      return fetch(`/api/proposals/sends/${send.id}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdfPath }),
+      })
+    })
+  }
+
+  return (
+    <div className="proposal-sent" role="status">
+      <div className="proposal-sent-head">
+        <span className="proposal-sent-mark" aria-hidden="true">✓</span>
+        Sent to the client {sentWhen(send.sentAt)} · version {send.version}{send.sentBy ? ` · ${send.sentBy}` : ''}
+        <button className="proposal-sent-undo" disabled={!!busy}
+          onClick={() => act('undo', () => fetch(`/api/proposals/sends/${send.id}`, { method: 'DELETE' }))}>
+          {busy === 'undo' ? 'Undoing…' : 'Undo'}
+        </button>
+      </div>
+
+      <div className="proposal-sent-line">
+        {send.review === 'working' && <span><InlineSpinner size={12} immediate /> Claude is looking back over it for the house style…</span>}
+        {send.review === 'done' && (
+          <span>Claude has looked back over it. Anything it suggests is on the <Link href="/house-style">House style</Link> page.</span>
+        )}
+        {(send.review === 'waiting' || send.review === 'not-started') && (
+          <span>
+            Claude hasn’t looked back over it yet.{' '}
+            <button className="proposal-sent-link" disabled={!!busy}
+              onClick={() => act('ask', () => fetch(`/api/proposals/sends/${send.id}/review`, { method: 'POST' }))}>
+              {busy === 'ask' ? 'Asking…' : 'Ask Claude now'}
+            </button>
+          </span>
+        )}
+      </div>
+
+      {send.hasOwnPdf ? (
+        <div className="proposal-sent-line">Your own PDF is with it.</div>
+      ) : (
+        <div className="proposal-sent-line">
+          Changed it after downloading?{' '}
+          <label className={`proposal-sent-link${busy ? ' is-busy' : ''}`}>
+            {busy === 'upload' ? 'Uploading…' : 'Add the PDF you sent'}
+            <input type="file" accept="application/pdf,.pdf" hidden disabled={!!busy}
+              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) addPdf(f) }} />
+          </label>
+          {' · '}
+          <button className="proposal-sent-link" onClick={() => setExplaining(x => !x)} aria-expanded={explaining}>
+            Why?
+          </button>
+          {explaining && <WhyThePdfMatters />}
+        </div>
+      )}
     </div>
   )
 }

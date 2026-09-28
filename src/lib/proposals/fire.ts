@@ -32,7 +32,11 @@ export interface FireResult {
   error?: string
 }
 
-export async function fireEngine(proposalId: string, studioUrl: string): Promise<FireResult> {
+/**
+ * `review` asks the run to look back over a proposal that was sent to the
+ * client (040) instead of building: the payload names the send.
+ */
+export async function fireEngine(proposalId: string, studioUrl: string, review?: string): Promise<FireResult> {
   const url = process.env.PROPOSAL_ROUTINE_URL
   const token = process.env.PROPOSAL_ROUTINE_TOKEN
   if (!url || !token) {
@@ -46,7 +50,11 @@ export async function fireEngine(proposalId: string, studioUrl: string): Promise
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ text: JSON.stringify({ proposal: proposalId, studio: studioUrl }) }),
+      body: JSON.stringify({
+        text: JSON.stringify(review
+          ? { proposal: proposalId, review, studio: studioUrl }
+          : { proposal: proposalId, studio: studioUrl }),
+      }),
     })
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
     if (!res.ok) {

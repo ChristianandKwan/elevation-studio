@@ -24,6 +24,8 @@ interface ProposalItem {
   /** No first draft and nothing working on one: it stopped, and may be removed. */
   stalled: boolean
   versions: VersionItem[]
+  /** The latest time it went to the client (040). */
+  sent: { version: number; sentAt: string; sentBy: string } | null
 }
 
 interface Props {
@@ -35,6 +37,8 @@ interface Props {
 const when = (iso: string) => new Date(iso).toLocaleString('en-GB', {
   day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
 })
+
+const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
 /**
  * The project's proposals, and every version of each.
@@ -124,7 +128,7 @@ export default function ProposalsView({ projectId, onNewProposal }: Props) {
           <div>
             <h1 className="index-title">Proposals</h1>
             <p className="index-sub">
-              Laid out by Claude in the C&amp;K style
+              Laid out by Claude in the C&amp;K <Link href="/house-style" className="proposals-house-link">house style</Link>
               {starts && <> · {starts.left} of {starts.limit} starts left today</>}
             </p>
           </div>
@@ -154,6 +158,7 @@ export default function ProposalsView({ projectId, onNewProposal }: Props) {
                   <small>{when(v.createdAt)}</small>
                 </div>
                 <div className="proposals-vsum" title={v.summary}>
+                  {p.sent?.version === v.number && <span className="proposals-sent-tag">Sent</span>}
                   {isLatest && <span className="proposals-latest">Latest</span>}
                   {v.summary || (v.pageCount ? `${v.pageCount} pages` : '')}
                 </div>
@@ -203,6 +208,7 @@ export default function ProposalsView({ projectId, onNewProposal }: Props) {
                   <span className="proposals-meta">
                     Started {when(p.createdAt)}
                     {p.versions.length > 0 && <> · {p.versions.length} version{p.versions.length === 1 ? '' : 's'}</>}
+                    {p.sent && <> · <span className="proposals-sent">Sent to the client {day(p.sent.sentAt)}</span></>}
                   </span>
                 </div>
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { EXPORTS_BUCKET, exportObjectPath } from '@/lib/export/bucket'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
@@ -37,6 +38,8 @@ interface Props {
   projects: DashProject[]
   /** Which projects the server loaded: `?view=archived` asks for the archived ones. */
   view: 'active' | 'archived'
+  /** House-style rules Claude suggested that wait for a decision. */
+  houseRulesWaiting?: number
 }
 
 /**
@@ -68,7 +71,7 @@ function CardThumb({ src, alt }: { src: string; alt: string }) {
   )
 }
 
-export default function DashboardClient({ profile, projects: initialProjects, view }: Props) {
+export default function DashboardClient({ profile, projects: initialProjects, view, houseRulesWaiting = 0 }: Props) {
   const router = useRouter()
   const [projects, setProjects] = useState(initialProjects)
 
@@ -278,6 +281,11 @@ export default function DashboardClient({ profile, projects: initialProjects, vi
           />
           <div className="header-app-title">Elevation Studio</div>
           <div className="dash-user">
+            <Link href="/house-style" className="btn btn-ghost btn-sm dash-house-style"
+              title="How Claude lays out your proposals, and the rules waiting for you">
+              House style
+              {houseRulesWaiting > 0 && <span className="dash-house-count" aria-label={`${houseRulesWaiting} waiting`}>{houseRulesWaiting}</span>}
+            </Link>
             <FeedbackButton />
             <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Sign out</button>
           </div>
