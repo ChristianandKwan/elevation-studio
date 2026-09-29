@@ -47,6 +47,11 @@ interface Props {
   promptInline?: boolean
   /** Tightens spacing for the studio sidebar and the index, which have none to spare. */
   compact?: boolean
+  /**
+   * The section already shows this anchor's hint just above. The empty box
+   * then says only "Write here…" rather than repeating it in grey (Tom).
+   */
+  hintAbove?: boolean
 }
 
 /**
@@ -58,7 +63,7 @@ interface Props {
  */
 export default function NotePanel({
   notes, anchor, onAdd, onChange, onDelete, workName, onWork,
-  promptInline = false, compact = false,
+  promptInline = false, compact = false, hintAbove = false,
 }: Props) {
   return (
     <div className={`note-panel${compact ? ' compact' : ''}`}>
@@ -69,6 +74,7 @@ export default function NotePanel({
           anchor={anchor}
           workName={workName}
           promptInline={promptInline}
+          hintAbove={hintAbove}
           // A note can show up somewhere it is not anchored — a note covering
           // several works appears on each of them. It is the same note, so
           // editing it here changes it everywhere; saying so is the
@@ -90,13 +96,14 @@ export default function NotePanel({
 }
 
 function NoteCard({
-  note, anchor, workName, onWork, promptInline = false, borrowed = false,
+  note, anchor, workName, onWork, promptInline = false, hintAbove = false, borrowed = false,
   onChange, onDelete,
 }: {
   note: Note
   anchor: NoteAnchor
   workName?: (workId: string) => string | undefined
   promptInline?: boolean
+  hintAbove?: boolean
   /** Shown here but written elsewhere — editing it changes it there too. */
   borrowed?: boolean
   onWork?: string
@@ -199,7 +206,7 @@ function NoteCard({
         ref={taRef}
         className="note-body"
         value={body}
-        placeholder={promptInline ? '' : ANCHOR_META[anchor].prompt}
+        placeholder={promptInline ? '' : hintAbove ? 'Write here…' : ANCHOR_META[anchor].prompt}
         onChange={e => setBody(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => { setFocused(false); flush() }}

@@ -38,8 +38,8 @@ import IndexScreen from '@/components/index/IndexScreen'
 import { preloadImages, clearPreloads } from '@/lib/imagePreload'
 import NotesScreen from '@/components/notes/NotesScreen'
 import {
-  DEFAULT_SHARE, noteRow, notesOn, rowToNote,
-  type Note, type NoteAnchor, type NoteRow,
+  DEFAULT_SHARE, emptyNoteOn, noteRow, notesOn,
+  type Note, type NoteAnchor,
 } from '@/lib/notes'
 import {
   artistKey, canRenameTo, findArtistByName, sortArtists, tidyArtistName,
@@ -485,16 +485,24 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   // All five anchors go through these three, so there is one place that
   // knows how a note is written and one place that can get it wrong.
 
-  const NOTE_SELECT = `
-    id, project_id, anchor_type, elevation_id, option_id, work_id, artist_id,
-    body, share, display_order, updated_at, note_works(work_id)
-  `
+  // Notes as they are right now, for "+ Note": two clicks in a row must see
+  // the first one's note, not a render that has not happened yet.
+  const notesNow = useRef(notes)
+  useEffect(() => { notesNow.current = notes }, [notes])
+  /** Notes still being created. Editing or deleting one waits for it. */
+  const noteInserts = useRef(new Map<string, Promise<boolean>>())
 
   const insertNote = useCallback(async (
     anchor: NoteAnchor, id: string | null, workIds: string[] = [],
   ) => {
-    const supabase = createClient()
-    const payload = noteRow({
+    // A blank note already on this section is the one "+ Note" means: a
+    // second click, or a double click, used to add another.
+    if (workIds.length === 0 && emptyNoteOn(notesNow.current, anchor, id)) return
+
+    // Shown at once and saved behind it. Waiting for the database before the
+    // box appeared felt slow enough that "+ Note" got clicked again.
+    const note: Note = {
+      id: crypto.randomUUID(),
       projectId: project.id,
       anchor,
       elevationId: anchor === 'elevation' ? id : null,
@@ -503,22 +511,34 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       artistId:    anchor === 'artist'    ? id : null,
       body: '',
       share: DEFAULT_SHARE,
-      displayOrder: notes.filter(n => n.anchor === anchor).length,
-    })
-    const { data, error } = await supabase.from('notes').insert(payload).select(NOTE_SELECT).single()
-    if (error || !data) { onStatus('Could not add the note — please try again'); return }
-
-    // The set of works a note covers is written with it rather than after,
-    // so a note picked out of several works is never briefly about none.
-    if (workIds.length > 0) {
-      const { error: setErr } = await supabase.from('note_works')
-        .insert(workIds.map(work_id => ({ note_id: data.id, work_id })))
-      if (setErr) onStatus('Note added, but not which works it is about')
+      workIds,
+      displayOrder: notesNow.current.filter(n => n.anchor === anchor).length,
+      updatedAt: null,
     }
+    notesNow.current = [...notesNow.current, note]
+    setNotes(prev => [...prev, note])
 
-    const note = rowToNote(data as unknown as NoteRow)
-    setNotes(prev => [...prev, { ...note, workIds }])
-  }, [project.id, notes]) // eslint-disable-line
+    const saved = (async () => {
+      const supabase = createClient()
+      const { error } = await supabase.from('notes').insert({ id: note.id, ...noteRow(note) })
+      if (error) {
+        setNotes(prev => prev.filter(n => n.id !== note.id))
+        onStatus('Could not add the note — please try again')
+        return false
+      }
+      // The set of works a note covers is written with it rather than after,
+      // so a note picked out of several works is never briefly about none.
+      if (workIds.length > 0) {
+        const { error: setErr } = await supabase.from('note_works')
+          .insert(workIds.map(work_id => ({ note_id: note.id, work_id })))
+        if (setErr) onStatus('Note added, but not which works it is about')
+      }
+      return true
+    })()
+    noteInserts.current.set(note.id, saved)
+    await saved
+    noteInserts.current.delete(note.id)
+  }, [project.id, onStatus])
 
   const addNote = useCallback((anchor: NoteAnchor, id: string | null) => {
     void insertNote(anchor, id)
@@ -544,6 +564,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     // Optimistic: a note is read back on more than one screen, and a textarea
     // that snaps back while the write is in flight reads as a lost edit.
     setNotes(prev => prev.map(n => (n.id === noteId ? { ...n, ...patch } : n)))
+    // A note typed into the moment it appears may not exist in the database
+    // yet: an update would match nothing and the words would be lost.
+    if (await noteInserts.current.get(noteId) === false) return
 
     const supabase = createClient()
     const { workIds, ...fields } = patch
@@ -578,6 +601,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const deleteNote = useCallback(async (noteId: string) => {
     const before = notes
     setNotes(prev => prev.filter(n => n.id !== noteId))
+    if (await noteInserts.current.get(noteId) === false) return
     const supabase = createClient()
     const { error } = await supabase.from('notes').delete().eq('id', noteId)
     if (error) { setNotes(before); onStatus('Could not remove the note — please try again') }

@@ -121,6 +121,7 @@ export default function NotesScreen({
               <NotePanel
                 notes={notesOn(notes, 'elevation', elev.id)}
                 anchor="elevation"
+                hintAbove
                 onAdd={() => onAdd('elevation', elev.id)}
                 onChange={onChange}
                 onDelete={onDelete}
@@ -193,6 +194,7 @@ function Section({
       <NotePanel
         notes={notes}
         anchor={anchor}
+        hintAbove
         onAdd={onAdd}
         onChange={onChange}
         onDelete={onDelete}

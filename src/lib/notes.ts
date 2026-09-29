@@ -234,6 +234,16 @@ export function notesOn(
 }
 
 /**
+ * A blank note already waiting on this thing, if there is one. "+ Note" gives
+ * that one rather than a second: clicking twice, or double-clicking, used to
+ * leave two empty boxes. A note covering several works is about them, so it is
+ * never counted as a spare, even when it is still empty.
+ */
+export function emptyNoteOn(notes: Note[], anchor: NoteAnchor, id: string | null = null): Note | undefined {
+  return notesOn(notes, anchor, id).find(n => n.body.trim() === '' && n.workIds.length === 0)
+}
+
+/**
  * The notes a thing's own panel shows: the ones anchored to it, less any
  * that were narrowed to a set of works.
  *

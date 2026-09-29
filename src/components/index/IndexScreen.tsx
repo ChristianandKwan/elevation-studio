@@ -291,6 +291,7 @@ function ArtistGroupSection({
               <NotePanel
                 notes={aboutTheArtist}
                 anchor="artist"
+                hintAbove
                 onAdd={() => onAddNote('artist', artistKeyValue)}
                 onChange={onChangeNote}
                 onDelete={onDeleteNote}
