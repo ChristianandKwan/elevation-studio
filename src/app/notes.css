@@ -52,6 +52,9 @@
 
 .note-card-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; flex-wrap: wrap; }
 .note-card-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.note-card-row { display: flex; align-items: flex-start; gap: 10px; }
+.note-card-row .note-body { flex: 1 1 auto; min-width: 0; }
+.note-card-row .note-card-actions { flex: none; }
 
 .note-role-select {
   font-size: 11px; font-weight: 500; letter-spacing: .02em;
