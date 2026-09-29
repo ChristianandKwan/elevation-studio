@@ -31,7 +31,7 @@ import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionK
 import { toWorkColumns, placementsOf, workFieldsOf } from '@/lib/works'
 import { useSaver } from '@/hooks/useSaver'
 import { flushAllSavers } from '@/lib/saver'
-import { bringInOpenWall, changeOption, changeWork } from '@/lib/projectState'
+import { bringInOpenWall, changeOption, changeWork, shareCutOuts } from '@/lib/projectState'
 import type { WorkPatch, IndexElevation } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import IndexScreen from '@/components/index/IndexScreen'
@@ -286,38 +286,21 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         }
       }))
     },
-    onForegroundSaved: (masks) => {
-      // Mirror saved masks into local state for the current option and any sibling options sharing the same image.
-      // useStudio only calls this when the masks actually changed, so the bulk sibling update below is no longer
-      // triggered by every autosave — moving an artwork never touches elevation_options at all.
+    onForegroundSaved: (optionId, masks) => {
+      // Cut-outs belong to the photo: mirror them onto the saved option and any
+      // sibling sharing its image. Found by the option that was saved, not the
+      // one open — see shareCutOuts. useStudio only calls this when the masks
+      // actually changed, so moving an artwork never touches elevation_options.
       setElevations(prev => {
-        const elev = prev.find(e => e.id === activeElevId)
-        if (!elev) return prev
-        const currentOpt = elev.elevation_options.find(o => o.option === activeOption)
-        const siblingIds = currentOpt?.imagePath
-          ? elev.elevation_options
-              .filter(o => o.option !== activeOption && o.imagePath === currentOpt.imagePath)
-              .map(o => o.id)
-          : []
-        const masksValue = masks.length > 0 ? masks : null
+        const { elevations: next, siblingIds } = shareCutOuts(prev, optionId, masks)
         if (siblingIds.length > 0) {
           const supabase = createClient()
           supabase.from('elevation_options')
-            .update({ foreground_masks: masksValue })
+            .update({ foreground_masks: masks.length > 0 ? masks : null })
             .in('id', siblingIds)
             .then(() => {})
         }
-        return prev.map(e => {
-          if (e.id !== activeElevId) return e
-          return {
-            ...e,
-            elevation_options: e.elevation_options.map(o => {
-              if (o.option === activeOption) return { ...o, foreground_masks: masksValue }
-              if (siblingIds.includes(o.id)) return { ...o, foreground_masks: masksValue }
-              return o
-            }),
-          }
-        })
+        return next
       })
     },
   })
