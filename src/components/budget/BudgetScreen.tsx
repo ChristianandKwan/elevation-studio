@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import BudgetHeader from './BudgetHeader'
 import ElevationSection from './ElevationSection'
 import InstallationRow from './InstallationRow'
@@ -128,9 +128,12 @@ export default function BudgetScreen({
 
   // Lands on the line once the budget has loaded and the line is drawn. A work
   // is looked for inside its option, since the same work can hang on several.
+  // Looked for inside this screen only: while an export runs, an off-screen
+  // copy of the budget is being photographed, and it comes first in the page.
+  const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!focus || isLoading) return
-    const block = document.querySelector<HTMLElement>(
+    if (!focus || isLoading || !root.current) return
+    const block = root.current.querySelector<HTMLElement>(
       `[data-budget-option="${CSS.escape(budgetOptionAnchor(focus.elevationId, focus.optionKey))}"]`,
     )
     if (!block) return
@@ -150,7 +153,7 @@ export default function BudgetScreen({
   const listedElevations = effectiveIsConsultant ? elevations : clientElevations
 
   return (
-    <div className="budget-view">
+    <div className="budget-view" ref={root}>
       <BudgetHeader
         vatMode={vatMode}
         onVatToggle={handleVatToggle}
@@ -190,7 +193,6 @@ export default function BudgetScreen({
                     isConsultant={effectiveIsConsultant}
                     onArtworkChange={effectiveIsConsultant ? onArtworkChange : undefined}
                     onNoteChange={effectiveIsConsultant ? onOptionNoteChange : undefined}
-                    focus={focus}
                   />
                 ))
               )}

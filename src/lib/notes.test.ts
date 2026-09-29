@@ -47,7 +47,13 @@ describe('the anchors', () => {
   test('the budget prompt sends per-line pricing elsewhere', () => {
     // The distinction that would otherwise be got wrong: this is the shape of
     // the money, not the figures.
-    assert.match(ANCHOR_META.budget.prompt, /Budget screen/)
+    assert.match(ANCHOR_META.budget.prompt, /Budget page/)
+  })
+
+  test('an option or work note sends anything about its price to the Budget page', () => {
+    // Money is a budget note, written beside its figures (Tom, 2026-09-28).
+    assert.match(ANCHOR_META.option.prompt, /price goes on the Budget page/)
+    assert.match(ANCHOR_META.work.prompt, /price goes on the Budget page/)
   })
 
   test('the elevation prompt talks about the space', () => {

@@ -241,3 +241,4 @@
 .budget-ref-edit { margin-left: auto; font-size: 11px; }
 .budget-ref-off { margin-left: auto; font-size: 11px; color: var(--mid); font-style: italic; }
 .budget-ref-text { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--mid); white-space: pre-wrap; }
+.budget-ref--editing .ble-textarea { margin-top: 6px; }

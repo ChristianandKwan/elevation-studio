@@ -103,7 +103,7 @@ export const ANCHOR_META: Record<NoteAnchor, {
   budget: {
     label: 'Budget',
     inline: 'the budget',
-    prompt: 'The shape of the money rather than the figures — the ceiling, how it is structured, what is in and what is out, terms. Per-work pricing lives on the Budget screen.',
+    prompt: 'The shape of the money rather than the figures — the ceiling, how it is structured, what is in and what is out, terms. Per-work pricing lives on the Budget page.',
   },
   elevation: {
     label: 'Elevation',
@@ -113,12 +113,12 @@ export const ANCHOR_META: Record<NoteAnchor, {
   option: {
     label: 'Option',
     inline: 'this option',
-    prompt: 'Why this arrangement — what it does for the room, and how it differs from the alternatives. Anything about its price goes on the Budget screen.',
+    prompt: 'Why this arrangement — what it does for the room, and how it differs from the alternatives. Anything about its price goes on the Budget page.',
   },
   work: {
     label: 'Work',
     inline: 'this work',
-    prompt: 'Why this piece, and why here. Or why it was set aside. Anything about its price goes on the Budget screen.',
+    prompt: 'Why this work, and why here. Or why it was set aside. Anything about its price goes on the Budget page.',
   },
   artist: {
     label: 'Artist',

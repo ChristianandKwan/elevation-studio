@@ -137,13 +137,13 @@ export default async function ClientPortalPage({ params }: Props) {
 
   if (!project) notFound()
 
-  // Both attempts failed. Rendering on would show the client a portal with
+  // Both attempts failed. Rendering on would show the client a proposal with
   // no walls in it, which reads as the consultant having sent them nothing.
   if (elevError) {
-    return <LoadFailed what="project" detail="" audience="client" />
+    return <LoadFailed what="proposal" detail="" audience="client" />
   }
 
-  // Notes and messages sit beside the walls rather than being the point,
+  // Notes and messages sit beside the walls rather than being the proposal,
   // so a failure to read them costs the client those and nothing else.
   if (notesRes.error) console.warn('[portal] notes failed:', notesRes.error.message)
   if (messagesRes.error) console.warn('[portal] messages failed:', messagesRes.error.message)

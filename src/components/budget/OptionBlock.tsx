@@ -22,24 +22,12 @@ interface Props {
   layout?: 'block' | 'card'
   /** Where the block can be found by a jump from the Index or Notes. */
   anchor: string
-  /**
-   * Changes each time "Edit on budget" lands on this option. A folded card
-   * opens for it, so the line being jumped to is on screen.
-   */
-  openSignal?: number
 }
 
 export default function OptionBlock({
-  option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block', anchor, openSignal,
+  option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block', anchor,
 }: Props) {
   const [open, setOpen] = useState(true)
-  // Opened during render rather than in an effect, so the card is already
-  // unfolded when the budget screen's effect scrolls to the line inside it.
-  const [seenSignal, setSeenSignal] = useState(openSignal)
-  if (openSignal !== seenSignal) {
-    setSeenSignal(openSignal)
-    if (openSignal !== undefined) setOpen(true)
-  }
   const displayTotal = optionTotal(option.artworks, vatMode)
   const keyClass = `budget-option-key${option.name ? ' budget-option-key--named' : ''}`
   const count = option.artworks.length

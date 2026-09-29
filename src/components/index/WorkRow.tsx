@@ -117,6 +117,7 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
           offBudget={placed.length === 0
             ? 'Not on the budget while it hangs nowhere'
             : 'Not on the budget: the client picked another option'}
+          onChange={(note, shown) => onChange({ note, noteShownToClient: shown })}
         />
       </div>
     </div>

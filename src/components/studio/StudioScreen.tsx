@@ -1937,6 +1937,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onChange={changeNote}
           onDelete={deleteNote}
           onEditOnBudget={(elevationId, optionKey) => openBudgetAt({ elevationId, optionKey })}
+          onBudgetNoteChange={handleOptionNoteChange}
         />
       )}
 

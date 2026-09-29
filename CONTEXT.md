@@ -120,7 +120,9 @@ _Avoid_: client notes, comments
 
 **Budget**:
 The priced view of a project, with a line for each placement plus sub-items,
-discounts, VAT and the consultant fee.
+discounts, VAT and the consultant fee. Consultants work on the *Budget page*;
+the client reads the *Budget tab* in the portal.
+_Avoid_: Budget screen
 
 **From / Up to**:
 The budget's lowest and highest totals while an elevation still has more than
@@ -149,9 +151,10 @@ _Avoid_: private, share, proposal (the old names)
 
 **Budget note**:
 A note about money, on one line of the budget: one per work, one per option.
-It is written only on the budget page, beside the figures it talks about. The
+It is written on the Budget page, beside the figures it talks about. The
 client reads it only on the Budget tab. The Index and the Notes screen show it
-with a link back to its line. Anything about a price is a budget note, and
+with a link back to its line, or, when the Budget page has no line for it,
+let it be edited where it is shown. Anything about a price is a budget note, and
 everything else is a Note.
 _Avoid_: budget line note, line note
 
@@ -164,8 +167,10 @@ _Avoid_: export (alone), pack
 
 **Proposal**:
 The designed, paged document that C&K send to a client, built by the proposal
-engine from a proposal pack. It is only ever the document, never the project or
-what the client sees in the portal.
+engine from a proposal pack. Inside the studio and in C&K's own emails it is
+only ever the document, never the project. In words the client reads (the
+portal, the portal guide), "your proposal" may name what they are shown,
+because that is what it is to them.
 _Avoid_: deck, presentation
 
 **Version**:
