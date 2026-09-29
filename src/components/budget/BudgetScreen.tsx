@@ -14,6 +14,7 @@ import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 import { budgetOptionAnchor, type BudgetFocus } from './budgetFocus'
 import type { ProjectBudget } from '@/types'
 import { InlineSpinner } from '@/components/ui/InlineSpinner'
+import { useOnline } from '@/hooks/useOnline'
 
 interface Props {
   projectId: string
@@ -104,6 +105,8 @@ export default function BudgetScreen({
     budget,
     saveStatus,
     isLoading,
+    loadFailed,
+    retry,
     setInstallation,
     setConsultantFee,
     addCustomLineItem,
@@ -148,6 +151,8 @@ export default function BudgetScreen({
     return () => window.clearTimeout(done)
   }, [focus, isLoading])
 
+  const online = useOnline()
+
   const effectiveIsConsultant = isConsultant && !isPreviewingClientView
   // "Client view" preview drops hidden elevations entirely, as the portal does.
   const listedElevations = effectiveIsConsultant ? elevations : clientElevations
@@ -176,7 +181,27 @@ export default function BudgetScreen({
             <InlineSpinner size={32} />
           </div>
         ) : !budget ? (
-          <div className="budget-loading">Unable to load budget data.</div>
+          // Keeps `.budget-loading`: the export waits for it to go, and must
+          // leave the budget picture out rather than photograph this.
+          <div className="budget-loading budget-load-failed" role="alert">
+            {loadFailed ? (
+              <>
+                <p className="budget-load-failed-title">
+                  {online ? 'The budget didn\u2019t load' : 'You seem to be offline'}
+                </p>
+                <p className="budget-load-failed-body">
+                  {online
+                    ? 'Nothing has been lost. This is usually a brief interruption, and trying again generally works.'
+                    : 'This device appears to have lost its internet connection. Nothing has been lost, and the budget will load by itself when you are back online.'}
+                </p>
+                <button type="button" className="btn btn-primary btn-sm" onClick={retry}>
+                  Try again
+                </button>
+              </>
+            ) : (
+              <p className="budget-load-failed-body">Unable to load budget data.</p>
+            )}
+          </div>
         ) : (
           <>
             {/* ── Elevations ──────────────────────────────────────────── */}
