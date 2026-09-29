@@ -23,6 +23,8 @@ import {
 } from '@/lib/frameShadow'
 import { frameRgb, mountRgb, frameGrainSvg } from '@/lib/frames'
 import { wallRgb } from '@/lib/wall'
+import { perspectiveOf, wallQuadToHomography, type WallCorners } from '@/lib/homography'
+import { warpRgba } from '@/lib/warpPixels'
 
 const THUMB_W = 600 // max thumbnail width in pixels
 
@@ -128,7 +130,8 @@ export async function buildThumbnailBuffer(
   origH: number,
   scalePxPerCm: number | null,
   foregroundMasks: MaskPolygon[] | null = null,
-  outWidth: number = THUMB_W
+  outWidth: number = THUMB_W,
+  perspective: WallCorners | null = null,
 ): Promise<Buffer | null> {
   try {
     const W = Math.max(1, Math.round(outWidth))
@@ -389,6 +392,23 @@ export async function buildThumbnailBuffer(
       }
     }
 
+    // Perspective. The studio, the portal and the image export bend the whole
+    // layer of works — frames and shadows with them — by the wall's corners.
+    // This picture used to draw them flat, and so did the proposal pack's walls.
+    // Only a wall that uses perspective takes this path: everything else is
+    // composited exactly as before, pixel for pixel.
+    if (perspective && compositeInputs.length > 0) {
+      const h = wallQuadToHomography(W, thumbH, perspective.map(([x, y]) => [x * W, y * thumbH]) as WallCorners)
+      if (h) {
+        const layer = await sharp({
+          create: { width: W, height: thumbH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+        }).composite(compositeInputs).raw().toBuffer()
+        const bent = warpRgba(new Uint8Array(layer), W, thumbH, h, W, thumbH)
+        const bentPng = await sharp(Buffer.from(bent), { raw: { width: W, height: thumbH, channels: 4 } }).png().toBuffer()
+        compositeInputs.splice(0, compositeInputs.length, { input: bentPng, left: 0, top: 0, blend: 'over' })
+      }
+    }
+
     const elevResized = await sharp(elevBuf).resize(W, thumbH, { fit: 'fill' }).png().toBuffer()
 
     // If any foreground masks exist, overlay a masked copy of the elevation on top so
@@ -436,6 +456,11 @@ interface OptionRowForThumbnail {
   /** Set instead of image_path when this wall was entered as a measurement. */
   wall_color: string | null
   foreground_masks: unknown
+  skew_active?: boolean | null
+  skew_tl_x?: number | null; skew_tl_y?: number | null
+  skew_tr_x?: number | null; skew_tr_y?: number | null
+  skew_br_x?: number | null; skew_br_y?: number | null
+  skew_bl_x?: number | null; skew_bl_y?: number | null
   artworks: Array<{
     x_fraction: number
     y_fraction: number
@@ -465,6 +490,7 @@ async function fetchOptionForThumbnail(
     .from('elevation_options')
     .select(`
       id, image_path, orig_w, orig_h, scale_px_per_cm, wall_color, foreground_masks,
+      skew_active, skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y,
       artworks(
         x_fraction, y_fraction, visible,
         brightness, fade, frame_type, frame_width_mm,
@@ -557,7 +583,9 @@ export async function regenerateOptionThumbnail(
     row.orig_w,
     row.orig_h,
     row.scale_px_per_cm,
-    (row.foreground_masks as MaskPolygon[] | null) ?? null
+    (row.foreground_masks as MaskPolygon[] | null) ?? null,
+    THUMB_W,
+    perspectiveOf(row),
   )
   if (!buf) return false
 

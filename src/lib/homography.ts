@@ -234,3 +234,25 @@ function gaussianElimination(A: number[][], b: number[]): number[] {
   }
   return x
 }
+
+/** A wall's perspective: its corners [TL, TR, BR, BL] as fractions of the photo. */
+export type WallCorners = [[number, number], [number, number], [number, number], [number, number]]
+
+/**
+ * The perspective an option row stores, when it is switched on and complete.
+ * Every renderer reads the same columns this way: the studio, the portal, and
+ * on the server the dashboard picture and the proposal pack's walls.
+ */
+export function perspectiveOf(row: {
+  skew_active?: boolean | null
+  skew_tl_x?: number | null; skew_tl_y?: number | null
+  skew_tr_x?: number | null; skew_tr_y?: number | null
+  skew_br_x?: number | null; skew_br_y?: number | null
+  skew_bl_x?: number | null; skew_bl_y?: number | null
+}): WallCorners | null {
+  if (!row.skew_active) return null
+  const v = [row.skew_tl_x, row.skew_tl_y, row.skew_tr_x, row.skew_tr_y, row.skew_br_x, row.skew_br_y, row.skew_bl_x, row.skew_bl_y]
+  if (v.some(n => n == null)) return null
+  const [a, b, c, d, e, f, g, h] = v as number[]
+  return [[a, b], [c, d], [e, f], [g, h]]
+}
