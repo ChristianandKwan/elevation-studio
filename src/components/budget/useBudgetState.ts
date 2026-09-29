@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useSaver } from '@/hooks/useSaver'
 import type { ProjectBudget, BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem } from '@/types'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -42,7 +43,6 @@ export function useBudgetState(projectId: string, initialBudget?: ProjectBudget 
   const [budget, setBudget] = useState<ProjectBudget | null>(initialBudget ?? null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [isLoading, setIsLoading] = useState(!serverProvided)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const budgetIdRef = useRef<string | null>(initialBudget?.id ?? null)
 
   // Load on mount — lazy-create row if none exists
@@ -93,30 +93,31 @@ export function useBudgetState(projectId: string, initialBudget?: ProjectBudget 
     return () => { cancelled = true }
   }, [projectId, serverProvided])
 
-  // Stable debounced persist — references only refs, never stale state.
-  // No-op when the row came from the server: that path is the read-only
-  // client portal, which cannot write to project_budgets.
+  // Written through the shared saver (src/lib/saver.ts): once typing pauses,
+  // in order, and before an export or on leaving — none of which this had on
+  // its own. Never in the client portal, where the row came from the server
+  // and the browser cannot write to project_budgets.
+  const saver = useSaver<ProjectBudget>(async (budgetId, next) => {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('project_budgets')
+      .update({
+        installation: next.installation,
+        consultant_fee: next.consultantFee,
+        custom_line_items: next.customLineItems,
+        vat_included_default: next.vatIncludedDefault,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', budgetId)
+    setSaveStatus(error ? 'error' : 'saved')
+    if (!error) setTimeout(() => setSaveStatus(prev => prev === 'saved' ? 'idle' : prev), 2500)
+  }, { delayMs: 500 })
+
   const persistDebounced = useCallback((next: ProjectBudget) => {
-    if (serverProvided) return
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (serverProvided || !budgetIdRef.current) return
     setSaveStatus('saving')
-    debounceRef.current = setTimeout(async () => {
-      if (!budgetIdRef.current) return
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('project_budgets')
-        .update({
-          installation: next.installation,
-          consultant_fee: next.consultantFee,
-          custom_line_items: next.customLineItems,
-          vat_included_default: next.vatIncludedDefault,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', budgetIdRef.current)
-      setSaveStatus(error ? 'error' : 'saved')
-      if (!error) setTimeout(() => setSaveStatus(prev => prev === 'saved' ? 'idle' : prev), 2500)
-    }, 500)
-  }, [serverProvided])
+    saver.save(budgetIdRef.current, next)
+  }, [serverProvided, saver])
 
   function mutateBudget(updater: (prev: ProjectBudget) => ProjectBudget) {
     setBudget(prev => {
