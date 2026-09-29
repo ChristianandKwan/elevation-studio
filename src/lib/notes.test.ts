@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  ANCHOR_META, ARTIST_STANDING_PROMPT, NOTE_ANCHORS,
+  ANCHOR_META, ARTIST_STANDING_PROMPT, NOTE_ANCHORS, emptyNoteOn,
   DEFAULT_SHARE, noteRow, notesForExport, notesForPortal, notesMentioning,
   notesOn, notesOwnedBy, parseShare, rowToNote, showsInPortal, workSetLabel,
   writtenCount,
@@ -338,5 +338,28 @@ describe('every note has a way out', () => {
       [],
       'a note no panel shows cannot be deleted',
     )
+  })
+})
+
+describe('adding a note', () => {
+  test('a section that already has an empty note is given that one, not a second', () => {
+    // "+ Note" clicked twice, or double-clicked, used to leave two empty boxes.
+    const empty = note({ id: 'empty', anchor: 'option', optionId: 'o1', body: '  ' })
+    const notes = [note({ id: 'full', anchor: 'option', optionId: 'o1' }), empty]
+    assert.equal(emptyNoteOn(notes, 'option', 'o1')?.id, 'empty')
+  })
+
+  test("a section whose notes all have words gets a new one, and another section's empty note does not count", () => {
+    const notes = [
+      note({ id: 'full', anchor: 'option', optionId: 'o1' }),
+      note({ id: 'elsewhere', anchor: 'option', optionId: 'o2', body: '' }),
+    ]
+    assert.equal(emptyNoteOn(notes, 'option', 'o1'), undefined)
+  })
+
+  test('an empty note covering several works is not a blank note for its section', () => {
+    // It was made by picking works first; it is about them, not spare.
+    const notes = [note({ id: 'set', anchor: 'artist', artistId: 'a1', body: '', workIds: ['w1', 'w2'] })]
+    assert.equal(emptyNoteOn(notes, 'artist', 'a1'), undefined)
   })
 })

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSaver } from '@/hooks/useSaver'
 
 /**
  * Where a piece of text is on its way to the database.
@@ -50,31 +51,40 @@ export function useAutosave(
     setDraftState(value)
   }
 
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // What a timer, a blur or the page closing should save: read at that
-  // moment, not at the render that set the timer.
-  const latest = useRef({ draft, saved, save })
-  useEffect(() => { latest.current = { draft, saved, save } })
+  // What a save should compare against and call: read when it runs, not at
+  // the render that queued it.
+  const latest = useRef({ saved, save })
+  useEffect(() => { latest.current = { saved, save } })
 
-  const flush = useCallback(() => {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null }
-    const { draft: text, saved: before, save: write } = latest.current
-    if (text === before) return
+  // The pause, the order and the flush on leaving or closing the page are the
+  // shared saver's (src/lib/saver.ts). Keeping them in order matters on a slow
+  // connection: two saves of one note in flight together used to be able to
+  // land the wrong way round, leaving the earlier text stored.
+  const saver = useSaver<{ text: string }>(async (_key, { text }) => {
+    const { saved: before, save: write } = latest.current
+    if (text === before) {
+      setStatus(s => (s === 'unsaved' ? 'idle' : s))
+      return
+    }
     latest.current.saved = text
     setSaved(text)
     setStatus('saving')
-    Promise.resolve(write(text)).then(
-      () => setStatus(s => (s === 'saving' ? 'saved' : s)),
-      () => setStatus('unsaved'),
-    )
-  }, [])
+    try {
+      await write(text)
+      setStatus(s => (s === 'saving' ? 'saved' : s))
+    } catch {
+      setStatus('unsaved')
+    }
+  }, { delayMs })
+
+  /** Save now: the box lost focus. */
+  const flush = useCallback(() => { void saver.flushAll() }, [saver])
 
   const setDraft = useCallback((text: string) => {
     setDraftState(text)
     setStatus('unsaved')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(flush, delayMs)
-  }, [flush, delayMs])
+    saver.save('text', { text })
+  }, [saver])
 
   // "Saved" is a moment's reassurance, not a permanent label on every note.
   useEffect(() => {
@@ -82,16 +92,6 @@ export function useAutosave(
     const t = setTimeout(() => setStatus(s => (s === 'saved' ? 'idle' : s)), SAVED_SHOWN_MS)
     return () => clearTimeout(t)
   }, [status])
-
-  // Off screen (another option opened, the panel closed) or the page closing:
-  // whatever is still waiting goes now.
-  useEffect(() => {
-    window.addEventListener('pagehide', flush)
-    return () => {
-      window.removeEventListener('pagehide', flush)
-      flush()
-    }
-  }, [flush])
 
   return { draft, setDraft, flush, status }
 }

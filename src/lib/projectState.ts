@@ -99,3 +99,31 @@ export function bringInOpenWall<E extends ElevationShape, W extends { id: string
   })
   return { elevations: nextElevations, works: nextWorks }
 }
+
+/**
+ * Cut-outs belong to a photo, so an option's saved cut-outs go to every other
+ * option on its elevation that shows the same photo.
+ *
+ * Found by the option that was saved, never by the one open: a save still
+ * waiting when the consultant switched walls used to share its cut-outs onto
+ * the wall they had switched to. Returns the siblings to write to as well.
+ */
+export function shareCutOuts<E extends { id: string; elevation_options: Array<{ id: string; imagePath?: string | null }> }>(
+  elevations: E[], optionId: string, masks: unknown[],
+): { elevations: E[]; siblingIds: string[] } {
+  const value = masks.length > 0 ? masks : null
+  const elev = elevations.find(e => e.elevation_options.some(o => o.id === optionId))
+  const saved = elev?.elevation_options.find(o => o.id === optionId)
+  if (!elev || !saved) return { elevations, siblingIds: [] }
+  const siblingIds = saved.imagePath
+    ? elev.elevation_options.filter(o => o.id !== optionId && o.imagePath === saved.imagePath).map(o => o.id)
+    : []
+  const touched = new Set([optionId, ...siblingIds])
+  return {
+    siblingIds,
+    elevations: elevations.map(e => (e !== elev ? e : {
+      ...e,
+      elevation_options: e.elevation_options.map(o => (touched.has(o.id) ? { ...o, foreground_masks: value } : o)),
+    })),
+  }
+}

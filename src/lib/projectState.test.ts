@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { bringInOpenWall, changeOption, changeWork } from './projectState.ts'
+import { bringInOpenWall, changeOption, changeWork, shareCutOuts } from './projectState.ts'
 
 /** A placement: one work hung on one option. */
 function placement(id: string, workId: string, extra: Record<string, unknown> = {}) {
@@ -112,5 +112,37 @@ describe('bringInOpenWall', () => {
     assert.deepEqual(b.foreground_masks, masks)
     assert.equal(b.skew_active, true)
     assert.equal((loaded.elevations[0].elevation_options[0] as Record<string, unknown>).skew_active, undefined, 'option A is untouched')
+  })
+})
+
+describe('shareCutOuts', () => {
+  // Living room: A and B share one photo, C has its own. Hallway: its own photo.
+  function walls() {
+    return [
+      { id: 'living', elevation_options: [
+        { id: 'la', option: 'A', imagePath: 'living.jpg', foreground_masks: null as unknown, artworks: [] },
+        { id: 'lb', option: 'B', imagePath: 'living.jpg', foreground_masks: null as unknown, artworks: [] },
+        { id: 'lc', option: 'C', imagePath: 'living-2.jpg', foreground_masks: null as unknown, artworks: [] },
+      ] },
+      { id: 'hallway', elevation_options: [
+        { id: 'ha', option: 'A', imagePath: 'hall.jpg', foreground_masks: 'radiator' as unknown, artworks: [] },
+        { id: 'hb', option: 'B', imagePath: 'hall.jpg', foreground_masks: 'radiator' as unknown, artworks: [] },
+      ] },
+    ]
+  }
+
+  test("cut-outs saved on one option reach the options sharing its photo, and never another wall's", () => {
+    const sofa = [{ shape: 'sofa' }]
+    const { elevations, siblingIds } = shareCutOuts(walls(), 'la', sofa)
+
+    const masks = Object.fromEntries(elevations.flatMap(e => e.elevation_options.map(o => [o.id, o.foreground_masks])))
+    assert.deepEqual(masks, { la: sofa, lb: sofa, lc: null, ha: 'radiator', hb: 'radiator' })
+    assert.deepEqual(siblingIds, ['lb'], 'only the Living room option sharing the photo is written to')
+  })
+
+  test('no cut-outs is saved as none', () => {
+    const { elevations } = shareCutOuts(walls(), 'ha', [])
+    assert.equal(elevations[1].elevation_options[0].foreground_masks, null)
+    assert.equal(elevations[1].elevation_options[1].foreground_masks, null)
   })
 })

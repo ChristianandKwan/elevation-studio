@@ -11,6 +11,7 @@ import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import type { ProjectBudget, DiscountStatus, SubLineItem } from '@/types'
 import { optionTitleFor, optionTagClass } from '@/lib/options'
 import type { OptionMessage } from '@/lib/messages'
+import { createPortalSaves, type PortalSaves } from '@/lib/portalSaves'
 
 interface ClientArtwork {
   id: string
@@ -100,17 +101,10 @@ interface Props {
   budget: ProjectBudget | null
 }
 
-/** How long after the last eye-icon click before the visibility write goes out. */
-const VISIBILITY_SAVE_DELAY_MS = 500
-/** How long after the last drag ends before positions are written. */
-const POSITION_SAVE_DELAY_MS = 600
-
 export default function ClientPortal({ token, project, elevations, approvalActivity, clientBudget, budget }: Props) {
   const inFlightRef = useRef(new Set<string>())
-  // Debounced writers — see toggleVisibility / onArtworkMoveEnd.
-  const visibilityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const serverVisibility = useRef(new Map<string, boolean>())
-  const positionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Show/hide and moves, saved once the client pauses — see src/lib/portalSaves.ts.
+  const portalSaves = useRef<PortalSaves | null>(null)
   const [toast, setToast] = useState('')
   const [portalView, setPortalView] = useState<'elevations' | 'budget'>('elevations')
   const [showIntroLoader, setShowIntroLoader] = useState(true)
@@ -201,14 +195,10 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   }, [activeElevId, activeOpt, pickedOptions]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => clearPreloads(), [])
 
-  // Mirrors for the debounced writers below, which fire from timers and would
-  // otherwise close over a stale snapshot.
+  // The screen as it is now, for saves that go out after a pause and would
+  // otherwise read a stale snapshot.
   const optionsStateRef = useRef(optionsState)
   useEffect(() => { optionsStateRef.current = optionsState }, [optionsState])
-  const activeElevIdRef = useRef(activeElevId)
-  useEffect(() => { activeElevIdRef.current = activeElevId }, [activeElevId])
-  const activeOptRef = useRef(activeOpt)
-  useEffect(() => { activeOptRef.current = activeOpt }, [activeOpt])
 
   // Relative zoom (1.0 = fit) persisted to localStorage per option.id.
   // Hydrates lazily after mount so SSR stays stable.
@@ -240,37 +230,38 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     })
   }
   /**
-   * Send anything still sitting in a debounce when the tab goes away. `pagehide`
-   * rather than `beforeunload` because it also fires on mobile Safari's
-   * back-forward cache. Requests go out with keepalive so the browser finishes
-   * them after the page is gone.
+   * The client's show/hide clicks and moves are saved once they pause (see
+   * src/lib/portalSaves.ts), and anything still waiting is sent when the tab
+   * goes away. `pagehide` rather than `beforeunload` because it also fires on
+   * mobile Safari's back-forward cache. Requests go out with keepalive so the
+   * browser finishes them after the page is gone.
    */
   useEffect(() => {
-    function flushPending() {
-      if (positionTimer.current) {
-        clearTimeout(positionTimer.current)
-        positionTimer.current = null
-        const arts = optionsStateRef.current[activeElevIdRef.current]?.[activeOptRef.current]?.artworks ?? []
-        flushPositions(arts, true).catch(() => { /* page is going away */ })
-      }
-      visibilityTimers.current.forEach((timer, artId) => {
-        clearTimeout(timer)
-        const baseline = serverVisibility.current.get(artId)
-        const art = Object.values(optionsStateRef.current)
-          .flatMap(byOpt => Object.values(byOpt))
-          .flatMap(o => o.artworks)
-          .find(a => a.id === artId)
-        if (!art || baseline === art.visible) return
-        callAction('toggle_visibility', { artworkId: artId, visible: art.visible }, { keepalive: true })
-          .catch(() => { /* page is going away */ })
-      })
-      visibilityTimers.current.clear()
-      serverVisibility.current.clear()
-    }
-    window.addEventListener('pagehide', flushPending)
+    const saves = createPortalSaves({
+      send: async (action, payload) => { await callAction(action, payload, { keepalive: true }) },
+      artworksOn: (elevId, opt) => optionsStateRef.current[elevId]?.[opt]?.artworks ?? [],
+      showAgain: (elevId, opt, artId, visible) => {
+        setOptionsState(prev => ({
+          ...prev,
+          [elevId]: {
+            ...prev[elevId],
+            [opt]: {
+              ...prev[elevId][opt],
+              artworks: prev[elevId][opt].artworks.map(a => (a.id === artId ? { ...a, visible } : a)),
+            },
+          },
+        }))
+        setRerenderKey(k => k + 1)
+      },
+      tell: onStatus,
+    })
+    portalSaves.current = saves
+    const onHide = () => { void saves.flushAll() }
+    window.addEventListener('pagehide', onHide)
     return () => {
-      window.removeEventListener('pagehide', flushPending)
-      flushPending()
+      window.removeEventListener('pagehide', onHide)
+      if (portalSaves.current === saves) portalSaves.current = null
+      saves.dispose()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -304,19 +295,6 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     })
     if (!res.ok) throw new Error(`${action} failed: ${res.status}`)
     return res.json() as Promise<T>
-  }
-
-  /** Flush dragged positions — batched into one call. */
-  async function flushPositions(artworks: ClientArtwork[], keepalive = false) {
-    // An explicit flush supersedes anything the drag debounce still has queued.
-    if (positionTimer.current) {
-      clearTimeout(positionTimer.current)
-      positionTimer.current = null
-    }
-    if (!artworks.length) return
-    await callAction('move_artworks', {
-      artworks: artworks.map(a => ({ id: a.id, xF: a.xF, yF: a.yF })),
-    }, { keepalive })
   }
 
   const activeElev = elevations.find(e => e.id === activeElevId)
@@ -376,17 +354,15 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
    * finished — which is what made it feel stuck. Only the final state matters
    * to the server, so a burst of clicks now collapses into one write.
    *
-   * `serverVisibility` holds what the server had before the current burst, so
-   * a failed write rolls back to the truth rather than to the previous click,
-   * and a burst that ends where it started skips the request entirely.
+   * What the server had before the burst is kept by portalSaves, so a failed
+   * write rolls back to the truth rather than to the previous click, and a
+   * burst that ends where it started skips the request entirely.
    */
   function toggleVisibility(artId: string) {
     const art = optionsStateRef.current[activeElevId]?.[activeOpt]?.artworks.find(a => a.id === artId)
     if (!art) return
     const newVis = !art.visible
     const elevId = activeElevId, opt = activeOpt
-
-    if (!serverVisibility.current.has(artId)) serverVisibility.current.set(artId, art.visible)
 
     setOptionsState(prev => ({
       ...prev,
@@ -402,32 +378,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     }))
     setRerenderKey(k => k + 1)
 
-    const pending = visibilityTimers.current.get(artId)
-    if (pending) clearTimeout(pending)
-    visibilityTimers.current.set(artId, setTimeout(() => {
-      visibilityTimers.current.delete(artId)
-      const baseline = serverVisibility.current.get(artId)
-      serverVisibility.current.delete(artId)
-      // Toggled an even number of times — the server is already correct.
-      if (baseline === newVis) return
-
-      callAction('toggle_visibility', { artworkId: artId, visible: newVis }).catch(() => {
-        setOptionsState(prev => ({
-          ...prev,
-          [elevId]: {
-            ...prev[elevId],
-            [opt]: {
-              ...prev[elevId][opt],
-              artworks: prev[elevId][opt].artworks.map(a =>
-                a.id === artId ? { ...a, visible: baseline ?? a.visible } : a
-              ),
-            },
-          },
-        }))
-        setRerenderKey(k => k + 1)
-        onStatus('Failed to update visibility. Please try again.')
-      })
-    }, VISIBILITY_SAVE_DELAY_MS))
+    portalSaves.current?.toggled(elevId, opt, artId, art.visible)
   }
 
   /**
@@ -436,17 +387,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
    * arrangement. Debounced so a flurry of small adjustments is one write.
    */
   function onArtworkMoveEnd() {
-    const elevId = activeElevId, opt = activeOpt
-    if (positionTimer.current) clearTimeout(positionTimer.current)
-    positionTimer.current = setTimeout(() => {
-      positionTimer.current = null
-      const arts = optionsStateRef.current[elevId]?.[opt]?.artworks ?? []
-      flushPositions(arts).catch(err => {
-        // Low-stakes: the on-screen position is already what the client wants,
-        // and pick/approve flushes again before anything locks.
-        console.warn('move_artworks failed:', err)
-      })
-    }, POSITION_SAVE_DELAY_MS)
+    portalSaves.current?.moved(activeElevId, activeOpt)
   }
 
   /**
@@ -487,7 +428,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     setActiveOpt(opt)
     try {
       // Save client's artwork positions before locking them in
-      await flushPositions(optionsState[elevId]?.[opt]?.artworks ?? [])
+      await portalSaves.current?.sendPositionsNow(elevId, opt)
       // The server writes the pick and its activity-log entry.
       await callAction('pick_option', { elevationId: elevId, option: opt })
       onStatus(`${titleFor(elevId, opt)} selected`)
@@ -528,7 +469,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
     const snapshotOpt = { ...optionsState[activeElevId][activeOpt] }
     try {
       // Save current artwork positions before they lock
-      await flushPositions(optData.artworks)
+      await portalSaves.current?.sendPositionsNow(activeElevId, activeOpt)
 
       // Primary write: approve the option. The server also writes the
       // activity-log entry and flips the project to 'approved' once every

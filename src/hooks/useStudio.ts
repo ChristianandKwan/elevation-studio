@@ -17,11 +17,13 @@ import {
   mountLipOpacity, SHADOW_PUSH,
 } from '@/lib/frameShadow'
 import { frameGrainElement, paintFrameGrain } from '@/lib/frameGrain'
-import { placementRow, workFieldsOf, workRow } from '@/lib/works'
+import { workFieldsOf } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import { frameHex, mountHex, isWoodFrame, bandsPx } from '@/lib/frames'
 import { blankWallDataUrl, blankWallPixels, clampCm, wallHex } from '@/lib/wall'
 import { setPreloadPaused } from '@/lib/imagePreload'
+import { createWallSaves, type WallContent } from '@/lib/wallSave'
+import { useSaver } from '@/hooks/useSaver'
 
 /** Quiet time after the last change before the dashboard thumbnail is re-rendered. */
 const THUMBNAIL_DEBOUNCE_MS = 3000
@@ -185,7 +187,8 @@ interface UseStudioOptions {
   /** Called when an artwork is deleted from the current option */
   onArtworkDeleted?: (id: string) => void
   /** Called only when foreground masks actually changed and were persisted, so sibling options sharing the wall photo can be synced */
-  onForegroundSaved?: (masks: ForegroundMasks) => void
+  /** The cut-outs of this option were written. Named by id: it may no longer be the option open. */
+  onForegroundSaved?: (optionId: string, masks: ForegroundMasks) => void
 }
 
 export function useStudio({ projectId, optionId, onStatus, projectName = '', elevationName = '', optionKey = '', artworkDragLocked = false, onElevationUploaded, onScaleSet, onBlankWallSet, onArtworksAdded, onArtworkDeleted, onForegroundSaved }: UseStudioOptions) {
@@ -275,7 +278,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
     if (!busy && !artworksPending) setPreloadPaused(false)
   }, [busy, artworksPending])
 
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // ─── DASHBOARD THUMBNAIL REGEN (debounced, one at a time) ────────
@@ -348,22 +350,31 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }, [runThumbnailRegen])
 
   // ─── WHAT THE DATABASE LAST SAW ───────────────────────────────────
-  // A save used to write the option's masks and every artwork on every
-  // debounce tick, changed or not — and the masks write fanned out into
-  // a bulk update of every sibling option sharing the wall photo. These
-  // snapshots let persistOption write only what actually changed. They
-  // are set when an option loads and after each successful write.
-  const lastSavedMasks = useRef<string>('null')
-  // Two snapshots, because a save writes two tables: the placement (where it
-  // hangs, frame, lighting) by its own id, and the work (name, size, money,
-  // notes) by work id. The halves are defined once, in src/lib/works.ts.
-  const lastSavedPlacements = useRef(new Map<string, string>())
-  const lastSavedWorks = useRef(new Map<string, string>())
+  // A save writes only what changed since the option was loaded or last
+  // saved: moving one artwork writes that one placement. The record is kept
+  // per option in src/lib/wallSave.ts, so a save still waiting when the
+  // consultant switches walls is compared against its own wall — and its
+  // cut-outs are shared from that wall, not the one now open.
+  const [wallSaves] = useState(() => createWallSaves({
+    db: {
+      saveMasks: async (id, masks) => {
+        const { error } = await createClient().from('elevation_options').update({ foreground_masks: masks }).eq('id', id)
+        if (error) throw error
+      },
+      savePlacement: async (id, row) => {
+        const { error } = await createClient().from('artworks').update(row).eq('id', id)
+        if (error) throw error
+      },
+      saveWork: async (id, row) => {
+        const { error } = await createClient().from('works').update(row).eq('id', id)
+        if (error) throw error
+      },
+    },
+    onMasksSaved: (id, masks) => onForegroundSavedRef.current?.(id, masks as ForegroundMasks),
+  }))
 
-  function rememberSaved(masks: ForegroundMasks, arts: Artwork[]) {
-    lastSavedMasks.current = JSON.stringify(masks.length > 0 ? masks : null)
-    lastSavedPlacements.current = new Map(arts.map(a => [a.id, JSON.stringify(placementRow(a))]))
-    lastSavedWorks.current = new Map(arts.map(a => [a.workId, JSON.stringify(workRow(a))]))
+  function rememberSaved(id: string, masks: ForegroundMasks, arts: Artwork[]) {
+    wallSaves.remember(id, { masks, artworks: arts })
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────
@@ -1275,7 +1286,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       loadedOptionIdRef.current = opts.optionId
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
-      rememberSaved([], [])
+      rememberSaved(opts.optionId, [], [])
       setArtworksPending(false)
       setBusy(false)
       setPreloadPaused(false)
@@ -1448,7 +1459,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       if (elevImg) elevImg.src = elevUrl
 
       const masks = opts.foregroundMasks ?? []
-      rememberSaved(masks, newArts)
+      rememberSaved(opts.optionId, masks, newArts)
 
       const skewCorners = opts.skewCorners ?? null
       const skewActive = opts.skewActive ?? false
@@ -1549,7 +1560,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       setState(s => ({ ...s, elev, scale: null, artworks: [], selId: null, selIds: new Set(), zoom: 1, fitZoom: 1, masks: [], maskDraw: DEFAULT_MASK_DRAW, skewCorners: null, skewActive: false, skewDefMode: false, skewAdjustMode: false }))
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
-      rememberSaved([], [])
+      rememberSaved(optionId, [], [])
 
       // A fresh upload starts at fit — clear any prior per-user zoom preference for this option
       saveRelativeZoom(optionId, 1)
@@ -1634,7 +1645,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       }))
       renderForegroundSVG([], null, null)
       renderSkewHandles([], null)
-      rememberSaved([], arts)
+      rememberSaved(optionId, [], arts)
 
       // A wall that just changed size starts at fit; the old per-user zoom was
       // chosen against a wall of a different shape.
@@ -2044,61 +2055,51 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
   }
 
   // ─── SAVE (debounced) ─────────────────────────────────────────────
+  // Through the shared saver (src/lib/saver.ts): one write per option once
+  // editing pauses for a second and a half, in order, and flushed on leaving,
+  // on page close and before an export. Keyed by option, so a save still
+  // waiting when the consultant switches walls goes to the wall it came from.
+  const wallSaver = useSaver<WallContent>(async (id, content) => {
+    try {
+      const wrote = await wallSaves.write(id, content)
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+      // Only a real write changes the rendered wall, so only then re-render the thumbnail.
+      if (wrote) scheduleThumbnailRegen(id)
+    } catch {
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 5000)
+    }
+  }, { delayMs: 1500 })
+
   function debounceSave(currentState: StudioState) {
     if (!optionId) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
     setSaveStatus('saving')
-    saveTimer.current = setTimeout(() => persistOption(currentState), 1500)
+    wallSaver.save(optionId, { masks: currentState.masks, artworks: currentState.artworks })
   }
 
-  useEffect(() => {
-    const flush = () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current)
-        saveTimer.current = null
-        persistOption(stateRef.current)
-      }
-    }
-    window.addEventListener('beforeunload', flush)
-    return () => {
-      window.removeEventListener('beforeunload', flush)
-      // Fire-and-forget flush on unmount so SPA navigation doesn't drop a pending save or thumbnail regen.
-      const pendingId = optionId
-      const hadSave = !!saveTimer.current
-      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-      // Regen only once the write has landed — a render started alongside the
-      // save composites the wall as it was before it.
-      if (hadSave && pendingId) {
-        void persistOption(stateRef.current).then(() => runThumbnailRegen(pendingId))
-      }
-      void flushThumbnailRegens()
-    }
-  }, [])
+  // Leaving the studio: whatever thumbnail renders are waiting go now. The
+  // saver writes any pending wall edit itself, and a write that changed the
+  // wall schedules its own render.
+  useEffect(() => () => { void flushThumbnailRegens() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Flush any pending save + fire thumbnail regen and await the response.
-  // Callers (e.g. the Dashboard back button) await this so the dashboard never renders a stale preview.
   /**
    * Write a pending wall edit now instead of in a second and a half. For
    * anything that reads the project back from the database — the export
    * pack — and would otherwise miss the last thing moved.
    */
   async function flushPendingSave(): Promise<void> {
-    if (!optionId || !saveTimer.current) return
-    clearTimeout(saveTimer.current)
-    saveTimer.current = null
-    await persistOption(stateRef.current)
+    await wallSaver.flushAll()
   }
 
+  // Flush any pending save + fire thumbnail regen and await the response.
+  // Callers (e.g. the Dashboard back button) await this so the dashboard never renders a stale preview.
   async function flushPendingAndRegen(): Promise<void> {
     if (!optionId) return
     // Option data (artworks + foreground masks). A write that changes the
     // wall schedules its own regen, which the flush below then picks up —
     // so an option nobody touched costs nothing here.
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current)
-      saveTimer.current = null
-      await persistOption(stateRef.current)
-    }
+    await wallSaver.flushAll()
     // Thumbnail. The dashboard serves a PNG built on the server, so leaving
     // before that render lands shows the wall as it was one edit ago. Wait
     // for it — but never longer than THUMBNAIL_FLUSH_CAP_MS, because a slow
@@ -2108,59 +2109,6 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       flushThumbnailRegens(),
       new Promise<void>(r => setTimeout(r, THUMBNAIL_FLUSH_CAP_MS)),
     ])
-  }
-
-  /**
-   * Write the option's masks and artworks — but only the parts that differ
-   * from what the database last saw. Moving one artwork used to PATCH the
-   * option row, bulk-PATCH its sibling options, and PATCH every artwork on
-   * the wall; now it PATCHes that one artwork.
-   */
-  async function persistOption(s: StudioState) {
-    const supabase = createClient()
-    try {
-      let wrote = false
-
-      // Foreground masks — and, through onForegroundSaved, the sibling
-      // options that share this wall photo. Only when they actually changed.
-      const masksValue = s.masks.length > 0 ? s.masks : null
-      const masksJson = JSON.stringify(masksValue)
-      if (masksJson !== lastSavedMasks.current) {
-        const { error: maskErr } = await supabase.from('elevation_options').update({
-          foreground_masks: masksValue,
-        }).eq('id', optionId)
-        if (maskErr) throw maskErr
-        lastSavedMasks.current = masksJson
-        wrote = true
-        onForegroundSavedRef.current?.(s.masks)
-      }
-
-      // Placements whose columns differ from the snapshot, and works likewise.
-      // A moved artwork writes its placement; a resized one writes its work.
-      const placements = s.artworks
-        .map(art => { const row = placementRow(art); return { art, row, json: JSON.stringify(row) } })
-        .filter(({ art, json }) => lastSavedPlacements.current.get(art.id) !== json)
-      const worksChanged = s.artworks
-        .map(art => { const row = workRow(art); return { art, row, json: JSON.stringify(row) } })
-        .filter(({ art, json }) => lastSavedWorks.current.get(art.workId) !== json)
-      const results = await Promise.all([
-        ...placements.map(({ art, row }) => supabase.from('artworks').update(row).eq('id', art.id)),
-        ...worksChanged.map(({ art, row }) => supabase.from('works').update(row).eq('id', art.workId)),
-      ])
-      const artErr = results.find(r => r.error)?.error
-      if (artErr) throw artErr
-      placements.forEach(({ art, json }) => lastSavedPlacements.current.set(art.id, json))
-      worksChanged.forEach(({ art, json }) => lastSavedWorks.current.set(art.workId, json))
-      if (placements.length > 0 || worksChanged.length > 0) wrote = true
-
-      setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 3000)
-      // Only a real write changes the rendered wall, so only then re-render the thumbnail.
-      if (wrote) scheduleThumbnailRegen()
-    } catch {
-      setSaveStatus('error')
-      setTimeout(() => setSaveStatus('idle'), 5000)
-    }
   }
 
   // ─── REMOVE FROM WALL ─────────────────────────────────────────────
@@ -2293,11 +2241,13 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       renderArtworksDOM(newArts, s.elev, s.scale, s.selIds)
       // Mark only this artwork as already written, never the whole option: a
       // sibling may have an unsaved drag still sitting in the debounce, and
-      // calling rememberSaved for all of them would drop it.
+      // marking all of them would drop it.
       const saved = newArts.find(a => a.id === artId)
-      if (saved) {
-        lastSavedPlacements.current.set(artId, JSON.stringify(placementRow(saved)))
-        lastSavedWorks.current.set(saved.workId, JSON.stringify(workRow(saved)))
+      if (saved && optionId) {
+        wallSaves.markSaved(optionId, saved)
+        // A wall save still waiting holds the wall as it was before this
+        // change; bring it up to date, or it would write the old figures back.
+        wallSaver.save(optionId, { masks: s.masks, artworks: newArts })
       }
       return { ...s, artworks: newArts }
     })

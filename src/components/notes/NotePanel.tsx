@@ -47,6 +47,11 @@ interface Props {
   promptInline?: boolean
   /** Tightens spacing for the studio sidebar and the index, which have none to spare. */
   compact?: boolean
+  /**
+   * The section already shows this anchor's hint just above. The empty box
+   * then says only "Write here…" rather than repeating it in grey (Tom).
+   */
+  hintAbove?: boolean
 }
 
 /**
@@ -58,7 +63,7 @@ interface Props {
  */
 export default function NotePanel({
   notes, anchor, onAdd, onChange, onDelete, workName, onWork,
-  promptInline = false, compact = false,
+  promptInline = false, compact = false, hintAbove = false,
 }: Props) {
   return (
     <div className={`note-panel${compact ? ' compact' : ''}`}>
@@ -69,6 +74,7 @@ export default function NotePanel({
           anchor={anchor}
           workName={workName}
           promptInline={promptInline}
+          hintAbove={hintAbove}
           // A note can show up somewhere it is not anchored — a note covering
           // several works appears on each of them. It is the same note, so
           // editing it here changes it everywhere; saying so is the
@@ -90,13 +96,14 @@ export default function NotePanel({
 }
 
 function NoteCard({
-  note, anchor, workName, onWork, promptInline = false, borrowed = false,
+  note, anchor, workName, onWork, promptInline = false, hintAbove = false, borrowed = false,
   onChange, onDelete,
 }: {
   note: Note
   anchor: NoteAnchor
   workName?: (workId: string) => string | undefined
   promptInline?: boolean
+  hintAbove?: boolean
   /** Shown here but written elsewhere — editing it changes it there too. */
   borrowed?: boolean
   onWork?: string
@@ -139,72 +146,98 @@ function NoteCard({
 
   const inPortal = showsInPortal(note.anchor)
 
+  // What the note is, when it needs saying: the works it covers, where it
+  // is really kept, or the prompt written inline.
+  const label = covers ? (
+    <span className="note-covers" title={note.workIds.map(id => workName?.(id)).filter(Boolean).join(', ')}>
+      About {covers}
+    </span>
+  ) : borrowed ? (
+    <span className="note-borrowed">From {ANCHOR_META[note.anchor].inline}</span>
+  ) : promptInline ? (
+    <span className="note-prompt">{ANCHOR_META[anchor].prompt}</span>
+  ) : null
+
+  const actions = (
+    <div className="note-card-actions">
+      {/* Only where the portal has a place for the note: elsewhere every
+          note goes into the pack and nowhere else, and a switch would
+          change nothing. */}
+      {inPortal && (
+        <ShareSwitch value={note.share} onChange={share => onChange({ share })} />
+      )}
+
+      {/* A plain "Remove" on a note being read somewhere it is not
+          anchored would say one thing and do another: it looks like
+          taking it off this work and would in fact delete a note several
+          works share. So the covering case asks which is meant.
+
+          It used to show nothing at all, which was worse — the note was
+          filtered out of its own artist's panel as well, so there was no
+          screen anywhere that would delete it. */}
+      {confirmDelete ? (
+        <>
+          {coversOthers && (
+            <button
+              type="button"
+              className="note-del"
+              onClick={() => {
+                onChange({ workIds: note.workIds.filter(id => id !== onWork) })
+                setConfirmDelete(false)
+              }}
+            >
+              Just this work
+            </button>
+          )}
+          <button type="button" className="note-del confirm" onClick={onDelete}>
+            {coversOthers ? 'Delete for all' : 'Delete'}
+          </button>
+          <button type="button" className="note-del" onClick={() => setConfirmDelete(false)}>Keep</button>
+        </>
+      ) : (
+        // Nothing written, nothing to lose: a blank note goes without asking (Tom).
+        <button
+          type="button"
+          className="note-del"
+          onClick={() => (body.trim() === '' ? onDelete() : setConfirmDelete(true))}
+        >
+          Remove
+        </button>
+      )}
+    </div>
+  )
+
+  const textarea = (
+    <textarea
+      ref={taRef}
+      className="note-body"
+      value={body}
+      placeholder={promptInline ? '' : hintAbove ? 'Write here…' : ANCHOR_META[anchor].prompt}
+      onChange={e => setBody(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => { setFocused(false); flush() }}
+      autoFocus={note.body === '' && !borrowed}
+    />
+  )
+
   return (
     <div className={`note-card${inPortal && note.share === 'studio' ? ' ck-only' : ''}${borrowed ? ' borrowed' : ''}`}>
-      <div className="note-card-head">
-        {covers && (
-          <span className="note-covers" title={note.workIds.map(id => workName?.(id)).filter(Boolean).join(', ')}>
-            About {covers}
-          </span>
-        )}
-        {borrowed && !covers && (
-          <span className="note-borrowed">From {ANCHOR_META[note.anchor].inline}</span>
-        )}
-        {promptInline && !covers && !borrowed && (
-          <span className="note-prompt">{ANCHOR_META[anchor].prompt}</span>
-        )}
-
-        <div className="note-card-actions">
-          {/* Only where the portal has a place for the note: elsewhere every
-              note goes into the pack and nowhere else, and a switch would
-              change nothing. */}
-          {inPortal && (
-            <ShareSwitch value={note.share} onChange={share => onChange({ share })} />
-          )}
-
-          {/* A plain "Remove" on a note being read somewhere it is not
-              anchored would say one thing and do another: it looks like
-              taking it off this work and would in fact delete a note several
-              works share. So the covering case asks which is meant.
-
-              It used to show nothing at all, which was worse — the note was
-              filtered out of its own artist's panel as well, so there was no
-              screen anywhere that would delete it. */}
-          {confirmDelete ? (
-            <>
-              {coversOthers && (
-                <button
-                  type="button"
-                  className="note-del"
-                  onClick={() => {
-                    onChange({ workIds: note.workIds.filter(id => id !== onWork) })
-                    setConfirmDelete(false)
-                  }}
-                >
-                  Just this work
-                </button>
-              )}
-              <button type="button" className="note-del confirm" onClick={onDelete}>
-                {coversOthers ? 'Delete for all' : 'Delete'}
-              </button>
-              <button type="button" className="note-del" onClick={() => setConfirmDelete(false)}>Keep</button>
-            </>
-          ) : (
-            <button type="button" className="note-del" onClick={() => setConfirmDelete(true)}>Remove</button>
-          )}
+      {label ? (
+        <>
+          <div className="note-card-head">
+            {label}
+            {actions}
+          </div>
+          {textarea}
+        </>
+      ) : (
+        // With nothing to label, the writing starts on the top line, level
+        // with the buttons, rather than on a line of its own below them.
+        <div className="note-card-row">
+          {textarea}
+          {actions}
         </div>
-      </div>
-
-      <textarea
-        ref={taRef}
-        className="note-body"
-        value={body}
-        placeholder={promptInline ? '' : ANCHOR_META[anchor].prompt}
-        onChange={e => setBody(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => { setFocused(false); flush() }}
-        autoFocus={note.body === '' && !borrowed}
-      />
+      )}
       <NoteSaveBar status={status} open={focused} onDone={() => { flush(); taRef.current?.blur() }} />
     </div>
   )

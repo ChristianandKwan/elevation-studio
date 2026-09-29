@@ -27,6 +27,7 @@
 import { zipSync, type Zippable } from 'fflate'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
+import { perspectiveOf } from '@/lib/homography'
 
 import { buildThumbnailBuffer, EXPORT_WALL_W, type ArtworkEntry } from '@/lib/thumbnail'
 import { notesForExport, notesMentioning, notesOn, rowToNote, workSetLabel, type Note, type NoteRow } from '@/lib/notes'
@@ -132,6 +133,11 @@ interface OptionRow {
   wall_h_cm: number | null
   wall_color: string | null
   foreground_masks: unknown
+  skew_active?: boolean | null
+  skew_tl_x?: number | null; skew_tl_y?: number | null
+  skew_tr_x?: number | null; skew_tr_y?: number | null
+  skew_br_x?: number | null; skew_br_y?: number | null
+  skew_bl_x?: number | null; skew_bl_y?: number | null
   consultant_note: string | null
   consultant_note_shown_to_client: boolean | null
   artworks: PlacementRow[]
@@ -178,6 +184,7 @@ interface BudgetRow {
 const OPTION_SELECT = `
   id, option, sort_order, created_at, name, image_path, thumbnail_path,
   orig_w, orig_h, scale_px_per_cm, wall_w_cm, wall_h_cm, wall_color, foreground_masks,
+  skew_active, skew_tl_x, skew_tl_y, skew_tr_x, skew_tr_y, skew_br_x, skew_br_y, skew_bl_x, skew_bl_y,
   consultant_note, consultant_note_shown_to_client,
   artworks(
     id, work_id, x_fraction, y_fraction, visible, display_order,
@@ -394,6 +401,7 @@ async function renderWall(
 
   const png = await buildThumbnailBuffer(
     elev, entries, opt.orig_w, opt.orig_h, opt.scale_px_per_cm, masks, EXPORT_WALL_W,
+    perspectiveOf(opt),
   )
   if (!png) return null
   return new Uint8Array(await sharp(png).jpeg({ quality: WALL_QUALITY }).toBuffer())
