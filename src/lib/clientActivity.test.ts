@@ -39,7 +39,7 @@ describe('buildDigest', () => {
       act('approve', 'o2', '2026-09-23T13:09:00Z'),
     ], url)!
     assert.equal(d.subject, 'Nepean: 1 choice, 1 approval and 1 message from the client')
-    assert.match(d.text, /^The client was active in the Nepean proposal between 14:02 and 14:09\./)
+    assert.match(d.text, /^The client was active in the Nepean project between 14:02 and 14:09\./)
     assert.match(d.text, /Chose Option B/)
     assert.match(d.text, /Approved Option B/)
     assert.match(d.text, /Sent a message on Option B/)
@@ -106,12 +106,12 @@ describe('buildDigest', () => {
 
   test('a single moment is "at", not "between" the same time twice', () => {
     const d = buildDigest(project, [living()], [act('pick', null)], url)!
-    assert.match(d.text, /proposal at 14:02\./)
+    assert.match(d.text, /project at 14:02\./)
   })
 
   test('the opening says "the client", which is singular however many people they are', () => {
     const d = buildDigest(project, [living()], [act('pick', null)], url)!
-    assert.match(d.text.split('\n')[0], /^The client was active in the Nepean proposal/)
+    assert.match(d.text.split('\n')[0], /^The client was active in the Nepean project/)
   })
 
   test('nothing to say about walls that are gone: no email', () => {

@@ -5,6 +5,7 @@ import OptionBlock from './OptionBlock'
 import OptionNote from './OptionNote'
 import { fmtGbp, optionTotal } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
+import { budgetOptionAnchor } from './budgetFocus'
 
 interface Props {
   elevation: BudgetElevationData
@@ -37,7 +38,10 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
     const displayTotal = opt ? optionTotal(opt.artworks, vatMode) : 0
 
     return (
-      <div className={`budget-elev-block budget-elev-block--picked${hiddenClass}`}>
+      <div
+        className={`budget-elev-block budget-elev-block--picked${hiddenClass}`}
+        data-budget-option={budgetOptionAnchor(elevation.id, picked)}
+      >
         <div className="budget-elev-header budget-elev-header--picked">
           <span className="budget-elev-name">{elevation.name}</span>
           {hiddenBadge}
@@ -90,6 +94,7 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
               isConsultant={isConsultant}
               onArtworkChange={onArtworkChange}
               onNoteChange={onNoteChange && ((k, n, shown) => onNoteChange(elevation.id, k, n, shown))}
+              anchor={budgetOptionAnchor(elevation.id, opt.key)}
             />
           ))}
         </div>
@@ -103,6 +108,7 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
               isConsultant={isConsultant}
               onArtworkChange={onArtworkChange}
               onNoteChange={onNoteChange && ((k, n, shown) => onNoteChange(elevation.id, k, n, shown))}
+              anchor={budgetOptionAnchor(elevation.id, opt.key)}
               layout="card"
             />
           ))}

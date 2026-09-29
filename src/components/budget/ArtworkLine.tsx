@@ -4,6 +4,7 @@ import { useState } from 'react'
 import ArtworkLineEditor from './ArtworkLineEditor'
 import { fmtGbp, netPrice, tbcNetPrice, subItemAmount, applyVat } from './budgetCalc'
 import type { BudgetArtwork, BudgetArtworkPatch } from './budgetCalc'
+import { SHARE_META } from '@/lib/notes'
 
 interface Props {
   artwork: BudgetArtwork
@@ -37,7 +38,7 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
 
   if (editing && onChange) {
     return (
-      <div className="budget-artwork-line">
+      <div className="budget-artwork-line" data-budget-work={artwork.workId}>
         <ArtworkLineEditor
           artwork={artwork}
           vatMode={vatMode}
@@ -66,7 +67,7 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
     .filter(({ amount }) => amount !== 0)
 
   return (
-    <div className="budget-artwork-line">
+    <div className="budget-artwork-line" data-budget-work={artwork.workId}>
       <div className="budget-artwork-main-row">
         <div className="budget-artwork-identity">
           <span className="budget-artwork-title">{artwork.name}</span>
@@ -135,7 +136,7 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
           <span className="budget-note-text">
             {artwork.note}
             {noteHidden && (
-              <span className="budget-badge budget-badge--internal">Internal</span>
+              <span className="budget-badge budget-badge--internal">{SHARE_META.studio.label}</span>
             )}
           </span>
         </div>

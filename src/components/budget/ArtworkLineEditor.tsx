@@ -1,6 +1,8 @@
 'use client'
 
 import { newSubLineItem } from '@/lib/lineItems'
+import { BUDGET_SHARE_TITLES, budgetNoteShare } from '@/lib/notes'
+import ShareSwitch from '@/components/notes/ShareSwitch'
 import { fmtGbp, netPrice, tbcNetPrice, subItemAmount, artworkLineTotal } from './budgetCalc'
 import type { BudgetArtwork, BudgetArtworkPatch } from './budgetCalc'
 import type { DiscountStatus, SubLineItem, SubLineItemKind } from '@/types'
@@ -262,14 +264,13 @@ export function MoneyFields({ artwork, onChange }: Pick<Props, 'artwork' | 'onCh
             onChange={e => onChange({ note: e.target.value })}
           />
           {artwork.note.trim().length > 0 && (
-            <label className="ble-toggle ble-toggle--block">
-              <input
-                type="checkbox"
-                checked={artwork.noteShownToClient}
-                onChange={e => onChange({ noteShownToClient: e.target.checked })}
+            <div className="ble-note-share">
+              <ShareSwitch
+                value={budgetNoteShare(artwork.noteShownToClient)}
+                onChange={share => onChange({ noteShownToClient: share === 'client' })}
+                titles={BUDGET_SHARE_TITLES}
               />
-              Show this note to the client
-            </label>
+            </div>
           )}
         </div>
       </div>

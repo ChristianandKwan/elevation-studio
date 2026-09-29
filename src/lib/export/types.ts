@@ -80,7 +80,7 @@ export interface ExportNote {
 }
 
 /**
- * The note from the Budget screen on a work or an option: pricing,
+ * The note from the Budget page on a work or an option: pricing,
  * discounts, shipping. Kept apart from the notes above because it is a
  * different kind of thing, written in a different place.
  *

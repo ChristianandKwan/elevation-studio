@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import BudgetHeader from './BudgetHeader'
 import ElevationSection from './ElevationSection'
 import InstallationRow from './InstallationRow'
@@ -11,8 +11,10 @@ import { useBudgetState } from './useBudgetState'
 import { rememberVatMode, storedVatMode } from './vatMode'
 import { computeProjectTotals } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
+import { budgetOptionAnchor, type BudgetFocus } from './budgetFocus'
 import type { ProjectBudget } from '@/types'
 import { InlineSpinner } from '@/components/ui/InlineSpinner'
+import { useOnline } from '@/hooks/useOnline'
 
 interface Props {
   projectId: string
@@ -43,6 +45,11 @@ interface Props {
    * vatMode.ts for why it exists.
    */
   initialVatMode?: boolean
+  /**
+   * A line to scroll to and highlight: "Edit on budget" from the Index or the
+   * Notes screen. A budget note is written only here, beside its figures.
+   */
+  focus?: BudgetFocus | null
 }
 
 /**
@@ -73,6 +80,7 @@ export default function BudgetScreen({
   onArtworkChange,
   onOptionNoteChange,
   initialVatMode,
+  focus,
 }: Props) {
   // VAT toggle — persisted per project in localStorage.
   //
@@ -97,6 +105,8 @@ export default function BudgetScreen({
     budget,
     saveStatus,
     isLoading,
+    loadFailed,
+    retry,
     setInstallation,
     setConsultantFee,
     addCustomLineItem,
@@ -119,12 +129,36 @@ export default function BudgetScreen({
     document.title = prev
   }
 
+  // Lands on the line once the budget has loaded and the line is drawn. A work
+  // is looked for inside its option, since the same work can hang on several.
+  // Looked for inside this screen only: while an export runs, an off-screen
+  // copy of the budget is being photographed, and it comes first in the page.
+  const root = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!focus || isLoading || !root.current) return
+    const block = root.current.querySelector<HTMLElement>(
+      `[data-budget-option="${CSS.escape(budgetOptionAnchor(focus.elevationId, focus.optionKey))}"]`,
+    )
+    if (!block) return
+    const target = focus.workId
+      ? block.querySelector<HTMLElement>(`[data-budget-work="${CSS.escape(focus.workId)}"]`) ?? block
+      : block.querySelector<HTMLElement>('.budget-note-row--option') ?? block
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    target.classList.remove('budget-focus')
+    void target.offsetWidth // restart the highlight on a second jump to the same line
+    target.classList.add('budget-focus')
+    const done = window.setTimeout(() => target.classList.remove('budget-focus'), 2600)
+    return () => window.clearTimeout(done)
+  }, [focus, isLoading])
+
+  const online = useOnline()
+
   const effectiveIsConsultant = isConsultant && !isPreviewingClientView
   // "Client view" preview drops hidden elevations entirely, as the portal does.
   const listedElevations = effectiveIsConsultant ? elevations : clientElevations
 
   return (
-    <div className="budget-view">
+    <div className="budget-view" ref={root}>
       <BudgetHeader
         vatMode={vatMode}
         onVatToggle={handleVatToggle}
@@ -147,7 +181,27 @@ export default function BudgetScreen({
             <InlineSpinner size={32} />
           </div>
         ) : !budget ? (
-          <div className="budget-loading">Unable to load budget data.</div>
+          // Keeps `.budget-loading`: the export waits for it to go, and must
+          // leave the budget picture out rather than photograph this.
+          <div className="budget-loading budget-load-failed" role="alert">
+            {loadFailed ? (
+              <>
+                <p className="budget-load-failed-title">
+                  {online ? 'The budget didn\u2019t load' : 'You seem to be offline'}
+                </p>
+                <p className="budget-load-failed-body">
+                  {online
+                    ? 'Nothing has been lost. This is usually a brief interruption, and trying again generally works.'
+                    : 'This device appears to have lost its internet connection. Nothing has been lost, and the budget will load by itself when you are back online.'}
+                </p>
+                <button type="button" className="btn btn-primary btn-sm" onClick={retry}>
+                  Try again
+                </button>
+              </>
+            ) : (
+              <p className="budget-load-failed-body">Unable to load budget data.</p>
+            )}
+          </div>
         ) : (
           <>
             {/* ── Elevations ──────────────────────────────────────────── */}

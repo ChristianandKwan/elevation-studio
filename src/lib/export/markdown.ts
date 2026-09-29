@@ -134,7 +134,7 @@ function noteLines(notes: ExportNote[]): string[] {
 export const UNSHOWN_BUDGET_NOTE =
   'not shown to the client: ask Christian & Kwan before using it in the proposal'
 
-/** A work's or an option's note from the Budget screen, labelled either way. */
+/** A work's or an option's note from the Budget page, labelled either way. */
 function budgetNoteLine(note: ExportBudgetNote | null): string | null {
   if (!note) return null
   return note.shownToClient

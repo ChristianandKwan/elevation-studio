@@ -161,8 +161,8 @@ export function buildDigest(
   // "The client", not their name: a name cannot say whether it takes "was"
   // (Mr & Mrs Hamilton, Acme Ltd), and "From Mr & Mrs Hamilton" reads as if
   // they sent the email. "Active", not "viewed": the times are when they did
-  // something, not how long they had the proposal open.
-  const intro = `The client was active in the ${project.name} proposal ${when}.`
+  // something, not how long they had the portal open.
+  const intro = `The client was active in the ${project.name} project ${when}.`
   const allApproved = project.status === 'approved' && actions.some(a => a.kind === 'approve')
   const finale = 'Every elevation is now approved.'
 

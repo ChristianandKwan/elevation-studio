@@ -26,9 +26,12 @@ import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog, Work } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
 import { fmtGbp } from '@/components/budget/budgetCalc'
+import { budgetLineForWork, type BudgetFocus, type BudgetLine } from '@/components/budget/budgetFocus'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
 import { toWorkColumns, placementsOf, workFieldsOf } from '@/lib/works'
-import { createWriteQueue, enqueue } from '@/lib/writeQueue'
+import { useSaver } from '@/hooks/useSaver'
+import { flushAllSavers } from '@/lib/saver'
+import { bringInOpenWall, changeOption, changeWork } from '@/lib/projectState'
 import type { WorkPatch, IndexElevation } from '@/lib/works'
 import { uploadWork, type WorkMeta } from '@/lib/workUpload'
 import IndexScreen from '@/components/index/IndexScreen'
@@ -189,16 +192,12 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   }, [])
 
   /**
-   * Stable by design, and it matters far more than it looks.
-   *
-   * As a plain function this was a new value on every render, which made
-   * `flushWorkWrite` and `flushNoteWrite` new on every render, which made the
-   * flush-on-leave effect below re-run on every render — and *its cleanup*
-   * clears the debounce timers and writes immediately. So the 600ms debounce
-   * never survived a render, every keystroke became its own request, and two
-   * requests for one row could land out of order. A rename typed as
-   * "Street 2" → "Street " → "Street 1" could end up stored as "Street ",
-   * with the screen still showing "Street 1" because that half is optimistic.
+   * Stable by design. As a plain function this was a new value on every
+   * render, and that once re-ran the old flush-on-leave effect every render,
+   * killing the debounce — a rename typed as "Street 2" → "Street " →
+   * "Street 1" was stored as "Street ". Saving now goes through useSaver,
+   * which reads its callbacks through a ref and is immune to that, but the
+   * toast and the conversations still want a stable function.
    */
   const onStatus = useCallback((msg: string) => {
     setToast(msg)
@@ -232,30 +231,14 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     optionKey: activeOptionTitle,
     artworkDragLocked: isPhone || !!(activeElev?.clientPickedOption && activeElev.clientPickedOption === activeOption) || (activeOptData?.approved ?? false),
     onElevationUploaded: ({ imagePath, imageUrl, origW, origH }) => {
-      setElevations(prev => prev.map(e => {
-        if (e.id !== activeElevId) return e
-        return {
-          ...e,
-          elevation_options: e.elevation_options.map(o => {
-            if (o.option !== activeOption) return o
-            // A photograph replaces a plain wall outright, so the wall's own
-            // fields go with it — see the same clearing in uploadElevation.
-            return { ...o, imagePath, imageUrl, orig_w: origW, orig_h: origH, wall_w_cm: null, wall_h_cm: null, wall_color: null }
-          }),
-        }
+      // A photograph replaces a plain wall outright, so the wall's own
+      // fields go with it — see the same clearing in uploadElevation.
+      setElevations(prev => changeOption(prev, activeElevId, activeOption, {
+        imagePath, imageUrl, orig_w: origW, orig_h: origH, wall_w_cm: null, wall_h_cm: null, wall_color: null,
       }))
     },
     onScaleSet: (scalePxPerCm) => {
-      setElevations(prev => prev.map(e => {
-        if (e.id !== activeElevId) return e
-        return {
-          ...e,
-          elevation_options: e.elevation_options.map(o => {
-            if (o.option !== activeOption) return o
-            return { ...o, scale_px_per_cm: scalePxPerCm }
-          }),
-        }
-      }))
+      setElevations(prev => changeOption(prev, activeElevId, activeOption, { scale_px_per_cm: scalePxPerCm }))
     },
     onBlankWallSet: ({ origW, origH, scalePxPerCm, wallWCm, wallHCm, wallColor }) => {
       setElevations(prev => prev.map(e => {
@@ -456,8 +439,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
    * discount or a note typed just before opening the budget did not show up
    * there until the page was reloaded.
    *
-   * Every field the sidebar can edit has to be listed here. A field left out
-   * saves to the database and still looks lost.
+   * Which fields go where is decided once, in src/lib/projectState.ts. When
+   * this listed them itself, a field left out saved to the database and still
+   * looked lost — as the mount did.
    */
   const studioLoadedOptionId = studio.loadedOptionId
   const syncStudioIntoElevations = useCallback(() => {
@@ -469,107 +453,49 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     // masks and perspective must not be copied onto the active option.
     const activeOptId = elevations.find(e => e.id === activeElevId)?.elevation_options.find(o => o.option === activeOption)?.id
     const wallIsLoaded = !!activeOptId && studioLoadedOptionId() === activeOptId
-    // Name, artist, size and the money belong to the work, not to this
-    // placement of it — so every other placement of the same work, on any
-    // option or elevation, and the index's copy move with it.
-    const byWork = new Map(currentArts.map(a => [a.workId, a]))
-    const workFields = (cur: Artwork) => ({
-      name: cur.name, artist: cur.artist,
-      wCm: cur.wCm, hCm: cur.hCm,
-      price: cur.price,
-      note: cur.note, noteShownToClient: cur.noteShownToClient,
-      vatApplies: cur.vatApplies,
-      discountStatus: cur.discountStatus, discountPercent: cur.discountPercent,
-      subLineItems: cur.subLineItems,
-    })
-    setElevations(prev => prev.map(e => ({
-      ...e,
-      elevation_options: e.elevation_options.map(o => {
-        if (e.id === activeElevId && o.option === activeOption) {
-          return {
-            ...o,
-            ...(wallIsLoaded ? {
-              foreground_masks: currentMasks.length > 0 ? currentMasks : null,
-              // Without this, a perspective set this visit was forgotten on
-              // switching away and back, and never reached a new option.
-              ...currentSkew,
-            } : {}),
-            artworks: o.artworks.map(a => {
-              const cur = currentArts.find(ca => ca.id === a.id)
-              if (!cur) return a
-              return {
-                ...a,
-                ...workFields(cur),
-                xF: cur.xF, yF: cur.yF,
-                frameType: cur.frameType, frameWidthMm: cur.frameWidthMm,
-                brightness: cur.brightness,
-                fade: cur.fade,
-                shadowAngle: cur.shadowAngle, shadowBlur: cur.shadowBlur, shadowOpacity: cur.shadowOpacity,
-                visible: cur.visible,
-              }
-            }),
-          }
-        }
-        return {
-          ...o,
-          artworks: o.artworks.map(a => {
-            const cur = byWork.get(a.workId)
-            return cur ? { ...a, ...workFields(cur) } : a
-          }),
-        }
-      }),
-    })))
-    setWorks(prev => prev.map(w => {
-      const cur = byWork.get(w.id)
-      return cur ? { ...w, ...workFields(cur) } : w
-    }))
+    // Name, artist, size and the money belong to the work, so they reach every
+    // placement of it and the index; where it hangs, its frame and its mount
+    // stay with this placement. The field lists live in projectState.ts, where
+    // a test holds them to everything the sidebar can edit.
+    const open = {
+      elevationId: activeElevId,
+      optionKey: activeOption,
+      artworks: currentArts,
+      wall: wallIsLoaded ? {
+        foreground_masks: currentMasks.length > 0 ? currentMasks : null,
+        // Without this, a perspective set this visit was forgotten on
+        // switching away and back, and never reached a new option.
+        ...currentSkew,
+      } : null,
+    }
+    setElevations(prev => bringInOpenWall(prev, [], open).elevations)
+    setWorks(prev => bringInOpenWall([], prev, open).works)
   }, [studio.state.artworks, studio.state.masks, studio.state.skewCorners, studio.state.skewActive, studioLoadedOptionId, elevations, activeElevId, activeOption])
 
   // ─── EDITING A WORK FROM THE BUDGET OR THE INDEX ─────────────────
+  const WRITE_DELAY_MS = 600
+
   // The money, the notes and the sourcing detail belong to the work, so a
   // change is written to `works` by work id and shown on every placement of
   // it. Writes go straight to the row because the budget and the index span
   // every elevation while the studio hook only knows the option open.
   //
-  // Debounced: the note fields fire on every keystroke, and one request per
-  // character would be both wasteful and out of order.
+  // Written through the shared saver (src/lib/saver.ts): the note fields fire
+  // on every keystroke, so writes wait for a pause, stay in order per work, and
+  // are flushed on leaving and before an export.
+  const worksSaver = useSaver<WorkPatch>(async (workId, patch) => {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('works')
+      .update(toWorkColumns(patch))
+      .eq('id', workId)
+      .select('id')
 
-  const WRITE_DELAY_MS = 600
-  const workPending = useRef(new Map<string, WorkPatch>())
-  const workTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const notePending = useRef(new Map<string, { note: string; shownToClient: boolean }>())
-  const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-
-  /**
-   * One queue per row, so two writes to the same work cannot overtake each
-   * other. The debounce means this rarely has anything to wait for — type,
-   * pause, one request — but "rarely" is not "never": a flush already in
-   * flight when the next one is queued used to be a race, and the loser of
-   * that race was whichever reply happened to arrive last, not whichever was
-   * typed last.
-   */
-  const workWrites = useRef(createWriteQueue())
-
-  const flushWorkWrite = useCallback(async (workId: string) => {
-    const patch = workPending.current.get(workId)
-    workPending.current.delete(workId)
-    workTimers.current.delete(workId)
-    if (!patch) return
-
-    await enqueue(workWrites.current, workId, async () => {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('works')
-        .update(toWorkColumns(patch))
-        .eq('id', workId)
-        .select('id')
-
-      // `select` matters: without it an update that matches nothing, or that
-      // row-level security filters out, comes back with no error at all.
-      if (error) onStatus('Not saved: ' + error.message)
-      else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
-    })
-  }, [onStatus])
+    // `select` matters: without it an update that matches nothing, or that
+    // row-level security filters out, comes back with no error at all.
+    if (error) onStatus('Not saved: ' + error.message)
+    else if (!data || data.length === 0) onStatus('Not saved: this work could not be found')
+  }, { delayMs: WRITE_DELAY_MS })
 
   // ─── NOTES ───────────────────────────────────────────────────────
   //
@@ -817,13 +743,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
   const handleWorkChange = useCallback((workId: string, patch: WorkPatch) => {
     // Optimistic: the budget and the index read these, so they have to move now.
     setWorks(prev => prev.map(w => (w.id === workId ? { ...w, ...patch } : w)))
-    setElevations(prev => prev.map(e => ({
-      ...e,
-      elevation_options: e.elevation_options.map(o => ({
-        ...o,
-        artworks: o.artworks.map(a => (a.workId === workId ? { ...a, ...patch } : a)),
-      })),
-    })))
+    setElevations(prev => changeWork(prev, workId, patch))
 
     // If this work is on the option the studio has open, its copy has to agree,
     // or the next autosave from a drag would write the old figures back.
@@ -840,92 +760,36 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       }))
     }
 
-    const merged = { ...workPending.current.get(workId), ...patch }
-    workPending.current.set(workId, merged)
-    const existing = workTimers.current.get(workId)
-    if (existing) clearTimeout(existing)
-    workTimers.current.set(
-      workId,
-      setTimeout(() => { void flushWorkWrite(workId) }, WRITE_DELAY_MS),
-    )
-  }, [studio, flushWorkWrite, elevations])
+    worksSaver.save(workId, patch)
+  }, [studio, worksSaver, elevations])
 
-  /** Same queue, same reason, for the note an option carries. */
-  const noteWrites = useRef(createWriteQueue())
+  /** Same saver, same reasons, for the note an option carries. */
+  const optionNotesSaver = useSaver<{ note: string; shownToClient: boolean }>(async (optionRowId, pending) => {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('elevation_options')
+      .update({
+        consultant_note: pending.note,
+        consultant_note_shown_to_client: pending.shownToClient,
+      })
+      .eq('id', optionRowId)
+      .select('id')
 
-  const flushNoteWrite = useCallback(async (optionRowId: string) => {
-    const pending = notePending.current.get(optionRowId)
-    notePending.current.delete(optionRowId)
-    noteTimers.current.delete(optionRowId)
-    if (!pending) return
-
-    await enqueue(noteWrites.current, optionRowId, async () => {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('elevation_options')
-        .update({
-          consultant_note: pending.note,
-          consultant_note_shown_to_client: pending.shownToClient,
-        })
-        .eq('id', optionRowId)
-        .select('id')
-
-      if (error) onStatus('Note not saved: ' + error.message)
-      else if (!data || data.length === 0) onStatus('Note not saved: this option could not be found')
-    })
-  }, [onStatus])
+    if (error) onStatus('Note not saved: ' + error.message)
+    else if (!data || data.length === 0) onStatus('Note not saved: this option could not be found')
+  }, { delayMs: WRITE_DELAY_MS })
 
   const handleOptionNoteChange = useCallback((
     elevationId: string, optionKey: string, note: string, shownToClient: boolean,
   ) => {
-    let optionRowId: string | null = null
-    setElevations(prev => prev.map(e => {
-      if (e.id !== elevationId) return e
-      return {
-        ...e,
-        elevation_options: e.elevation_options.map(o => {
-          if (o.option !== optionKey) return o
-          optionRowId = o.id
-          return { ...o, consultantNote: note, consultantNoteShownToClient: shownToClient }
-        }),
-      }
+    setElevations(prev => changeOption(prev, elevationId, optionKey, {
+      consultantNote: note, consultantNoteShownToClient: shownToClient,
     }))
-
-    // The id is read out of the state update above, so resolve it separately
-    // for the write rather than relying on when that callback runs.
     const rowId = elevations
       .find(e => e.id === elevationId)?.elevation_options
-      .find(o => o.option === optionKey)?.id ?? optionRowId
-    if (!rowId) return
-
-    notePending.current.set(rowId, { note, shownToClient })
-    const existing = noteTimers.current.get(rowId)
-    if (existing) clearTimeout(existing)
-    noteTimers.current.set(
-      rowId,
-      setTimeout(() => { void flushNoteWrite(rowId) }, WRITE_DELAY_MS),
-    )
-  }, [elevations, flushNoteWrite])
-
-  // Leaving the page with a write still queued would lose it.
-  //
-  // This must run on mount and unmount ONLY. Its cleanup clears the debounce
-  // timers and writes immediately, so if anything in the dependency array
-  // changes per render, the cleanup fires per render and the debounce above
-  // is dead — every keystroke becomes its own request and two of them can
-  // land out of order. That is exactly what happened while `onStatus` was a
-  // plain function. Both dependencies are `useCallback`s over a stable
-  // `onStatus`; keep them that way.
-  useEffect(() => {
-    const wTimers = workTimers.current
-    const nTimers = noteTimers.current
-    return () => {
-      wTimers.forEach(t => clearTimeout(t))
-      nTimers.forEach(t => clearTimeout(t))
-      workPending.current.forEach((_, id) => { void flushWorkWrite(id) })
-      notePending.current.forEach((_, id) => { void flushNoteWrite(id) })
-    }
-  }, [flushWorkWrite, flushNoteWrite])
+      .find(o => o.option === optionKey)?.id
+    if (rowId) optionNotesSaver.save(rowId, { note, shownToClient })
+  }, [elevations, optionNotesSaver])
 
   async function handleSwitch(elevId: string, opt: string) {
     // Before switching: bring the studio's live edits into `elevations`.
@@ -1540,19 +1404,9 @@ export default function StudioScreen({ project, elevations: initialElevations, e
    * typed a moment ago — now rather than when its timer runs out.
    */
   async function flushAllPending() {
-    await Promise.all([
-      studio.flushPendingSave(),
-      ...[...workPending.current.keys()].map(id => {
-        const t = workTimers.current.get(id)
-        if (t) clearTimeout(t)
-        return flushWorkWrite(id)
-      }),
-      ...[...notePending.current.keys()].map(id => {
-        const t = noteTimers.current.get(id)
-        if (t) clearTimeout(t)
-        return flushNoteWrite(id)
-      }),
-    ])
+    // Every saver on every screen — the budget's own figures included, which
+    // live in the budget view and used to be missed here.
+    await Promise.all([studio.flushPendingSave(), flushAllSavers()])
   }
 
   /**
@@ -1667,6 +1521,20 @@ export default function StudioScreen({ project, elevations: initialElevations, e
     })),
   })), [elevations])
 
+  // "Edit on budget", from a budget note quoted in the Index or on the Notes
+  // screen. A budget note is written only on the budget, beside its figures.
+  const [budgetFocus, setBudgetFocus] = useState<BudgetFocus | null>(null)
+  const openBudgetAt = useCallback((line: BudgetLine) => {
+    syncStudioIntoElevations()
+    setIsPreviewingClientView(false)
+    setBudgetFocus({ ...line, nonce: Date.now() })
+    setView('budget')
+  }, [syncStudioIntoElevations])
+  const budgetJumpFor = useCallback((workId: string) => {
+    const line = budgetLineForWork(budgetElevations, workId)
+    return line ? () => openBudgetAt(line) : null
+  }, [budgetElevations, openBudgetAt])
+
   // What the index needs to say where each work hangs.
   const indexElevations: IndexElevation[] = elevations.map(e => {
     const labelled = labelOptions(e.elevation_options)
@@ -1753,6 +1621,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                   if (place !== 'studio') syncStudioIntoElevations()
                   // The client view is the budget's; leaving it ends it.
                   if (place !== 'budget') setIsPreviewingClientView(false)
+                  // Arriving by the header is not a jump to a line.
+                  setBudgetFocus(null)
                   setView(place)
                 }}
               >
@@ -1919,6 +1789,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onAdd={addNote}
           onChange={changeNote}
           onDelete={deleteNote}
+          onEditOnBudget={(elevationId, optionKey) => openBudgetAt({ elevationId, optionKey })}
+          onBudgetNoteChange={handleOptionNoteChange}
         />
       )}
 
@@ -1967,6 +1839,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onClientBudgetChange={updateBudget}
           onArtworkChange={handleWorkChange}
           onOptionNoteChange={handleOptionNoteChange}
+          focus={budgetFocus}
         />
       )}
 
@@ -1995,6 +1868,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
           onSetWorkArtist={setWorkArtist}
           onRenameArtist={renameArtist}
           onArtistNoteChange={changeArtistNote}
+          budgetJumpFor={budgetJumpFor}
         />
       )}
 

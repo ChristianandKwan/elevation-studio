@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import ShareSwitch from '@/components/notes/ShareSwitch'
+import { BUDGET_SHARE_TITLES, SHARE_META, budgetNoteShare } from '@/lib/notes'
 
 interface Props {
   note: string
@@ -53,14 +55,11 @@ export default function OptionNote({ note, shownToClient, isConsultant, onChange
             onChange={e => onChange(e.target.value, shownToClient)}
           />
           <div className="budget-note-edit-foot">
-            <label className="ble-toggle">
-              <input
-                type="checkbox"
-                checked={shownToClient}
-                onChange={e => onChange(note, e.target.checked)}
-              />
-              Show this note to the client
-            </label>
+            <ShareSwitch
+              value={budgetNoteShare(shownToClient)}
+              onChange={share => onChange(note, share === 'client')}
+              titles={BUDGET_SHARE_TITLES}
+            />
             <button type="button" className="btn btn-sm btn-primary" onClick={() => setEditing(false)}>
               Done
             </button>
@@ -89,7 +88,7 @@ export default function OptionNote({ note, shownToClient, isConsultant, onChange
       <Icon hidden={hidden} />
       <span className="budget-note-text">
         {text}
-        {hidden && <span className="budget-badge budget-badge--internal">Internal</span>}
+        {hidden && <span className="budget-badge budget-badge--internal">{SHARE_META.studio.label}</span>}
       </span>
       {onChange && (
         <button type="button" className="budget-line-edit" onClick={() => setEditing(true)}>

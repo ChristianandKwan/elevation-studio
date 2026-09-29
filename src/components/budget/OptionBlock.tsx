@@ -20,9 +20,13 @@ interface Props {
    * client can see what each option holds; print forces them open.
    */
   layout?: 'block' | 'card'
+  /** Where the block can be found by a jump from the Index or Notes. */
+  anchor: string
 }
 
-export default function OptionBlock({ option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block' }: Props) {
+export default function OptionBlock({
+  option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block', anchor,
+}: Props) {
   const [open, setOpen] = useState(true)
   const displayTotal = optionTotal(option.artworks, vatMode)
   const keyClass = `budget-option-key${option.name ? ' budget-option-key--named' : ''}`
@@ -48,7 +52,7 @@ export default function OptionBlock({ option, vatMode, isConsultant, onArtworkCh
 
   if (layout === 'card') {
     return (
-      <div className="budget-option-block budget-option-card">
+      <div className="budget-option-block budget-option-card" data-budget-option={anchor}>
         <button
           type="button"
           className="budget-option-header budget-option-header--toggle"
@@ -72,7 +76,7 @@ export default function OptionBlock({ option, vatMode, isConsultant, onArtworkCh
   }
 
   return (
-    <div className="budget-option-block">
+    <div className="budget-option-block" data-budget-option={anchor}>
       <div className="budget-option-header">
         <span className={keyClass}>{option.title}</span>
         <span className="budget-option-subtotal">{fmtGbp(displayTotal)}</span>

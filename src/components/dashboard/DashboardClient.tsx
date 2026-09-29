@@ -254,7 +254,7 @@ export default function DashboardClient({ profile, projects: initialProjects, vi
     if (p.shownCount > 0 && p.approvedCount >= p.shownCount) return 'Client Final'
     if (p.approvedCount > 0) return `${p.approvedCount}/${p.shownCount} approved`
     if (p.pickedCount > 0) return `${p.pickedCount}/${p.shownCount} picked`
-    if (p.status === 'sent') return 'Sent to Client'
+    if (p.status === 'sent') return 'Shared with Client'
     return 'Draft'
   }
 
