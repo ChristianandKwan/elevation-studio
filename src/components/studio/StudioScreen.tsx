@@ -1509,6 +1509,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       name: cleanOptionName(o.name),
       consultantNote: o.consultantNote ?? '',
       consultantNoteShownToClient: o.consultantNoteShownToClient ?? true,
+      hasWall: !!o.imagePath || !!o.wall_color,
+      approved: !!o.approved,
       artworks: o.artworks.map(a => ({
         id: a.id,
         workId: a.workId,

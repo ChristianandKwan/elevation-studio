@@ -4,14 +4,19 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   fmtGbp,
-  computeProjectTotals, installCostDisplay, consultantFeeRange,
+  installCostDisplay, consultantFeeRange,
   displayFrozenAmount, applyVat,
 } from './budgetCalc'
-import type { BudgetElevationData } from './budgetCalc'
+import type { ProjectTotals } from './budgetCalc'
 import type { BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem } from '@/types'
 
 interface Props {
-  elevations: BudgetElevationData[]
+  /**
+   * The project's totals as the client would see them, choices counted
+   * (computeBudgetTotals in choices.ts). Worked out once by the budget screen,
+   * which needs the same figures for the installation tier.
+   */
+  totals: ProjectTotals
   installation: BudgetInstallation
   consultantFee: BudgetConsultantFee | null
   customLineItems: BudgetCustomLineItem[]
@@ -22,7 +27,7 @@ interface Props {
 }
 
 export default function TotalsPanel({
-  elevations,
+  totals,
   installation,
   consultantFee,
   customLineItems,
@@ -34,9 +39,7 @@ export default function TotalsPanel({
   const [settingBudget, setSettingBudget] = useState(false)
   const [budgetDraft, setBudgetDraft] = useState('')
 
-  // ── Compute project totals ──────────────────────────────────────────────────
-  const pt = computeProjectTotals(elevations, vatMode)
-  const { min, max, isRange, hasFraming, hasOther } = pt
+  const { min, max, isRange, hasFraming, hasOther } = totals
 
   // Artwork spend drives the percentage fee and nothing else. Framing, duty
   // and shipping are excluded, as framing always was.

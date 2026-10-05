@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import ArtworkLineEditor from './ArtworkLineEditor'
-import { fmtGbp, netPrice, tbcNetPrice, subItemAmount, applyVat } from './budgetCalc'
+import { fmtGbp, fmtRange, netPrice, tbcNetPrice, subItemAmount, applyVat } from './budgetCalc'
 import type { BudgetArtwork, BudgetArtworkPatch } from './budgetCalc'
 import { SHARE_META } from '@/lib/notes'
 
@@ -101,6 +101,32 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
           </span>
         </div>
       ))}
+
+      {/* A budget choice's cost on this work: what was picked, or the range
+          until it is. Worked out on the budget, so not editable here. */}
+      {(artwork.choiceLines ?? []).map(line => {
+        if (line.picked) {
+          return (
+            <div key={line.choiceId} className="budget-sub-row budget-sub-row--choice">
+              <span className="budget-sub-label">
+                {line.label}
+                {vatMode && !line.picked.vatApplies && <span className="budget-sub-tag">no VAT</span>}
+              </span>
+              <span className="budget-sub-cost">
+                {fmtGbp(applyVat(line.picked.amount, line.picked.vatApplies, vatMode))}
+              </span>
+            </div>
+          )
+        }
+        const each = (line.open ?? []).map(c => applyVat(c.amount, c.vatApplies, vatMode))
+        if (each.length === 0) return null
+        return (
+          <div key={line.choiceId} className="budget-sub-row budget-sub-row--choice budget-sub-row--open">
+            <span className="budget-sub-label">{line.label} · to be chosen</span>
+            <span className="budget-sub-cost">{fmtRange(Math.min(...each), Math.max(...each))}</span>
+          </div>
+        )
+      })}
 
       {(!artwork.vatApplies || artwork.discountStatus !== 'none') && (
         <div className="budget-badge-row">

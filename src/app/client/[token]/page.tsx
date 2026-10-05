@@ -10,6 +10,7 @@ import { PLACEMENT_WITH_WORK_SELECT } from '@/lib/works'
 import { placementsToArtworks, placementImagePath } from '@/lib/workRows'
 import { notesForPortal, rowToNote, type NoteRow } from '@/lib/notes'
 import { MESSAGE_COLUMNS, messagesByOption, rowToMessage, type OptionMessageRow } from '@/lib/messages'
+import { choicesForClient, readChoices, readPicks } from '@/components/budget/choices'
 
 interface Props {
   params: Promise<{ token: string }>
@@ -95,6 +96,7 @@ export default async function ClientPortalPage({ params }: Props) {
     { data: budgetRow },
     notesRes,
     messagesRes,
+    picksRes,
   ] = await Promise.all([
     supabase
       .from('projects')
@@ -133,6 +135,11 @@ export default async function ClientPortalPage({ params }: Props) {
       .select(MESSAGE_COLUMNS)
       .eq('project_id', projectId)
       .order('created_at', { ascending: true }),
+    // The picks on the budget's choices (041).
+    supabase
+      .from('budget_choice_picks')
+      .select('choice_id, alternative_id, picked_by, picked_at')
+      .eq('project_id', projectId),
   ])
 
   if (!project) notFound()
@@ -147,6 +154,7 @@ export default async function ClientPortalPage({ params }: Props) {
   // so a failure to read them costs the client those and nothing else.
   if (notesRes.error) console.warn('[portal] notes failed:', notesRes.error.message)
   if (messagesRes.error) console.warn('[portal] messages failed:', messagesRes.error.message)
+  if (picksRes.error) console.warn('[portal] choice picks failed:', picksRes.error.message)
 
   // Keyed by option, and only ever looked up for the options fetched above —
   // so nothing on a wall the client cannot see reaches the page.
@@ -221,6 +229,8 @@ export default async function ClientPortalPage({ params }: Props) {
         installation: budgetRow.installation ?? { indicative: true, confirmedAmount: null },
         consultantFee: budgetRow.consultant_fee ?? null,
         customLineItems: budgetRow.custom_line_items ?? [],
+        choices: choicesForClient(readChoices(budgetRow.choices)),
+        choicePicks: readPicks(picksRes.data as Array<Record<string, unknown>> | null),
         vatIncludedDefault: budgetRow.vat_included_default ?? false,
         createdAt: budgetRow.created_at,
         updatedAt: budgetRow.updated_at,

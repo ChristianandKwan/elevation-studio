@@ -13,15 +13,18 @@
  *   3. only then performs the write.
  *
  * Behaviour mirrors the previous in-browser Supabase calls 1:1, including the
- * activity-log entries and the "all elevations done → project approved" rule.
+ * activity-log entries and the "every decision made → project approved" rule.
  *
  * Auth pattern and route config follow src/app/api/thumbnails/[optionId]/route.ts.
  * `middleware.ts` already excludes /api/, so no middleware changes are needed.
  */
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { optionTitleFor, sortOptions } from '@/lib/options'
+import { optionTitleFor } from '@/lib/options'
 import { MESSAGE_COLUMNS, cleanMessage, rowToMessage, type OptionMessageRow } from '@/lib/messages'
+import { allDecided } from '@/lib/decisions'
+import { loadDecisionState } from '@/lib/decisionsLoad'
+import { alternativesOf, clientChoices, offeredAlternatives, pickedAlternative, worksInPlay } from '@/components/budget/choices'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -35,10 +38,13 @@ type Action =
   | 'pick_option'
   | 'unpick_option'
   | 'approve'
+  | 'pick_choice'
+  | 'unpick_choice'
 
 const ACTIONS: readonly Action[] = [
   'toggle_visibility', 'send_message', 'move_artworks',
   'pick_option', 'unpick_option', 'approve',
+  'pick_choice', 'unpick_choice',
 ]
 
 // ── Ownership checks ──────────────────────────────────────
@@ -148,32 +154,23 @@ async function logActivity(svc: Svc, projectId: string, type: string, text: stri
 }
 
 /**
- * Mirrors ClientPortal's old client-side `allDone` check, but from freshly
- * written DB state: every elevation the client can see has a resolved option
- * and that option is approved. Hidden elevations don't count — the client
- * can't act on them, so they must not hold the project back. An elevation "needs picking" when more than one option has an
- * image; otherwise the single imaged option stands in.
+ * Whether the whole project is now approved, from freshly written state:
+ * every elevation the client can see has its option approved, and every
+ * budget choice they are offered is picked (src/lib/decisions.ts, the rule
+ * the portal's checklist uses too). A read that fails answers no, so a
+ * hiccup never marks a project approved.
  */
-async function allElevationsApproved(svc: Svc, projectId: string): Promise<boolean> {
-  const { data: elevs } = await svc
-    .from('elevations')
-    .select('id, client_picked_option, elevation_options(option, image_path, approved, sort_order, created_at)')
-    .eq('project_id', projectId)
-    .eq('visible_to_client', true)
-  if (!elevs?.length) return false
+async function projectNowApproved(svc: Svc, projectId: string): Promise<boolean> {
+  const state = await loadDecisionState(svc, projectId)
+  if (!state) return false
+  return allDecided(state.elevations, state.choices, state.picks)
+}
 
-  return elevs.every(elev => {
-    const options = (elev.elevation_options ?? []) as Array<{
-      option: string; image_path: string | null; approved: boolean
-      sort_order: number | null; created_at: string | null
-    }>
-    const withImages = sortOptions(options).filter(o => o.image_path)
-    const needsPick = withImages.length > 1
-    const picked = (elev.client_picked_option as string | null) ?? null
-    const resolved = needsPick ? picked : (picked ?? withImages[0]?.option ?? null)
-    if (!resolved) return false
-    return options.find(o => o.option === resolved)?.approved ?? false
-  })
+/** Flip the project to approved once every decision is made. Best-effort. */
+async function markApprovedIfDone(svc: Svc, projectId: string): Promise<boolean> {
+  const done = await projectNowApproved(svc, projectId)
+  if (done) await svc.from('projects').update({ status: 'approved' }).eq('id', projectId)
+  return done
 }
 
 /**
@@ -183,8 +180,8 @@ async function allElevationsApproved(svc: Svc, projectId: string): Promise<boole
  * email quotes exactly what was sent; the kind stays 'note', as 037 has it.
  */
 async function recordForEmail(
-  svc: Svc, projectId: string, kind: 'pick' | 'approve' | 'note',
-  ids: { elevationId?: string; optionId?: string; messageId?: string },
+  svc: Svc, projectId: string, kind: 'pick' | 'approve' | 'note' | 'choice',
+  ids: { elevationId?: string; optionId?: string; messageId?: string; choiceId?: string },
 ) {
   const { error } = await svc.from('client_activity').insert({
     project_id: projectId,
@@ -192,6 +189,7 @@ async function recordForEmail(
     elevation_id: ids.elevationId ?? null,
     option_id: ids.optionId ?? null,
     ...(ids.messageId ? { message_id: ids.messageId } : {}),
+    ...(ids.choiceId ? { choice_id: ids.choiceId } : {}),
   })
   if (error) console.warn(`client_activity insert failed (${kind}):`, error.message)
 }
@@ -371,13 +369,66 @@ export async function POST(
 
       await recordForEmail(svc, projectId, 'approve', { elevationId: opt.elevationId, optionId })
 
-      // Whole project signed off once every elevation's resolved option is approved.
-      const projectApproved = await allElevationsApproved(svc, projectId)
-      if (projectApproved) {
-        await svc.from('projects').update({ status: 'approved' }).eq('id', projectId)
-      }
+      // Whole project signed off once every elevation and every choice is decided.
+      const projectApproved = await markApprovedIfDone(svc, projectId)
 
       return NextResponse.json({ ok: true, approvedAt, projectApproved })
+    }
+
+    // ── Client picks an alternative on a budget choice ───
+    // Once for the whole project (041). Only an alternative the portal offers
+    // can be picked: one with a price for every work in play. A pick can be
+    // changed freely until the project is approved, then it stands, as a
+    // wall's approved option does.
+    case 'pick_choice':
+    case 'unpick_choice': {
+      const choiceId = payload.choiceId
+      const alternativeId = payload.alternativeId
+      if (typeof choiceId !== 'string' || (action === 'pick_choice' && typeof alternativeId !== 'string')) {
+        return bad('Invalid payload', 400)
+      }
+
+      const state = await loadDecisionState(svc, projectId)
+      if (!state) return bad('Could not read the budget', 500)
+      const choice = clientChoices(state.choices, state.elevations, state.picks).find(c => c.id === choiceId)
+      if (!choice) return bad('Forbidden', 403)
+      if (allDecided(state.elevations, state.choices, state.picks)) {
+        return bad('The project is approved', 409)
+      }
+
+      if (action === 'unpick_choice') {
+        const before = pickedAlternative(choice, state.picks)
+        const { error } = await svc.from('budget_choice_picks').delete()
+          .eq('project_id', projectId).eq('choice_id', choiceId)
+        if (error) return bad('Update failed', 500)
+        if (before) await logActivity(svc, projectId, 'pick_cleared', `Client cleared their choice of ${choice.name || 'a budget choice'}`)
+        return NextResponse.json({ ok: true })
+      }
+
+      const offered = offeredAlternatives(choice, worksInPlay(state.elevations))
+      const placed = offered.find(p => p.alt.id === alternativeId)
+        // Re-sending the pick already made is harmless even if a price has since gone missing.
+        ?? (state.picks[choiceId]?.alternativeId === alternativeId
+          ? alternativesOf(choice).find(p => p.alt.id === alternativeId)
+          : undefined)
+      if (!placed) return bad('Unknown alternative', 400)
+
+      const pickedAt = new Date().toISOString()
+      const { error } = await svc.from('budget_choice_picks').upsert({
+        project_id: projectId,
+        choice_id: choiceId,
+        alternative_id: alternativeId as string,
+        picked_by: 'client',
+        picked_at: pickedAt,
+      }, { onConflict: 'project_id,choice_id' })
+      if (error) return bad('Update failed', 500)
+
+      const what = [placed.alt.name, placed.group.label].filter(s => s.trim()).join(', ')
+      await logActivity(svc, projectId, 'pick', `Client chose ${what || 'an alternative'} for ${choice.name || 'a budget choice'}`)
+      await recordForEmail(svc, projectId, 'choice', { choiceId })
+
+      const projectApproved = await markApprovedIfDone(svc, projectId)
+      return NextResponse.json({ ok: true, pickedAt, projectApproved })
     }
   }
 }

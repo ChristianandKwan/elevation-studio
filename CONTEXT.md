@@ -132,6 +132,21 @@ _Avoid_: best case / worst case (it grades the client's own choice)
 **Confirmed / TBC**:
 Whether a discount has been agreed or is still expected.
 
+**Choice**:
+A budget line the client picks one alternative of, once for the whole
+project: framing from two framers, say, or two shippers. The client sees it
+under its own name ("Framing: choose one"). Until it is picked, every figure it
+touches is a From / Up to range. A project is not approved until every choice
+the client is offered has been picked.
+_Avoid_: option (that is an arrangement on a wall), variant
+
+**Alternative**:
+One of a choice's priced entries, such as a framer's museum glass. Each
+belongs to a group labelled as the consultant wants the client to read it
+("Framer 1"). An alternative is offered to the client only once it has a price
+for every work still in play.
+_Avoid_: option, tier
+
 ## Notes
 
 **Note**:

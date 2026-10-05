@@ -35,9 +35,13 @@ import { MESSAGE_COLUMNS, messagesByOption, rowToMessage, type OptionMessage, ty
 import { sortOptions, optionTitleFor } from '@/lib/options'
 import {
   netPrice, subItemAmount, installCostDisplay, consultantFeeRange,
-  displayFrozenAmount, computeProjectTotals, getOptionTotals, bucketTotal,
+  displayFrozenAmount, getOptionTotals, bucketTotal, optionSpan,
   type BudgetArtwork, type BudgetElevationData,
 } from '@/components/budget/budgetCalc'
+import {
+  alternativeSpan, clientChoices, computeBudgetTotals, offeredAlternatives, pickedAlternative,
+  pickedLabel, priceElevations, readChoices, readPicks, worksInPlay,
+} from '@/components/budget/choices'
 import { parseSubLineItems, parseDiscountStatus, parseDiscountPercent } from '@/lib/lineItems'
 import { parseSetAside } from '@/lib/works'
 import type { BudgetConsultantFee, BudgetCustomLineItem, BudgetInstallation } from '@/types'
@@ -179,6 +183,9 @@ interface BudgetRow {
   installation: BudgetInstallation | null
   consultant_fee: BudgetConsultantFee | null
   custom_line_items: BudgetCustomLineItem[] | null
+  /** Budget choices (041), and their picks read alongside. */
+  choices: unknown
+  pickRows: Array<Record<string, unknown>>
 }
 
 const OPTION_SELECT = `
@@ -196,7 +203,7 @@ const OPTION_SELECT = `
 
 /** Everything the pack needs, in as few round trips as the shapes allow. */
 async function readProject(supabase: SupabaseClient, projectId: string) {
-  const [project, elevations, works, notes, artists, budget, messages] = await Promise.all([
+  const [project, elevations, works, notes, artists, budget, messages, picks] = await Promise.all([
     supabase.from('projects')
       .select('id, name, client_name, budget, consultant_id')
       .eq('id', projectId).maybeSingle(),
@@ -214,12 +221,15 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
       .order('display_order', { ascending: true }),
     supabase.from('artist_profiles').select('id, name, note'),
     supabase.from('project_budgets')
-      .select('installation, consultant_fee, custom_line_items')
+      .select('installation, consultant_fee, custom_line_items, choices')
       .eq('project_id', projectId).maybeSingle(),
     supabase.from('option_messages')
       .select(MESSAGE_COLUMNS)
       .eq('project_id', projectId)
       .order('created_at', { ascending: true }),
+    supabase.from('budget_choice_picks')
+      .select('choice_id, alternative_id, picked_by, picked_at')
+      .eq('project_id', projectId),
   ])
 
   return {
@@ -228,7 +238,9 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
     works: (works.data ?? []) as unknown as WorkRow[],
     notes: ((notes.data ?? []) as unknown as NoteRow[]).map(rowToNote),
     artists: (artists.data ?? []) as Array<{ id: string; name: string; note: string | null }>,
-    budget: budget.data as BudgetRow | null,
+    budget: budget.data
+      ? { ...(budget.data as Omit<BudgetRow, 'pickRows'>), pickRows: (picks.data ?? []) as Array<Record<string, unknown>> }
+      : null,
     messages: ((messages.data ?? []) as OptionMessageRow[]).map(rowToMessage),
   }
 }
@@ -493,7 +505,14 @@ function buildBudget(
     })),
   }))
 
-  const totals = computeProjectTotals(budgetElevations, false)
+  // The budget's choices (041), counted exactly as the Budget page counts
+  // them: for the works in this export, the client's own, picked or a range.
+  const choices = readChoices(budgetRow?.choices)
+  const picks = readPicks(budgetRow?.pickRows)
+  const counted = clientChoices(choices, budgetElevations, picks)
+  const priced = priceElevations(budgetElevations, counted, picks)
+
+  const totals = computeBudgetTotals(budgetElevations, choices, picks, false)
   const artMin = totals.min.artVatable + totals.min.artExempt
   const artMax = totals.max.artVatable + totals.max.artExempt
 
@@ -503,7 +522,7 @@ function buildBudget(
   // are listed, because that is what is actually being bought. Where they
   // have not, the alternatives are a range and naming one option's works
   // would present a choice that has not been made as though it had.
-  for (const elev of budgetElevations) {
+  for (const elev of priced) {
     const picked = elev.clientPickedOption
       ? elev.options.find(o => o.key === elev.clientPickedOption)
       : undefined
@@ -518,16 +537,47 @@ function buildBudget(
           if (amount === 0) continue
           lines.push({ label: item.label?.trim() || item.kind, amount, sub: true })
         }
+        for (const line of a.choiceLines ?? []) {
+          if (line.picked) lines.push({ label: line.label, amount: line.picked.amount, sub: true })
+        }
       }
       continue
     }
 
-    const each = elev.options.map(o => bucketTotal(getOptionTotals(o.artworks), false))
-    if (each.length === 0) continue
-    const lo = Math.min(...each)
-    const hi = Math.max(...each)
+    // Each option's own range: a choice still open adds its cheapest and
+    // dearest alternative to it, as on the Budget page.
+    const spans = elev.options.map(o => optionSpan(o.artworks, false))
+    if (spans.length === 0) continue
+    const lo = Math.min(...spans.map(x => x.min))
+    const hi = Math.max(...spans.map(x => x.max))
     lines.push({
       label: `${elev.name} — ${elev.options.length} option${elev.options.length === 1 ? '' : 's'}, none picked yet`,
+      amount: lo,
+      ...(hi !== lo ? { amountMax: hi } : {}),
+    })
+  }
+
+  // A choice still open is listed with what it could come to, so the reader
+  // can see where the range comes from. One priced per work and picked is
+  // already on its works above; one priced as one figure has no works, so it
+  // is always listed here. These lines are words for the reader: the total
+  // below comes from the Budget page's own arithmetic, not from adding them.
+  const inPlay = worksInPlay(budgetElevations)
+  for (const choice of counted) {
+    const placed = pickedAlternative(choice, picks)
+    if (placed) {
+      if (choice.pricing !== 'whole') continue
+      const span = alternativeSpan(choice, placed.alt, budgetElevations, false)
+      lines.push({ label: pickedLabel(choice, placed), amount: span.min })
+      continue
+    }
+    const offered = offeredAlternatives(choice, inPlay)
+    const spans = offered.map(p => alternativeSpan(choice, p.alt, budgetElevations, false))
+    if (spans.length === 0) continue
+    const lo = Math.min(...spans.map(x => x.min))
+    const hi = Math.max(...spans.map(x => x.max))
+    lines.push({
+      label: `${choice.name.trim() || 'Choice'} — ${offered.length} alternative${offered.length === 1 ? '' : 's'}, none picked yet`,
       amount: lo,
       ...(hi !== lo ? { amountMax: hi } : {}),
     })

@@ -123,4 +123,23 @@ describe('buildDigest', () => {
     assert.doesNotMatch(d.html, /<a href="x">/)
     assert.match(d.html, /&lt;a href=&quot;x&quot;&gt;hi&lt;\/a&gt;/)
   })
+
+  test('a pick on a budget choice is reported under Budget, as it stands now (041)', () => {
+    const choice = { kind: 'choice' as const, elevationId: null, optionId: null, createdAt: '2026-09-23T13:02:00Z', choiceId: 'framing' }
+    const d = buildDigest(project, [living()], [act('pick', null), choice], url, [
+      { id: 'framing', name: 'Framing', picked: 'Conservation, Framer 1' },
+    ])!
+    assert.equal(d.subject, 'Nepean: 2 choices from the client')
+    assert.match(d.text, /Budget\n  • Chose Conservation, Framer 1 for Framing/)
+    const cleared = buildDigest(project, [living()], [choice], url, [{ id: 'framing', name: 'Framing', picked: null }])!
+    assert.match(cleared.text, /Chose for Framing, then cleared the choice/)
+  })
+
+  test('a pick that was the last decision says everything is approved', () => {
+    const choice = { kind: 'choice' as const, elevationId: null, optionId: null, createdAt: '2026-09-23T13:02:00Z', choiceId: 'framing' }
+    const d = buildDigest({ name: 'Nepean', status: 'approved' }, [living()], [choice], url, [
+      { id: 'framing', name: 'Framing', picked: 'Museum, Framer 2' },
+    ])!
+    assert.match(d.text, /Every elevation and choice is now approved\./)
+  })
 })

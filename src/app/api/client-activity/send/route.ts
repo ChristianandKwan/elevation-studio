@@ -14,7 +14,8 @@ import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createServiceClient } from '@/lib/supabase/server'
 import { labelOptions } from '@/lib/options'
-import { buildDigest, type DigestAction, type DigestElevation } from '@/lib/clientActivity'
+import { buildDigest, type DigestAction, type DigestChoice, type DigestElevation } from '@/lib/clientActivity'
+import { pickedAlternative, readChoices, readPicks } from '@/components/budget/choices'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,6 +35,8 @@ interface ClaimedRow {
   created_at: string
   /** The message a 'note' action sent (038); null for one recorded before it. */
   message_id: string | null
+  /** The budget choice a 'choice' action picked on (041). */
+  choice_id: string | null
 }
 
 interface OptionRow {
@@ -73,7 +76,8 @@ export async function POST(request: Request) {
     }
     try {
       const messageIds = actions.map(a => a.message_id).filter((id): id is string => !!id)
-      const [projectRes, elevRes, messagesRes] = await Promise.all([
+      const hasChoices = actions.some(a => a.kind === 'choice')
+      const [projectRes, elevRes, messagesRes, budgetRes, picksRes] = await Promise.all([
         svc.from('projects').select('name, status').eq('id', projectId).maybeSingle(),
         svc.from('elevations')
           .select('id, name, display_order, client_picked_option, elevation_options(id, option, name, sort_order, created_at, image_path, wall_color, approved)')
@@ -83,8 +87,14 @@ export async function POST(request: Request) {
         messageIds.length
           ? svc.from('option_messages').select('id, body').in('id', messageIds)
           : Promise.resolve({ data: [] as Array<{ id: string; body: string }>, error: null }),
+        hasChoices
+          ? svc.from('project_budgets').select('choices').eq('project_id', projectId).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        hasChoices
+          ? svc.from('budget_choice_picks').select('choice_id, alternative_id, picked_by, picked_at').eq('project_id', projectId)
+          : Promise.resolve({ data: [], error: null }),
       ])
-      const failed = projectRes.error ?? elevRes.error ?? messagesRes.error
+      const failed = projectRes.error ?? elevRes.error ?? messagesRes.error ?? budgetRes.error ?? picksRes.error
       if (failed) { await release(failed); continue }
       const words = new Map((messagesRes.data ?? []).map(m => [m.id as string, m.body as string]))
       // Deleted since: its actions went with it (cascade), and nobody wants the email.
@@ -106,14 +116,27 @@ export async function POST(request: Request) {
         }
       })
 
+      // Each choice and how its pick reads now, for the Budget lines.
+      const picks = readPicks((picksRes.data ?? []) as Array<Record<string, unknown>>)
+      const choices: DigestChoice[] = readChoices(budgetRes.data?.choices).map(c => {
+        const placed = pickedAlternative(c, picks)
+        return {
+          id: c.id,
+          name: c.name.trim() || 'a budget choice',
+          picked: placed ? [placed.alt.name.trim(), placed.group.label.trim()].filter(Boolean).join(', ') || 'an alternative' : null,
+        }
+      })
+
       const digest = buildDigest(
         { name: projectRes.data.name, status: projectRes.data.status },
         elevations,
         actions.map(a => ({
           kind: a.kind, elevationId: a.elevation_id, optionId: a.option_id, createdAt: a.created_at,
           message: a.message_id ? words.get(a.message_id) ?? null : null,
+          choiceId: a.choice_id,
         })),
         `${origin}/projects/${projectId}`,
+        choices,
       )
       if (!digest) continue
 

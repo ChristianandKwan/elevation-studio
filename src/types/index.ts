@@ -293,12 +293,76 @@ export interface BudgetCustomLineItem {
   amountIncludesVat?: boolean
 }
 
+/**
+ * What a choice's money counts as in the summary. Framing has its own row;
+ * shipping and anything else join the other costs, as a work's own shipping
+ * line does.
+ */
+export type BudgetChoiceKind = 'framing' | 'shipping' | 'other'
+
+/**
+ * One alternative the client can pick: a framer's museum glass, a shipper's
+ * three-day van.
+ */
+export interface BudgetChoiceAlternative {
+  id: string
+  name: string
+  /** What makes it different: the glass, the frame, the speed. The client reads it. */
+  description: string
+  vatApplies: boolean
+  /**
+   * Pounds ex-VAT for each work, keyed by work id, when the choice is priced
+   * per work. A work with no entry has not been priced yet, which is not the
+   * same as costing nothing.
+   */
+  prices: Record<string, number>
+  /** Pounds ex-VAT for the whole job, when the choice is priced as one figure. */
+  amount: number | null
+}
+
+/** One supplier's alternatives, under the label the client sees. */
+export interface BudgetChoiceGroup {
+  id: string
+  /** "Framer 1", or the firm's name: whatever the consultant wants the client to read. */
+  label: string
+  /** C&K only: the real supplier, the quote reference. */
+  internalNote: string
+  alternatives: BudgetChoiceAlternative[]
+}
+
+/**
+ * A budget line the client picks one alternative of, once for the whole
+ * project. Not an option: an option is an arrangement on a wall.
+ */
+export interface BudgetChoice {
+  id: string
+  /** The heading the client reads: "Framing". */
+  name: string
+  kind: BudgetChoiceKind
+  /** `per_work`: a price for each work. `whole`: one figure for the job. */
+  pricing: 'per_work' | 'whole'
+  shownToClient: boolean
+  groups: BudgetChoiceGroup[]
+}
+
+export interface BudgetChoicePick {
+  alternativeId: string
+  /** `us` when a consultant picked on the client's behalf. */
+  by: 'client' | 'us'
+  at: string
+}
+
+/** Keyed by choice id. Stored as rows of their own (041), never in the budget row. */
+export type BudgetChoicePicks = Record<string, BudgetChoicePick>
+
 export interface ProjectBudget {
   id: string
   projectId: string
   installation: BudgetInstallation
   consultantFee: BudgetConsultantFee | null
   customLineItems: BudgetCustomLineItem[]
+  choices: BudgetChoice[]
+  choicePicks: BudgetChoicePicks
   /** Consultant-set VAT default for the client view */
   vatIncludedDefault: boolean
   createdAt: string

@@ -311,6 +311,10 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       name: opt.name?.trim() || null,
       consultantNote: opt.consultantNote ?? '',
       consultantNoteShownToClient: opt.consultantNoteShownToClient ?? true,
+      // For the checklist of decisions on the Budget tab: an approval made
+      // here shows there at once.
+      hasWall: hasWall(opt),
+      approved: optionsState[elev.id]?.[opt.option]?.approved ?? opt.approved,
       artworks: opt.artworks.map(a => ({
         id: a.id,
         workId: a.workId,
@@ -458,6 +462,27 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       onStatus('Failed to clear selection. Please try again.')
     } finally {
       inFlightRef.current.delete(key)
+    }
+  }
+
+  /**
+   * Saves a pick on a budget choice through the server, which checks it is
+   * one the portal offers and marks the project approved if it was the last
+   * decision. The budget shows the pick at once and puts it back on failure.
+   */
+  async function saveChoicePick(choiceId: string, alternativeId: string | null): Promise<boolean> {
+    try {
+      const res = await callAction<{ projectApproved?: boolean }>(
+        alternativeId ? 'pick_choice' : 'unpick_choice',
+        { choiceId, alternativeId },
+      )
+      onStatus(alternativeId
+        ? res.projectApproved ? 'Choice saved. Everything is now approved.' : 'Choice saved'
+        : 'Choice cleared')
+      return true
+    } catch {
+      onStatus('Your choice was not saved. Please try again.')
+      return false
     }
   }
 
@@ -634,6 +659,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           isPreviewingClientView={false}
           clientBudget={clientBudget}
           initialBudget={budget}
+          onPickChoice={saveChoicePick}
         />
       </div>
 

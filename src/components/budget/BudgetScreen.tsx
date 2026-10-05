@@ -7,14 +7,21 @@ import InstallationRow from './InstallationRow'
 import ConsultantFeeRow from './ConsultantFeeRow'
 import CustomLineItems from './CustomLineItems'
 import TotalsPanel from './TotalsPanel'
-import { useBudgetState } from './useBudgetState'
+import ChoicesSection from './ChoicesSection'
+import { useBudgetState, type SavePick } from './useBudgetState'
 import { rememberVatMode, storedVatMode } from './vatMode'
-import { computeProjectTotals } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
+import {
+  alternativesOf, clientChoices, computeBudgetTotals, doubleFramedWorks, pickedAlternative, priceElevations,
+} from './choices'
 import { budgetOptionAnchor, type BudgetFocus } from './budgetFocus'
 import type { ProjectBudget } from '@/types'
 import { InlineSpinner } from '@/components/ui/InlineSpinner'
 import { useOnline } from '@/hooks/useOnline'
+import { allDecided, decisionsFor } from '@/lib/decisions'
+import { loadDecisionState } from '@/lib/decisionsLoad'
+import { createClient } from '@/lib/supabase/client'
+import { PRACTICE_NAME } from '@/lib/utils'
 
 interface Props {
   projectId: string
@@ -50,6 +57,11 @@ interface Props {
    * Notes screen. A budget note is written only here, beside its figures.
    */
   focus?: BudgetFocus | null
+  /**
+   * The client portal's way of saving a pick on a budget choice, through its
+   * server route. The studio saves its own picks and leaves this out.
+   */
+  onPickChoice?: SavePick
 }
 
 /**
@@ -81,6 +93,7 @@ export default function BudgetScreen({
   onOptionNoteChange,
   initialVatMode,
   focus,
+  onPickChoice,
 }: Props) {
   // VAT toggle — persisted per project in localStorage.
   //
@@ -112,15 +125,29 @@ export default function BudgetScreen({
     addCustomLineItem,
     updateCustomLineItem,
     removeCustomLineItem,
-  } = useBudgetState(projectId, initialBudget)
+    addChoice,
+    updateChoice,
+    removeChoice,
+    pickChoice,
+  } = useBudgetState(projectId, initialBudget, onPickChoice)
 
   // Totals are always what the client would see: hidden elevations are listed
   // for the consultant below but never counted, so the consultant's figure and
-  // the client's figure are the same number.
+  // the client's figure are the same number. Hidden choices likewise.
   const clientElevations = elevations.filter(e => !e.hiddenFromClient)
+  const choices = budget?.choices ?? []
+  const picks = budget?.choicePicks ?? {}
+  const countedChoices = clientChoices(choices, clientElevations, picks)
 
-  // Compute artwork counts for installation tier
-  const pt = computeProjectTotals(clientElevations, vatMode)
+  // Totals with the choices counted; also the artwork counts for the installation tier.
+  const pt = computeBudgetTotals(clientElevations, choices, picks, vatMode)
+
+  // What the client still has to decide. Once everything is, the project is
+  // approved and a pick stands, as a wall's approved option does.
+  const decisions = decisionsFor(clientElevations, choices, picks)
+  const locked = allDecided(clientElevations, choices, picks)
+  const openDecisions = decisions.filter(d => !d.done)
+  const lastDecisionId = openDecisions.length === 1 && openDecisions[0].kind === 'choice' ? openDecisions[0].id : null
 
   function handleExportPdf() {
     const prev = document.title
@@ -155,7 +182,60 @@ export default function BudgetScreen({
 
   const effectiveIsConsultant = isConsultant && !isPreviewingClientView
   // "Client view" preview drops hidden elevations entirely, as the portal does.
-  const listedElevations = effectiveIsConsultant ? elevations : clientElevations
+  // Each work carries what the choices cost it: picked, or a range until then.
+  const listedElevations = priceElevations(
+    effectiveIsConsultant ? elevations : clientElevations, countedChoices, picks,
+  )
+  // Edits are offered only where the budget can be edited: never in the
+  // portal, the client preview, or the export's off-screen copy.
+  const editable = effectiveIsConsultant && !!onArtworkChange
+
+  /**
+   * A pick on a budget choice. The client's goes through the portal's route,
+   * which also marks the project approved when it was the last decision. A
+   * consultant's, made on the client's behalf, is saved here and does the
+   * same, from what the database holds rather than what this page last saw.
+   */
+  async function handlePick(choiceId: string, alternativeId: string | null) {
+    const ok = await pickChoice(choiceId, alternativeId)
+    if (!ok || !isConsultant) return
+    const supabase = createClient()
+    const choice = choices.find(c => c.id === choiceId)
+    const placed = choice && alternativeId
+      ? alternativesOf(choice).find(p => p.alt.id === alternativeId)
+      : null
+    const name = choice?.name.trim() || 'a budget choice'
+    const before = choice ? pickedAlternative(choice, picks) : null
+    if (placed || before) {
+      const what = placed ? [placed.alt.name, placed.group.label].filter(x => x.trim()).join(', ') : ''
+      await supabase.from('activity_logs').insert({
+        project_id: projectId,
+        type: placed ? 'pick' : 'pick_cleared',
+        text: placed
+          ? `${PRACTICE_NAME} chose ${what || 'an alternative'} for ${name} on the client's behalf`
+          : `${PRACTICE_NAME} cleared the choice of ${name}`,
+      })
+    }
+    if (!placed) return
+    const state = await loadDecisionState(supabase, projectId)
+    if (state && allDecided(state.elevations, state.choices, state.picks)) {
+      await supabase.from('projects').update({ status: 'approved' }).eq('id', projectId)
+    }
+  }
+
+  /** Takes a work's own framing line off, where a framing choice now prices it. */
+  function removeFramingLines(workIds: string[]) {
+    if (!onArtworkChange) return
+    for (const workId of workIds) {
+      const a = elevations.flatMap(e => e.options.flatMap(o => o.artworks)).find(x => x.workId === workId)
+      if (!a) continue
+      onArtworkChange(workId, { subLineItems: a.subLineItems.filter(i => i.kind !== 'framing') })
+    }
+  }
+
+  // The client's checklist appears once there is a choice to make; until
+  // then the walls speak for themselves, as they always have.
+  const showDecisions = !effectiveIsConsultant && countedChoices.length > 0
 
   return (
     <div className="budget-view" ref={root}>
@@ -175,6 +255,20 @@ export default function BudgetScreen({
           <h1 className="budget-project-name">{projectName}</h1>
           {clientName && <p className="budget-project-client">{clientName}</p>}
         </div>
+
+        {showDecisions && !isLoading && (
+          <div className={`budget-decisions${locked ? ' budget-decisions--done' : ''}`}>
+            <span className="budget-decisions-title">Your decisions</span>
+            {decisions.map(d => (
+              <span key={`${d.kind}:${d.id}`} className={`budget-decision${d.done ? ' budget-decision--done' : ''}`}>
+                <i aria-hidden="true" />
+                {d.name}
+                {!d.done && <span className="budget-decision-todo">to {d.todo}</span>}
+              </span>
+            ))}
+            {locked && <span className="budget-decisions-all">All approved</span>}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="budget-loading" style={{ minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -223,6 +317,24 @@ export default function BudgetScreen({
               )}
             </section>
 
+            {/* ── Choices ──────────────────────────────────────────────── */}
+            <ChoicesSection
+              choices={choices}
+              picks={picks}
+              clientElevations={clientElevations}
+              allElevations={elevations}
+              vatMode={vatMode}
+              isConsultant={effectiveIsConsultant}
+              locked={locked}
+              lastDecisionId={lastDecisionId}
+              doubleFramed={editable ? doubleFramedWorks(clientElevations, choices, picks) : []}
+              onPick={isPreviewingClientView || (!editable && isConsultant) ? undefined : handlePick}
+              onAdd={editable ? addChoice : undefined}
+              onUpdate={editable ? updateChoice : undefined}
+              onRemove={editable ? removeChoice : undefined}
+              onRemoveFramingLines={editable ? removeFramingLines : undefined}
+            />
+
             {/* ── Additional costs ─────────────────────────────────────── */}
             {/* Every row here can be hidden from the client individually, so
                 they can all be off at once — leaving a heading above an empty
@@ -264,7 +376,7 @@ export default function BudgetScreen({
 
             {/* ── Totals ───────────────────────────────────────────────── */}
             <TotalsPanel
-              elevations={clientElevations}
+              totals={pt}
               installation={budget.installation}
               consultantFee={budget.consultantFee}
               customLineItems={budget.customLineItems}
