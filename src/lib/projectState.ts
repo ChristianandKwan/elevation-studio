@@ -35,7 +35,7 @@ export function changeOption<E extends ElevationShape>(
 
 /** What belongs to the work, wherever it hangs. */
 const WORK_FIELDS = [
-  'name', 'artist', 'wCm', 'hCm', 'price', 'note', 'noteShownToClient',
+  'name', 'artist', 'wCm', 'hCm', 'price', 'priceCurrency', 'note', 'noteShownToClient',
   'vatApplies', 'discountStatus', 'discountPercent', 'subLineItems',
 ] as const
 

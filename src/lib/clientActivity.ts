@@ -11,7 +11,7 @@
  * Pure, so the wording can be tested without a database or an email.
  */
 
-export type ActivityKind = 'pick' | 'approve' | 'note'
+export type ActivityKind = 'pick' | 'approve' | 'note' | 'choice'
 
 export interface DigestAction {
   kind: ActivityKind
@@ -24,6 +24,16 @@ export interface DigestAction {
    * was overwritten — those are reported without a quote.
    */
   message?: string | null
+  /** The budget choice a `choice` action picked on (041). */
+  choiceId?: string | null
+}
+
+/** A budget choice as it stands when the email is written. */
+export interface DigestChoice {
+  id: string
+  name: string
+  /** How the pick reads now, "Conservation, Framer 1", or null if it was cleared. */
+  picked: string | null
 }
 
 export interface DigestOption {
@@ -119,6 +129,18 @@ function linesFor(elev: DigestElevation, actions: DigestAction[]): Line[] {
   return lines
 }
 
+/** The budget's lines: each choice picked, as it stands now. */
+function budgetLines(choices: DigestChoice[], actions: DigestAction[]): Line[] {
+  const touched = new Set(actions.filter(a => a.kind === 'choice' && a.choiceId).map(a => a.choiceId as string))
+  return choices
+    .filter(c => touched.has(c.id))
+    .map(c => ({
+      text: c.picked
+        ? `Chose ${c.picked} for ${c.name}`
+        : `Chose for ${c.name}, then cleared the choice`,
+    }))
+}
+
 /** The message actions, oldest first. */
 function messageActions(actions: DigestAction[]): DigestAction[] {
   return actions
@@ -139,17 +161,24 @@ export function buildDigest(
   elevations: DigestElevation[],
   actions: DigestAction[],
   projectUrl: string,
+  choices: DigestChoice[] = [],
 ): Digest | null {
   // Walls in the project's order; a wall deleted since the action is skipped.
-  const sections = elevations
-    .map(elev => ({ elev, lines: linesFor(elev, actions.filter(a => a.elevationId === elev.id)) }))
-    .filter(s => s.lines.length > 0)
+  // Picks on the budget's choices come after the walls, under "Budget".
+  const sections = [
+    ...elevations.map(elev => ({
+      elev: { name: elev.name },
+      lines: linesFor(elev, actions.filter(a => a.kind !== 'choice' && a.elevationId === elev.id)),
+    })),
+    { elev: { name: 'Budget' }, lines: budgetLines(choices, actions) },
+  ].filter(s => s.lines.length > 0)
   if (sections.length === 0) return null
 
   const distinct = (kind: ActivityKind, key: (a: DigestAction) => string | null) =>
     new Set(actions.filter(a => a.kind === kind).map(key).filter(Boolean)).size
+  const picks = distinct('pick', a => a.elevationId) + distinct('choice', a => a.choiceId ?? null)
   const summary = listed([
-    distinct('pick', a => a.elevationId) && count(distinct('pick', a => a.elevationId), 'choice', 'choices'),
+    picks && count(picks, 'choice', 'choices'),
     distinct('approve', a => a.optionId) && count(distinct('approve', a => a.optionId), 'approval', 'approvals'),
     messageCount(actions) && count(messageCount(actions), 'message', 'messages'),
   ].filter((p): p is string => !!p))
@@ -163,8 +192,9 @@ export function buildDigest(
   // they sent the email. "Active", not "viewed": the times are when they did
   // something, not how long they had the portal open.
   const intro = `The client was active in the ${project.name} project ${when}.`
-  const allApproved = project.status === 'approved' && actions.some(a => a.kind === 'approve')
-  const finale = 'Every elevation is now approved.'
+  // The last decision can be an approval or a pick on a budget choice (041).
+  const allApproved = project.status === 'approved' && actions.some(a => a.kind === 'approve' || a.kind === 'choice')
+  const finale = choices.length > 0 ? 'Every elevation and choice is now approved.' : 'Every elevation is now approved.'
 
   const subject = `${project.name}: ${summary} from the client`
 

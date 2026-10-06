@@ -1,6 +1,6 @@
 import type {
   BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem,
-  DiscountStatus, SubLineItem,
+  BudgetChoiceKind, Currency, DiscountStatus, SubLineItem,
 } from '@/types'
 
 // ── Types used across budget components ───────────────────────────────────────
@@ -14,8 +14,18 @@ export interface BudgetArtwork {
   artist: string
   wCm: number
   hCm: number
-  /** The list price, ex-VAT, before any discount. */
+  /**
+   * The list price, ex-VAT, before any discount. In `priceCurrency` as
+   * stored; in the currency on screen once the budget has converted it
+   * (currency.ts).
+   */
   price: number
+  /** The currency the price was quoted in. Absent means pounds. */
+  priceCurrency?: Currency
+  /** The price as quoted, kept when the budget converted it for the screen. */
+  quotedPrice?: number
+  /** The price needed a rate and there was none, so it counts as nothing. */
+  priceUnconverted?: boolean
   visible: boolean
   note: string
   noteShownToClient: boolean
@@ -23,6 +33,34 @@ export interface BudgetArtwork {
   discountStatus: DiscountStatus
   discountPercent: number | null
   subLineItems: SubLineItem[]
+  /**
+   * What each budget choice costs this work. Worked out on the budget from
+   * the choices (choices.ts) and never saved on the work, so the line editor
+   * cannot write one back as if it were the work's own cost.
+   */
+  choiceLines?: ChoiceLine[]
+}
+
+/** One alternative's figure, ex-VAT, with the VAT treatment it carries. */
+export interface ChoiceAmount {
+  amount: number
+  vatApplies: boolean
+}
+
+/** A budget choice's cost on one work. */
+export interface ChoiceLine {
+  choiceId: string
+  kind: BudgetChoiceKind
+  /** Picked: "Framing · Conservation, Framer 1". Open: the choice's name. */
+  label: string
+  /** The picked alternative's figure. Absent while the choice is open. */
+  picked?: ChoiceAmount
+  /**
+   * While the choice is open: this work's figure under each alternative on
+   * offer, in the same order on every work, so an option's figures can be
+   * added up one alternative at a time.
+   */
+  open?: ChoiceAmount[]
 }
 
 /**
@@ -34,7 +72,7 @@ export interface BudgetArtwork {
  */
 export type BudgetArtworkPatch = Partial<Pick<
   BudgetArtwork,
-  'price' | 'vatApplies' | 'discountStatus' | 'discountPercent'
+  'price' | 'priceCurrency' | 'vatApplies' | 'discountStatus' | 'discountPercent'
   | 'subLineItems' | 'note' | 'noteShownToClient'
 >>
 
@@ -83,9 +121,13 @@ export function applyVat(value: number, vatApplies: boolean, vatMode: boolean): 
 /** Everything one artwork adds to the budget in the current view. */
 export function artworkLineTotal(a: BudgetArtwork, vatMode: boolean): number {
   const net = netPrice(a)
-  return a.subLineItems.reduce(
+  const own = a.subLineItems.reduce(
     (sum, item) => sum + applyVat(subItemAmount(item, net), item.vatApplies, vatMode),
     applyVat(net, a.vatApplies, vatMode),
+  )
+  return (a.choiceLines ?? []).reduce(
+    (sum, l) => sum + (l.picked ? applyVat(l.picked.amount, l.picked.vatApplies, vatMode) : 0),
+    own,
   )
 }
 
@@ -102,6 +144,13 @@ export interface BudgetOptionData {
   consultantNote: string
   consultantNoteShownToClient: boolean
   artworks: BudgetArtwork[]
+  /**
+   * Whether the option has a wall (a photograph or a blank wall) and whether
+   * the client has approved it. Only the decisions (src/lib/decisions.ts)
+   * read these; absent counts as no.
+   */
+  hasWall?: boolean
+  approved?: boolean
 }
 
 export interface BudgetElevationData {
@@ -130,7 +179,13 @@ export function fmtRange(min: number, max: number): string {
 
 // ── Installation tiers ─────────────────────────────────────────────────────────
 
-export function installRange(count: number): { min: number; max: number } {
+/** The tiers in pounds. `factor` moves them into the currency on screen. */
+export function installRange(count: number, factor = 1): { min: number; max: number } {
+  const r = installRangeGbp(count)
+  return factor === 1 ? r : { min: Math.round(r.min * factor), max: Math.round(r.max * factor) }
+}
+
+function installRangeGbp(count: number): { min: number; max: number } {
   if (count === 0) return { min: 0, max: 0 }
   if (count <= 5) return { min: 125, max: 185 }
   if (count <= 15) return { min: 250, max: 350 }
@@ -147,13 +202,15 @@ export function installCostDisplay(
   installation: BudgetInstallation,
   artCountMin: number,
   artCountMax: number,
+  /** Pounds to the currency on screen, for the indicative tiers. */
+  factor = 1,
 ): InstallCostDisplay {
   if (!installation.indicative && installation.confirmedAmount != null) {
     const v = installation.confirmedAmount
     return { min: v, max: v, isIndicative: false }
   }
-  const rMin = installRange(artCountMin)
-  const rMax = installRange(artCountMax)
+  const rMin = installRange(artCountMin, factor)
+  const rMax = installRange(artCountMax, factor)
   return {
     min: Math.min(rMin.min, rMax.min),
     max: Math.max(rMin.max, rMax.max),
@@ -221,17 +278,26 @@ export function getOptionTotals(artworks: BudgetArtwork[]): OptionTotals {
     else bucket.artExempt += net
     bucket.artCount += 1
 
-    for (const item of a.subLineItems) {
-      const amount = subItemAmount(item, net)
-      if (amount === 0) continue
-      if (item.kind === 'framing') {
+    const costs = [
+      ...a.subLineItems.map(item => ({
+        framing: item.kind === 'framing', amount: subItemAmount(item, net), vatApplies: item.vatApplies,
+      })),
+      // A choice counts once it is picked. While it is open its range is
+      // carried by the option's figures and the project's From / Up to.
+      ...(a.choiceLines ?? []).filter(l => l.picked).map(l => ({
+        framing: l.kind === 'framing', amount: Math.round(l.picked!.amount), vatApplies: l.picked!.vatApplies,
+      })),
+    ]
+    for (const cost of costs) {
+      if (cost.amount === 0) continue
+      if (cost.framing) {
         hasFraming = true
-        if (item.vatApplies) bucket.framingVatable += amount
-        else bucket.framingExempt += amount
+        if (cost.vatApplies) bucket.framingVatable += cost.amount
+        else bucket.framingExempt += cost.amount
       } else {
         hasOther = true
-        if (item.vatApplies) bucket.otherVatable += amount
-        else bucket.otherExempt += amount
+        if (cost.vatApplies) bucket.otherVatable += cost.amount
+        else bucket.otherExempt += cost.amount
       }
     }
   }
@@ -242,6 +308,32 @@ export function getOptionTotals(artworks: BudgetArtwork[]): OptionTotals {
 /** One option's subtotal in the current view, for a block or card header. */
 export function optionTotal(artworks: BudgetArtwork[], vatMode: boolean): number {
   return bucketTotal(getOptionTotals(artworks), vatMode)
+}
+
+/**
+ * One option's subtotal while a choice is still open: the lowest and highest
+ * it could come to. Each open choice is added one alternative at a time, so
+ * both ends are an alternative the client could really pick, never one
+ * alternative's price on this work beside another's on that.
+ */
+export function optionSpan(artworks: BudgetArtwork[], vatMode: boolean): { min: number; max: number } {
+  const base = optionTotal(artworks, vatMode)
+  const perChoice = new Map<string, number[]>()
+  for (const a of artworks.filter(x => x.visible)) {
+    for (const line of a.choiceLines ?? []) {
+      if (!line.open) continue
+      const sums = perChoice.get(line.choiceId) ?? line.open.map(() => 0)
+      line.open.forEach((c, i) => { sums[i] = (sums[i] ?? 0) + applyVat(c.amount, c.vatApplies, vatMode) })
+      perChoice.set(line.choiceId, sums)
+    }
+  }
+  let min = base, max = base
+  for (const sums of perChoice.values()) {
+    if (sums.length === 0) continue
+    min += Math.min(...sums)
+    max += Math.max(...sums)
+  }
+  return { min, max }
 }
 
 // ── Project-level totals (handles picked vs pending elevations) ───────────────

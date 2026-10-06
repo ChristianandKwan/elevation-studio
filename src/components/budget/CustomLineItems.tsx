@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from './money'
 import { useState, useRef, useEffect } from 'react'
 import { displayFrozenAmount } from './budgetCalc'
 import type { BudgetCustomLineItem } from '@/types'
@@ -22,6 +23,7 @@ interface DraftState {
 }
 
 export default function CustomLineItems({ items, isConsultant, vatMode, onAdd, onUpdate, onRemove }: Props) {
+  const { fmt } = useMoney()
   const [draft, setDraft] = useState<DraftState | null>(null)
   const pendingAdd = useRef(false)
 
@@ -159,7 +161,7 @@ export default function CustomLineItems({ items, isConsultant, vatMode, onAdd, o
               </div>
               <div className="budget-cost-value-group">
                 <span className="budget-cost-value">
-                  £{displayAmount.toLocaleString('en-GB')}
+                  {fmt(displayAmount)}
                 </span>
                 {isConsultant && (
                   <button

@@ -65,6 +65,7 @@ export function placementToArtwork(row: Row, imageUrl: string | null): Artwork |
     yF: num(row.y_fraction, 0.08),
     visible: row.visible !== false,
     price: w.price,
+    priceCurrency: w.priceCurrency,
     artist: w.artist,
     note: w.note,
     noteShownToClient: w.noteShownToClient,

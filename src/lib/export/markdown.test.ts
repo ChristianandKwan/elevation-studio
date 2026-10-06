@@ -313,6 +313,31 @@ describe('elevations', () => {
 })
 
 describe('budget', () => {
+  test('the budget in the client\u2019s currency follows, with where its rate comes from (042)', () => {
+    const md = buildMarkdown(snapshot({
+      budget: { imageFile: null,
+        lines: [{ label: 'London', amount: 7561 }],
+        total: 7561, totalMax: 7561, clientBudget: null, notes: [],
+        rateNote: 'Works priced in US dollars are converted at £1 = $1.3225.',
+      },
+      budgetInClientCurrency: { imageFile: null,
+        lines: [{ label: 'London', amount: 10000 }],
+        total: 10000, totalMax: 10000, clientBudget: null, notes: [],
+        symbol: '$', currencyName: 'US dollars',
+        rateNote: 'Figures in US dollars are indicative.',
+      },
+    }))
+    assert.ok(md.includes('| **Total ex VAT** | **£7,561** |'))
+    assert.ok(md.includes('### The budget in US dollars'))
+    assert.ok(md.includes('| **Total ex VAT** | **$10,000** |'))
+    assert.ok(md.includes('Figures in US dollars are indicative.'))
+  })
+
+  test('a work quoted in dollars is priced in dollars', () => {
+    const md = buildMarkdown(snapshot({ works: [work({ price: 10000, priceSymbol: '$' })] }))
+    assert.ok(md.includes('$10,000 ex VAT'))
+  })
+
   test('the difference is stated, never graded', () => {
     // Client-facing language: the export reports the gap and stops. Whether
     // being over is a problem is the consultant's conversation to have.

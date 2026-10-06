@@ -26,3 +26,24 @@ export function rememberVatMode(projectId: string, incVat: boolean): void {
     localStorage.setItem(KEY(projectId), incVat ? 'incvat' : 'exvat')
   } catch { /* storage unavailable */ }
 }
+
+// ── The currency view (042) ───────────────────────────────────────────────────
+// Remembered the same way and for the same reasons: the export photographs
+// the budget in the view the consultant is reading.
+
+const CURRENCY_KEY = (projectId: string) => `elevation_budget_currency_${projectId}`
+
+/** The currency last chosen on this project's budget in this browser, or null if never. */
+export function storedCurrency(projectId: string): string | null {
+  try {
+    return localStorage.getItem(CURRENCY_KEY(projectId))
+  } catch {
+    return null
+  }
+}
+
+export function rememberCurrency(projectId: string, currency: string): void {
+  try {
+    localStorage.setItem(CURRENCY_KEY(projectId), currency)
+  } catch { /* storage unavailable */ }
+}

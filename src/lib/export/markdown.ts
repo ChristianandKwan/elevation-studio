@@ -61,17 +61,17 @@ export function fileSlug(raw: string, fallback = 'untitled'): string {
  * import of it. `src/lib` does not reach into `src/components`, and the one
  * line of formatting is a smaller price than inverting that dependency.
  */
-export function money(n: number): string {
-  return '£' + Math.round(n).toLocaleString('en-GB')
+export function money(n: number, symbol = '£'): string {
+  return symbol + Math.round(n).toLocaleString('en-GB')
 }
 
 /**
  * `£250 – £350`, matching what the budget screen already shows a client for
  * an indicative cost. Collapses to a single figure when the ends agree.
  */
-export function moneyRange(min: number, max?: number): string {
-  if (max == null || Math.round(min) === Math.round(max)) return money(min)
-  return `${money(min)} – ${money(max)}`
+export function moneyRange(min: number, max?: number, symbol = '£'): string {
+  if (max == null || Math.round(min) === Math.round(max)) return money(min, symbol)
+  return `${money(min, symbol)} – ${money(max, symbol)}`
 }
 
 /**
@@ -178,7 +178,7 @@ function workSection(work: ExportWork, level: number): string[] {
   ]))
 
   const commercial = facts([
-    ['Price', work.price > 0 ? `${money(work.price)} ex VAT` : null],
+    ['Price', work.price > 0 ? `${money(work.price, work.priceSymbol)} ex VAT` : null],
     ['Discount', work.discountStatus === 'confirmed' && work.discountPercent
       ? `${work.discountPercent}% confirmed`
       : work.discountStatus === 'tbc' && work.discountPercent
@@ -289,19 +289,37 @@ function optionSection(
 }
 
 /** "£500 below" / "£200 above" / "exactly on it". */
-function describeGap(diff: number): string {
+function describeGap(diff: number, symbol = '£'): string {
   if (Math.round(diff) === 0) return 'exactly on it'
-  return `${money(Math.abs(diff))} ${diff > 0 ? 'above' : 'below'}`
+  return `${money(Math.abs(diff), symbol)} ${diff > 0 ? 'above' : 'below'}`
 }
 
-function budgetSection(budget: ExportBudget): string[] {
-  const rows = [
+function budgetTable(budget: ExportBudget): string[] {
+  const sym = budget.symbol
+  return [
     '| Line | Amount |',
     '| --- | --- |',
     ...budget.lines.map(line =>
-      `| ${line.sub ? '&nbsp;&nbsp;↳ ' : ''}${line.label} | ${moneyRange(line.amount, line.amountMax)} |`),
-    `| **Total ex VAT** | **${moneyRange(budget.total, budget.totalMax)}** |`,
+      `| ${line.sub ? '&nbsp;&nbsp;↳ ' : ''}${line.label} | ${moneyRange(line.amount, line.amountMax, sym)} |`),
+    `| **Total ex VAT** | **${moneyRange(budget.total, budget.totalMax, sym)}** |`,
   ]
+}
+
+/**
+ * The budget again in the client's own currency (042). Figures only: the
+ * picture and the notes are the pound budget's, above it.
+ */
+function clientCurrencySection(budget: ExportBudget): string[] {
+  const out = [`### The budget in ${budget.currencyName ?? 'the client\u2019s currency'}`, tight(budgetTable(budget))]
+  if (budget.clientBudget != null) {
+    out.push(facts([['Client budget', `${money(budget.clientBudget, budget.symbol)} ex VAT`]]))
+  }
+  if (budget.rateNote) out.push(budget.rateNote)
+  return out
+}
+
+function budgetSection(budget: ExportBudget, inClientCurrency?: ExportBudget | null): string[] {
+  const rows = budgetTable(budget)
   const out: string[] = ['## Budget']
 
   // The page first, then the figures. Both describe the same budget: the
@@ -327,6 +345,9 @@ function budgetSection(budget: ExportBudget): string[] {
       out.push(`Against the budget, the total runs from ${describeGap(lo)} to ${describeGap(hi)}.`)
     }
   }
+
+  if (budget.rateNote) out.push(budget.rateNote)
+  if (inClientCurrency) out.push(...clientCurrencySection(inClientCurrency))
 
   out.push('**About the budget**')
   out.push(...notesBlock(budget.notes))
@@ -419,7 +440,7 @@ export function buildMarkdown(snap: ExportSnapshot): string {
     }
   }
 
-  if (snap.budget) blocks.push(budgetSection(snap.budget))
+  if (snap.budget) blocks.push(budgetSection(snap.budget, snap.budgetInClientCurrency))
 
   return blocks
     .map(b => b.filter(part => part.trim() !== '').join('\n\n'))

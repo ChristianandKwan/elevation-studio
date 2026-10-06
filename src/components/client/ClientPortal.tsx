@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import Image from 'next/image'
-import ClientElevation from './ClientElevation'
+import ClientElevation, { type PanelMoney } from './ClientElevation'
 import StatusToast from '@/components/ui/StatusToast'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { DrawLoader } from '@/components/ui/Spinner'
 import { preloadImages, clearPreloads } from '@/lib/imagePreload'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
-import type { ProjectBudget, DiscountStatus, SubLineItem } from '@/types'
+import { fmtMoney, rateBetween, type FxRate } from '@/components/budget/currency'
+import type { Currency, ProjectBudget, DiscountStatus, SubLineItem } from '@/types'
 import { optionTitleFor, optionTagClass } from '@/lib/options'
 import type { OptionMessage } from '@/lib/messages'
 import { createPortalSaves, type PortalSaves } from '@/lib/portalSaves'
@@ -24,6 +25,7 @@ interface ClientArtwork {
   yF: number
   visible: boolean
   price: number
+  priceCurrency?: Currency
   artist: string
   note: string
   noteShownToClient: boolean
@@ -99,9 +101,11 @@ interface Props {
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
   clientBudget: number | null
   budget: ProjectBudget | null
+  /** Exchange rates the server read for this budget, or null when it needs none or none could be had (042). */
+  rates: FxRate | null
 }
 
-export default function ClientPortal({ token, project, elevations, approvalActivity, clientBudget, budget }: Props) {
+export default function ClientPortal({ token, project, elevations, approvalActivity, clientBudget, budget, rates }: Props) {
   const inFlightRef = useRef(new Set<string>())
   // Show/hide and moves, saved once the client pauses — see src/lib/portalSaves.ts.
   const portalSaves = useRef<PortalSaves | null>(null)
@@ -300,6 +304,19 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
   const activeElev = elevations.find(e => e.id === activeElevId)
   const optData = optionsState[activeElevId]?.[activeOpt]
 
+  // Prices beside the walls, in the client's currency where the project has
+  // one and there is a rate for it, else pounds; a work quoted in anything
+  // else is converted either way (042). The Budget tab has its own switch.
+  const panelMoney = useMemo<PanelMoney>(() => {
+    const shown: Currency = budget?.clientCurrency && rateBetween('GBP', budget.clientCurrency, rates) != null
+      ? budget.clientCurrency : 'GBP'
+    return {
+      amountOf: a => a.price * (rateBetween(a.priceCurrency ?? 'GBP', shown, rates) ?? 0),
+      fmt: n => fmtMoney(n, shown),
+      poundFactor: rateBetween('GBP', shown, rates) ?? 1,
+    }
+  }, [budget?.clientCurrency, rates])
+
   const budgetElevations: BudgetElevationData[] = elevations.map(elev => ({
     id: elev.id,
     name: elev.name,
@@ -311,6 +328,10 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       name: opt.name?.trim() || null,
       consultantNote: opt.consultantNote ?? '',
       consultantNoteShownToClient: opt.consultantNoteShownToClient ?? true,
+      // For the checklist of decisions on the Budget tab: an approval made
+      // here shows there at once.
+      hasWall: hasWall(opt),
+      approved: optionsState[elev.id]?.[opt.option]?.approved ?? opt.approved,
       artworks: opt.artworks.map(a => ({
         id: a.id,
         workId: a.workId,
@@ -319,6 +340,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
         wCm: a.wCm,
         hCm: a.hCm,
         price: a.price,
+        priceCurrency: a.priceCurrency ?? 'GBP',
         visible: a.visible,
         note: a.note ?? '',
         noteShownToClient: a.noteShownToClient ?? true,
@@ -458,6 +480,27 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
       onStatus('Failed to clear selection. Please try again.')
     } finally {
       inFlightRef.current.delete(key)
+    }
+  }
+
+  /**
+   * Saves a pick on a budget choice through the server, which checks it is
+   * one the portal offers and marks the project approved if it was the last
+   * decision. The budget shows the pick at once and puts it back on failure.
+   */
+  async function saveChoicePick(choiceId: string, alternativeId: string | null): Promise<boolean> {
+    try {
+      const res = await callAction<{ projectApproved?: boolean }>(
+        alternativeId ? 'pick_choice' : 'unpick_choice',
+        { choiceId, alternativeId },
+      )
+      onStatus(alternativeId
+        ? res.projectApproved ? 'Choice saved. Everything is now approved.' : 'Choice saved'
+        : 'Choice cleared')
+      return true
+    } catch {
+      onStatus('Your choice was not saved. Please try again.')
+      return false
     }
   }
 
@@ -602,6 +645,7 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
             rerenderKey={rerenderKey}
             approvalActivity={approvalActivity}
             clientBudget={clientBudget}
+            money={panelMoney}
             isPicked={!activeElev ? true : !needsPick(activeElev) || pickedOptions[activeElevId] != null}
             artworksLocked={optData.approved || (!!activeElev && needsPick(activeElev) && pickedOptions[activeElevId] != null)}
             onPick={(opt) => handlePick(activeElevId, opt)}
@@ -634,6 +678,8 @@ export default function ClientPortal({ token, project, elevations, approvalActiv
           isPreviewingClientView={false}
           clientBudget={clientBudget}
           initialBudget={budget}
+          onPickChoice={saveChoicePick}
+          initialRates={rates}
         />
       </div>
 

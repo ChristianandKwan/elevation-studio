@@ -1,4 +1,4 @@
-import type { DiscountStatus, SubLineItem, SubLineItemKind } from '@/types'
+import type { Currency, DiscountStatus, SubLineItem, SubLineItemKind } from '@/types'
 
 /**
  * Reading the line-item columns added by migration 024 off a database row.
@@ -52,6 +52,8 @@ export function parseDiscountPercent(raw: unknown): number | null {
 /** The line-item fields for one artwork row, ready to spread onto an Artwork. */
 export function readLineItemFields(row: Record<string, unknown>) {
   return {
+    // Pounds for a row read before 042 ran, which is what its price was.
+    priceCurrency: parseCurrency(row.price_currency),
     note: typeof row.note === 'string' ? row.note : '',
     noteShownToClient: row.note_shown_to_client !== false,
     vatApplies: row.vat_applies !== false,
@@ -59,6 +61,14 @@ export function readLineItemFields(row: Record<string, unknown>) {
     discountPercent: parseDiscountPercent(row.discount_percent),
     subLineItems: parseSubLineItems(row.sub_line_items),
   }
+}
+
+/** Every currency the budget knows, in menu order. Names and symbols: src/components/budget/currency.ts. */
+export const CURRENCY_CODES: readonly Currency[] = ['GBP', 'EUR', 'USD', 'JPY', 'CNY', 'HKD', 'CHF', 'CAD', 'AUD']
+
+/** A stored currency code, or pounds for anything else (and for a row read before 042). */
+export function parseCurrency(raw: unknown): Currency {
+  return CURRENCY_CODES.includes(raw as Currency) ? (raw as Currency) : 'GBP'
 }
 
 /** The consultant's note fields for one elevation_options row. */

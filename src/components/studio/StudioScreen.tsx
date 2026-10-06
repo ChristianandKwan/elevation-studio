@@ -18,14 +18,15 @@ import StatusToast from '@/components/ui/StatusToast'
 import { DrawLoader } from '@/components/ui/Spinner'
 import BudgetScreen from '@/components/budget/BudgetScreen'
 import { captureBudgetImage, PAGE_W, PAGE_PAD } from '@/components/budget/captureBudget'
-import { storedVatMode } from '@/components/budget/vatMode'
+import { storedCurrency, storedVatMode } from '@/components/budget/vatMode'
+import { parseCurrency } from '@/lib/lineItems'
 import { FeedbackDialog } from '@/components/feedback/FeedbackButton'
 import { installFeedbackLogger } from '@/lib/feedback/logger'
 import ProposalsView from '@/components/proposals/ProposalsView'
 import { timeNow, PRACTICE_NAME } from '@/lib/utils'
 import type { Artwork, ActivityLog, Work } from '@/types'
 import type { BudgetElevationData } from '@/components/budget/budgetCalc'
-import { fmtGbp } from '@/components/budget/budgetCalc'
+import { fmtMoney } from '@/components/budget/currency'
 import { budgetLineForWork, type BudgetFocus, type BudgetLine } from '@/components/budget/budgetFocus'
 import { labelOptions, optionLabel, optionTitleFor, cleanOptionName, nextOptionKey, nextSortOrder } from '@/lib/options'
 import { toWorkColumns, placementsOf, workFieldsOf } from '@/lib/works'
@@ -1509,6 +1510,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
       name: cleanOptionName(o.name),
       consultantNote: o.consultantNote ?? '',
       consultantNoteShownToClient: o.consultantNoteShownToClient ?? true,
+      hasWall: !!o.imagePath || !!o.wall_color,
+      approved: !!o.approved,
       artworks: o.artworks.map(a => ({
         id: a.id,
         workId: a.workId,
@@ -1517,6 +1520,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         wCm: a.wCm,
         hCm: a.hCm,
         price: a.price,
+        priceCurrency: a.priceCurrency ?? 'GBP',
         visible: a.visible,
         note: a.note ?? '',
         noteShownToClient: a.noteShownToClient ?? true,
@@ -1829,6 +1833,8 @@ export default function StudioScreen({ project, elevations: initialElevations, e
             // copy starts ex-VAT and may be photographed before the stored
             // preference lands.
             initialVatMode={storedVatMode(project.id)}
+            // And the currency they are reading it in, for the same reason.
+            initialCurrency={parseCurrency(storedCurrency(project.id))}
           />
         </div>
       )}
@@ -1950,7 +1956,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
         const clashes = elevations.flatMap(e => e.elevation_options
           .filter(o => keepOptionIds.has(o.id) && o.artworks.some(a => drops.some(d => d.id === a.workId)))
           .map(() => e.name))
-        const prices = new Set(picked.map(w => w.price))
+        const prices = new Set(picked.map(w => fmtMoney(w.price, w.priceCurrency)))
         const names = new Set(picked.map(w => w.name.trim()))
 
         return (
@@ -1983,7 +1989,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
                       <span className="merge-choice-text">
                         <span className="merge-choice-name">{w.name}</span>
                         <span className="merge-choice-meta">
-                          {w.wCm} × {w.hCm} cm · {fmtGbp(w.price)}
+                          {w.wCm} × {w.hCm} cm · {fmtMoney(w.price, w.priceCurrency)}
                         </span>
                         <span className="merge-choice-meta">
                           {placed.length > 0
@@ -2005,7 +2011,7 @@ export default function StudioScreen({ project, elevations: initialElevations, e
               )}
               {prices.size > 1 && (
                 <p className="modal-sub merge-warn">
-                  Prices differ ({[...prices].map(fmtGbp).join(' and ')}). The kept
+                  Prices differ ({[...prices].join(' and ')}). The kept
                   record&rsquo;s price is the one that stands.
                 </p>
               )}

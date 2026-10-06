@@ -35,18 +35,27 @@ import { MESSAGE_COLUMNS, messagesByOption, rowToMessage, type OptionMessage, ty
 import { sortOptions, optionTitleFor } from '@/lib/options'
 import {
   netPrice, subItemAmount, installCostDisplay, consultantFeeRange,
-  displayFrozenAmount, computeProjectTotals, getOptionTotals, bucketTotal,
+  displayFrozenAmount, getOptionTotals, bucketTotal, optionSpan,
   type BudgetArtwork, type BudgetElevationData,
 } from '@/components/budget/budgetCalc'
-import { parseSubLineItems, parseDiscountStatus, parseDiscountPercent } from '@/lib/lineItems'
+import {
+  alternativeSpan, clientChoices, computeBudgetTotals, offeredAlternatives, pickedAlternative,
+  pickedLabel, priceElevations, readChoices, readPicks, worksInPlay,
+} from '@/components/budget/choices'
+import { parseSubLineItems, parseDiscountStatus, parseDiscountPercent, parseCurrency } from '@/lib/lineItems'
+import {
+  CURRENCY_META, artworkIn, choicesIn, elevationsIn, fmtRate, fmtRateDate, quotedCurrencies, rateBetween,
+  type FxRate,
+} from '@/components/budget/currency'
+import { getRates } from '@/lib/fx'
 import { parseSetAside } from '@/lib/works'
-import type { BudgetConsultantFee, BudgetCustomLineItem, BudgetInstallation } from '@/types'
+import type { BudgetConsultantFee, BudgetCustomLineItem, BudgetInstallation, Currency } from '@/types'
 import { buildMarkdown, fileSlug } from './markdown'
 import { hangingOrder } from './order'
 import { decodeCapturedImage } from './capturedImage'
 import { EXPORTS_BUCKET, exportObjectPath } from './bucket'
 import type {
-  ExportBudgetLine, ExportBudgetNote, ExportChoices, ExportElevation, ExportMessage, ExportNote,
+  ExportBudget, ExportBudgetLine, ExportBudgetNote, ExportChoices, ExportElevation, ExportMessage, ExportNote,
   ExportSnapshot, ExportWork,
 } from './types'
 
@@ -160,6 +169,7 @@ interface WorkRow {
   w_cm: number
   h_cm: number
   price: number | null
+  price_currency: unknown
   vat_applies: boolean | null
   discount_status: unknown
   discount_percent: unknown
@@ -179,6 +189,11 @@ interface BudgetRow {
   installation: BudgetInstallation | null
   consultant_fee: BudgetConsultantFee | null
   custom_line_items: BudgetCustomLineItem[] | null
+  /** The second currency the budget is shown in, or null (042). */
+  client_currency: string | null
+  /** Budget choices (041), and their picks read alongside. */
+  choices: unknown
+  pickRows: Array<Record<string, unknown>>
 }
 
 const OPTION_SELECT = `
@@ -196,7 +211,7 @@ const OPTION_SELECT = `
 
 /** Everything the pack needs, in as few round trips as the shapes allow. */
 async function readProject(supabase: SupabaseClient, projectId: string) {
-  const [project, elevations, works, notes, artists, budget, messages] = await Promise.all([
+  const [project, elevations, works, notes, artists, budget, messages, picks] = await Promise.all([
     supabase.from('projects')
       .select('id, name, client_name, budget, consultant_id')
       .eq('id', projectId).maybeSingle(),
@@ -205,7 +220,7 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
       .eq('project_id', projectId)
       .order('display_order', { ascending: true }),
     supabase.from('works')
-      .select('id, artist, artist_id, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, year, medium, edition, source, set_aside, considered_for, display_order, note, note_shown_to_client')
+      .select('id, artist, artist_id, name, image_path, w_cm, h_cm, price, price_currency, vat_applies, discount_status, discount_percent, sub_line_items, year, medium, edition, source, set_aside, considered_for, display_order, note, note_shown_to_client')
       .eq('project_id', projectId)
       .order('display_order', { ascending: true }),
     supabase.from('notes')
@@ -214,12 +229,15 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
       .order('display_order', { ascending: true }),
     supabase.from('artist_profiles').select('id, name, note'),
     supabase.from('project_budgets')
-      .select('installation, consultant_fee, custom_line_items')
+      .select('installation, consultant_fee, custom_line_items, choices, client_currency')
       .eq('project_id', projectId).maybeSingle(),
     supabase.from('option_messages')
       .select(MESSAGE_COLUMNS)
       .eq('project_id', projectId)
       .order('created_at', { ascending: true }),
+    supabase.from('budget_choice_picks')
+      .select('choice_id, alternative_id, picked_by, picked_at')
+      .eq('project_id', projectId),
   ])
 
   return {
@@ -228,7 +246,9 @@ async function readProject(supabase: SupabaseClient, projectId: string) {
     works: (works.data ?? []) as unknown as WorkRow[],
     notes: ((notes.data ?? []) as unknown as NoteRow[]).map(rowToNote),
     artists: (artists.data ?? []) as Array<{ id: string; name: string; note: string | null }>,
-    budget: budget.data as BudgetRow | null,
+    budget: budget.data
+      ? { ...(budget.data as Omit<BudgetRow, 'pickRows'>), pickRows: (picks.data ?? []) as Array<Record<string, unknown>> }
+      : null,
     messages: ((messages.data ?? []) as OptionMessageRow[]).map(rowToMessage),
   }
 }
@@ -424,6 +444,7 @@ function toBudgetArtwork(a: PlacementRow, byId: Map<string, WorkRow>): BudgetArt
     wCm: w.w_cm,
     hCm: w.h_cm,
     price: w.price ?? 0,
+    priceCurrency: parseCurrency(w.price_currency),
     visible: a.visible,
     note: '',
     noteShownToClient: true,
@@ -465,11 +486,17 @@ function buildBudget(
   clientBudget: number | null,
   budgetNotes: ExportNote[],
   imageFile: string | null,
-) {
+  /** The currency to cost it in (042): pounds, or the client's own. */
+  currency: Currency,
+  rates: FxRate | null,
+): ExportBudget {
   const byId = new Map(works.map(w => [w.id, w]))
   const asBudgetArtwork = (a: PlacementRow) => toBudgetArtwork(a, byId)
+  // Every amount moved into `currency` first, exactly as the Budget page
+  // does (currency.ts); the arithmetic below then runs unchanged.
+  const f = rateBetween('GBP', currency, rates) ?? 1
 
-  const budgetElevations: BudgetElevationData[] = chosen.map(({ elev, opts, options }) => ({
+  const asQuoted: BudgetElevationData[] = chosen.map(({ elev, opts, options }) => ({
     id: elev.id,
     name: elev.name,
     // Only a pick the consultant actually included counts. Leaving the key in
@@ -492,8 +519,16 @@ function buildBudget(
         .filter((a): a is BudgetArtwork => a !== null),
     })),
   }))
+  const budgetElevations = elevationsIn(asQuoted, currency, rates)
 
-  const totals = computeProjectTotals(budgetElevations, false)
+  // The budget's choices (041), counted exactly as the Budget page counts
+  // them: for the works in this export, the client's own, picked or a range.
+  const choices = choicesIn(readChoices(budgetRow?.choices), currency, rates)
+  const picks = readPicks(budgetRow?.pickRows)
+  const counted = clientChoices(choices, budgetElevations, picks)
+  const priced = priceElevations(budgetElevations, counted, picks)
+
+  const totals = computeBudgetTotals(budgetElevations, choices, picks, false)
   const artMin = totals.min.artVatable + totals.min.artExempt
   const artMax = totals.max.artVatable + totals.max.artExempt
 
@@ -503,7 +538,7 @@ function buildBudget(
   // are listed, because that is what is actually being bought. Where they
   // have not, the alternatives are a range and naming one option's works
   // would present a choice that has not been made as though it had.
-  for (const elev of budgetElevations) {
+  for (const elev of priced) {
     const picked = elev.clientPickedOption
       ? elev.options.find(o => o.key === elev.clientPickedOption)
       : undefined
@@ -518,16 +553,47 @@ function buildBudget(
           if (amount === 0) continue
           lines.push({ label: item.label?.trim() || item.kind, amount, sub: true })
         }
+        for (const line of a.choiceLines ?? []) {
+          if (line.picked) lines.push({ label: line.label, amount: line.picked.amount, sub: true })
+        }
       }
       continue
     }
 
-    const each = elev.options.map(o => bucketTotal(getOptionTotals(o.artworks), false))
-    if (each.length === 0) continue
-    const lo = Math.min(...each)
-    const hi = Math.max(...each)
+    // Each option's own range: a choice still open adds its cheapest and
+    // dearest alternative to it, as on the Budget page.
+    const spans = elev.options.map(o => optionSpan(o.artworks, false))
+    if (spans.length === 0) continue
+    const lo = Math.min(...spans.map(x => x.min))
+    const hi = Math.max(...spans.map(x => x.max))
     lines.push({
       label: `${elev.name} — ${elev.options.length} option${elev.options.length === 1 ? '' : 's'}, none picked yet`,
+      amount: lo,
+      ...(hi !== lo ? { amountMax: hi } : {}),
+    })
+  }
+
+  // A choice still open is listed with what it could come to, so the reader
+  // can see where the range comes from. One priced per work and picked is
+  // already on its works above; one priced as one figure has no works, so it
+  // is always listed here. These lines are words for the reader: the total
+  // below comes from the Budget page's own arithmetic, not from adding them.
+  const inPlay = worksInPlay(budgetElevations)
+  for (const choice of counted) {
+    const placed = pickedAlternative(choice, picks)
+    if (placed) {
+      if (choice.pricing !== 'whole') continue
+      const span = alternativeSpan(choice, placed.alt, budgetElevations, false)
+      lines.push({ label: pickedLabel(choice, placed), amount: span.min })
+      continue
+    }
+    const offered = offeredAlternatives(choice, inPlay)
+    const spans = offered.map(p => alternativeSpan(choice, p.alt, budgetElevations, false))
+    if (spans.length === 0) continue
+    const lo = Math.min(...spans.map(x => x.min))
+    const hi = Math.max(...spans.map(x => x.max))
+    lines.push({
+      label: `${choice.name.trim() || 'Choice'} — ${offered.length} alternative${offered.length === 1 ? '' : 's'}, none picked yet`,
       amount: lo,
       ...(hi !== lo ? { amountMax: hi } : {}),
     })
@@ -544,7 +610,10 @@ function buildBudget(
   if (install && (install.shownToClient ?? true)) {
     // Indicative installation is tiered on how many works are going out, and
     // that count itself has two ends once an elevation is undecided.
-    const display = installCostDisplay(install, totals.min.artCount, totals.max.artCount)
+    const display = installCostDisplay(
+      { ...install, confirmedAmount: install.confirmedAmount == null ? null : install.confirmedAmount * f },
+      totals.min.artCount, totals.max.artCount, f,
+    )
     if (display.max > 0) {
       lines.push({
         label: display.isIndicative ? 'Installation (indicative)' : 'Installation',
@@ -563,7 +632,7 @@ function buildBudget(
     // ex-VAT total — which is what `displayFrozenAmount` exists to prevent.
     if (fee.mode === 'flat') {
       const amount = displayFrozenAmount(
-        fee.amount, fee.amountIncludesVat, fee.vatApplies ?? true, false,
+        fee.amount * f, fee.amountIncludesVat, fee.vatApplies ?? true, false,
       )
       lines.push({ label: 'Consultant fee', amount })
       total += amount
@@ -586,7 +655,7 @@ function buildBudget(
   for (const item of budgetRow?.custom_line_items ?? []) {
     if (!(item.shownToClient ?? true)) continue
     // Ex-VAT throughout: the pack states its figures once, and says so.
-    const amount = displayFrozenAmount(item.amount, item.amountIncludesVat, item.vatApplies, false)
+    const amount = displayFrozenAmount(item.amount * f, item.amountIncludesVat, item.vatApplies, false)
     lines.push({ label: item.name || 'Other', amount })
     total += amount
     totalMax += amount
@@ -595,8 +664,32 @@ function buildBudget(
   return {
     imageFile, lines, total,
     totalMax: Math.max(total, totalMax),
-    clientBudget, notes: budgetNotes,
+    clientBudget: clientBudget == null ? null : clientBudget * f,
+    notes: budgetNotes,
+    symbol: CURRENCY_META[currency].symbol,
+    currencyName: CURRENCY_META[currency].inSentence,
+    rateNote: rateNoteFor(asQuoted, currency, rates),
   }
+}
+
+/** Where the budget's converted figures come from, in words, or null if none are. */
+function rateNoteFor(elevations: BudgetElevationData[], currency: Currency, rates: FxRate | null): string | null {
+  const name = (c: Currency) => CURRENCY_META[c].inSentence
+  const quoted = quotedCurrencies(elevations, currency)
+  const parts: string[] = []
+  if (!rates) {
+    if (currency === 'GBP' && quoted.length === 0) return null
+    return `No exchange rate could be fetched, so works priced in ${quoted.map(name).join(' and ')} are left out of these figures.`
+  }
+  const when = `${rates.source}, ${fmtRateDate(rates.date)}`
+  if (currency !== 'GBP') {
+    parts.push(`Figures in ${name(currency)} are indicative, converted at ${fmtRate(rates, currency)} (${when}). The amount payable is set at the rate on the day of payment.`)
+  }
+  const others = quoted.filter(c => currency === 'GBP' || c !== 'GBP')
+  if (others.length) {
+    parts.push(`Works priced in ${others.map(name).join(' and ')} are converted at ${others.map(c => fmtRate(rates, c)).join(', ')} (${when}), so those figures are indicative.`)
+  }
+  return parts.length ? parts.join(' ') : null
 }
 
 // ── Assembly ───────────────────────────────────────────────────────────────
@@ -631,6 +724,13 @@ export async function assemblePack(
 
   const workById = new Map(works.map(w => [w.id, w]))
   const nameOf = (id: string) => workById.get(id)?.name ?? undefined
+
+  // Exchange rates, where the budget needs them (042): a second currency for
+  // the client, or a work quoted in something other than pounds.
+  const clientCurrency = budget?.client_currency ? parseCurrency(budget.client_currency) : null
+  const usableClientCurrency = clientCurrency && clientCurrency !== 'GBP' ? clientCurrency : null
+  const needsRates = !!usableClientCurrency || works.some(w => parseCurrency(w.price_currency) !== 'GBP')
+  const rates = needsRates ? await getRates() : null
 
   // The one filter for what goes into the pack, applied once.
   const visible = notesForExport(notes)
@@ -775,6 +875,7 @@ export async function assemblePack(
     wCm: w.w_cm,
     hCm: w.h_cm,
     price: w.price ?? 0,
+    priceSymbol: CURRENCY_META[parseCurrency(w.price_currency)].symbol,
     discountStatus: parseDiscountStatus(w.discount_status),
     discountPercent: parseDiscountPercent(w.discount_percent),
     subLineItems: parseSubLineItems(w.sub_line_items),
@@ -807,10 +908,12 @@ export async function assemblePack(
       // was listed London first.
       const placed = hangingOrder((opt.artworks ?? [])
         .filter(pl => pl.visible && workById.has(pl.work_id)))
+      // In pounds, with any work quoted in another currency converted (042).
       const cost = bucketTotal(getOptionTotals(
         (opt.artworks ?? [])
           .map(pl => toBudgetArtwork(pl, workById))
-          .filter((a): a is BudgetArtwork => a !== null),
+          .filter((a): a is BudgetArtwork => a !== null)
+          .map(a => artworkIn(a, 'GBP', rates)),
       ), false)
       return {
         id: opt.id,
@@ -846,13 +949,17 @@ export async function assemblePack(
       notes: notesFor(visible, 'artist', a.id, nameOf),
     })),
     budget: buildBudget(
-      chosen,
-      works,
-      budget,
-      project.budget ?? null,
-      notesFor(visible, 'budget', null, nameOf),
-      budgetImageFile,
+      chosen, works, budget, project.budget ?? null,
+      notesFor(visible, 'budget', null, nameOf), budgetImageFile,
+      'GBP', rates,
     ),
+    // The same budget in the client's own currency, when the project has one.
+    budgetInClientCurrency: usableClientCurrency && rates
+      ? buildBudget(
+        chosen, works, budget, project.budget ?? null,
+        [], null, usableClientCurrency, rates,
+      )
+      : null,
     choices,
   }
 

@@ -1,9 +1,10 @@
 'use client'
 
+import { useMoney } from './money'
 import { useState } from 'react'
 import ArtworkLine from './ArtworkLine'
 import OptionNote from './OptionNote'
-import { fmtGbp, optionTotal } from './budgetCalc'
+import { optionSpan } from './budgetCalc'
 import type { BudgetOptionData, BudgetArtworkPatch } from './budgetCalc'
 
 interface Props {
@@ -27,8 +28,10 @@ interface Props {
 export default function OptionBlock({
   option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block', anchor,
 }: Props) {
+  const { fmtRange } = useMoney()
   const [open, setOpen] = useState(true)
-  const displayTotal = optionTotal(option.artworks, vatMode)
+  // A range while a budget choice is open: see optionSpan.
+  const span = optionSpan(option.artworks, vatMode)
   const keyClass = `budget-option-key${option.name ? ' budget-option-key--named' : ''}`
   const count = option.artworks.length
 
@@ -61,7 +64,7 @@ export default function OptionBlock({
         >
           <span className={keyClass}>{option.title}</span>
           <span className="budget-option-count">{count} artwork{count === 1 ? '' : 's'}</span>
-          <span className="budget-option-subtotal">{fmtGbp(displayTotal)}</span>
+          <span className="budget-option-subtotal">{fmtRange(span.min, span.max)}</span>
           <span className={`budget-option-chevron${open ? ' open' : ''}`} aria-hidden="true" />
         </button>
         <OptionNote
@@ -79,7 +82,7 @@ export default function OptionBlock({
     <div className="budget-option-block" data-budget-option={anchor}>
       <div className="budget-option-header">
         <span className={keyClass}>{option.title}</span>
-        <span className="budget-option-subtotal">{fmtGbp(displayTotal)}</span>
+        <span className="budget-option-subtotal">{fmtRange(span.min, span.max)}</span>
       </div>
       <OptionNote
         note={option.consultantNote}

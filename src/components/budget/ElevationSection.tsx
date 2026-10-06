@@ -1,9 +1,10 @@
 'use client'
 
+import { useMoney } from './money'
 import ArtworkLine from './ArtworkLine'
 import OptionBlock from './OptionBlock'
 import OptionNote from './OptionNote'
-import { fmtGbp, optionTotal } from './budgetCalc'
+import { optionSpan } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 import { budgetOptionAnchor } from './budgetFocus'
 
@@ -24,6 +25,7 @@ interface Props {
 const SIDE_BY_SIDE_MAX = 3
 
 export default function ElevationSection({ elevation, vatMode, isConsultant, onArtworkChange, onNoteChange }: Props) {
+  const { fmtRange } = useMoney()
   const picked = elevation.clientPickedOption
   const hidden = !!elevation.hiddenFromClient
   const hiddenClass = hidden ? ' budget-elev-block--hidden' : ''
@@ -35,7 +37,8 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
 
   if (picked) {
     const opt = elevation.options.find(o => o.key === picked)
-    const displayTotal = opt ? optionTotal(opt.artworks, vatMode) : 0
+    // A range while a budget choice is open: see optionSpan.
+    const span = opt ? optionSpan(opt.artworks, vatMode) : { min: 0, max: 0 }
 
     return (
       <div
@@ -46,7 +49,7 @@ export default function ElevationSection({ elevation, vatMode, isConsultant, onA
           <span className="budget-elev-name">{elevation.name}</span>
           {hiddenBadge}
           <span className="budget-elev-pick-badge">✓ {opt?.title ?? `Option ${picked}`}</span>
-          <span className="budget-elev-total">{fmtGbp(displayTotal)}</span>
+          <span className="budget-elev-total">{fmtRange(span.min, span.max)}</span>
         </div>
         {opt && (
           <OptionNote

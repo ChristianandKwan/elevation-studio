@@ -58,7 +58,7 @@ export const PLACEMENT_COLUMNS =
 
 /** The columns a work row carries. */
 export const WORK_COLUMNS =
-  'id, project_id, artist, artist_id, name, image_path, w_cm, h_cm, price, vat_applies, discount_status, discount_percent, sub_line_items, note, note_shown_to_client, year, medium, edition, source, set_aside, considered_for, display_order'
+  'id, project_id, artist, artist_id, name, image_path, w_cm, h_cm, price, price_currency, vat_applies, discount_status, discount_percent, sub_line_items, note, note_shown_to_client, year, medium, edition, source, set_aside, considered_for, display_order'
 
 /** A placement with its work joined in — what the studio and portal loaders select. */
 export const PLACEMENT_WITH_WORK_SELECT = `${PLACEMENT_COLUMNS}, work:works(${WORK_COLUMNS})`
@@ -95,6 +95,7 @@ export function workRow(art: Artwork) {
     w_cm: art.wCm,
     h_cm: art.hCm,
     price: art.price,
+    price_currency: art.priceCurrency,
     note: art.note,
     note_shown_to_client: art.noteShownToClient,
     vat_applies: art.vatApplies,
@@ -106,7 +107,7 @@ export function workRow(art: Artwork) {
 
 /** What the budget and the index may change on a work. */
 export type WorkPatch = Partial<Pick<Work,
-  | 'name' | 'artist' | 'wCm' | 'hCm' | 'price' | 'vatApplies' | 'discountStatus'
+  | 'name' | 'artist' | 'wCm' | 'hCm' | 'price' | 'priceCurrency' | 'vatApplies' | 'discountStatus'
   | 'discountPercent' | 'subLineItems' | 'note' | 'noteShownToClient'
   | 'year' | 'medium' | 'edition' | 'source' | 'setAside' | 'consideredFor'
 >>
@@ -119,6 +120,7 @@ export function toWorkColumns(patch: WorkPatch): Record<string, unknown> {
   if (patch.wCm !== undefined) row.w_cm = patch.wCm
   if (patch.hCm !== undefined) row.h_cm = patch.hCm
   if (patch.price !== undefined) row.price = patch.price
+  if (patch.priceCurrency !== undefined) row.price_currency = patch.priceCurrency
   if (patch.vatApplies !== undefined) row.vat_applies = patch.vatApplies
   if (patch.discountStatus !== undefined) row.discount_status = patch.discountStatus
   if (patch.discountPercent !== undefined) row.discount_percent = patch.discountPercent
@@ -242,6 +244,7 @@ export function workFieldsOf(w: Work) {
     wCm: w.wCm,
     hCm: w.hCm,
     price: w.price,
+    priceCurrency: w.priceCurrency,
     note: w.note,
     noteShownToClient: w.noteShownToClient,
     vatApplies: w.vatApplies,

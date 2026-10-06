@@ -35,10 +35,15 @@ const ADDED_PLACEMENT_COLUMNS = [
   'mount_color', 'mount_top_mm', 'mount_right_mm', 'mount_bottom_mm', 'mount_left_mm',
 ].sort()
 
+/** Work columns added after 026, on the same terms. */
+const ADDED_WORK_COLUMNS = [
+  'price_currency',
+].sort()
+
 function art(partial: Partial<Artwork> = {}): Artwork {
   return {
     id: 'p1', workId: 'w1', name: 'Berlin', imageUrl: null, imagePath: null,
-    wCm: 101.6, hCm: 121.9, xF: 0.2, yF: 0.3, visible: true, price: 5300, artist: 'Paula Scher',
+    wCm: 101.6, hCm: 121.9, xF: 0.2, yF: 0.3, visible: true, price: 5300, priceCurrency: 'GBP', artist: 'Paula Scher',
     note: '', noteShownToClient: true, vatApplies: true, discountStatus: 'none', discountPercent: null,
     subLineItems: [], frameType: 'black', frameWidthMm: 20, brightness: 1, fade: null,
     shadowAngle: null, shadowBlur: null, shadowOpacity: null,
@@ -50,7 +55,7 @@ let seq = 0
 function work(partial: Partial<Work> = {}): Work {
   return {
     id: `w${seq++}`, projectId: 'proj', artist: '', artistId: null, name: 'Untitled', imagePath: null, imageUrl: null,
-    wCm: 40, hCm: 60, price: 0, vatApplies: true, discountStatus: 'none', discountPercent: null,
+    wCm: 40, hCm: 60, price: 0, priceCurrency: 'GBP', vatApplies: true, discountStatus: 'none', discountPercent: null,
     subLineItems: [], note: '', noteShownToClient: true, year: null, medium: null, edition: null,
     source: null, setAside: null, consideredFor: null, displayOrder: 0,
     ...partial,
@@ -61,7 +66,7 @@ describe('the two halves of a save', () => {
   test('cover every legacy column exactly once', () => {
     const p = Object.keys(placementRow(art()))
     const w = Object.keys(workRow(art()))
-    assert.deepEqual([...p, ...w].sort(), [...LEGACY_COLUMNS, ...ADDED_PLACEMENT_COLUMNS].sort())
+    assert.deepEqual([...p, ...w].sort(), [...LEGACY_COLUMNS, ...ADDED_PLACEMENT_COLUMNS, ...ADDED_WORK_COLUMNS].sort())
     assert.deepEqual(p.filter(k => w.includes(k)), [])
   })
 
