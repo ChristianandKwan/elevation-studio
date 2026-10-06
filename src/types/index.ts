@@ -282,6 +282,8 @@ export interface BudgetInstallation {
 }
 
 export interface BudgetConsultantFee {
+  /** What the line is called on the budget. Absent means the default name. */
+  label?: string
   mode: 'flat' | 'percentage'
   /** £ when flat; percentage as a number (e.g. 15 = 15%) when percentage. */
   amount: number

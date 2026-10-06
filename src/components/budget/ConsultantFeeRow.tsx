@@ -2,7 +2,7 @@
 
 import { useMoney } from './money'
 import { useState } from 'react'
-import { consultantFeeRange, displayFrozenAmount } from './budgetCalc'
+import { consultantFeeRange, displayFrozenAmount, feeLabel, DEFAULT_FEE_LABEL } from './budgetCalc'
 import type { BudgetConsultantFee } from '@/types'
 
 interface Props {
@@ -19,10 +19,12 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, va
   const [editing, setEditing] = useState(false)
   const [draftMode, setDraftMode] = useState<'flat' | 'percentage'>('flat')
   const [draftAmount, setDraftAmount] = useState('')
+  const [draftLabel, setDraftLabel] = useState('')
 
   const vatApplies = fee?.vatApplies ?? true
 
   function openEdit() {
+    setDraftLabel(feeLabel(fee))
     setDraftMode(fee?.mode ?? 'flat')
     if (fee?.amount != null) {
       // Flat: show the stored value converted into the current VAT view.
@@ -50,7 +52,11 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, va
         storedAmount = Math.round(parsed)
         amountIncludesVat = vatMode
       }
+      // The default name is not stored, so a later change to it reaches
+      // every fee that was never renamed.
+      const label = draftLabel.trim()
       onChange({
+        label: label && label !== DEFAULT_FEE_LABEL ? label : undefined,
         mode: draftMode,
         amount: storedAmount,
         shownToClient: fee?.shownToClient ?? false,
@@ -103,7 +109,7 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, va
     if (!fee || !fee.shownToClient) return null
     return (
       <div className="budget-cost-row">
-        <div className="budget-cost-label">Consultant fee</div>
+        <div className="budget-cost-label">{feeLabel(fee)}</div>
         <span className="budget-cost-value">{valueStr}</span>
       </div>
     )
@@ -112,7 +118,17 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, va
   return (
     <div className="budget-cost-row budget-cost-row--stacked">
       <div className="budget-cost-row-main">
-        <div className="budget-cost-label">Consultant fee</div>
+        <div className="budget-cost-label">
+          {editing ? (
+            <input
+              className="budget-custom-name-input"
+              value={draftLabel}
+              onChange={e => setDraftLabel(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }}
+              placeholder={DEFAULT_FEE_LABEL}
+            />
+          ) : feeLabel(fee)}
+        </div>
 
         {editing ? (
           <div className="budget-inline-edit">
@@ -154,7 +170,7 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, va
           <div className="budget-cost-value-group">
             <span className="budget-cost-value">{fee ? valueStr : '—'}</span>
             <button className="budget-cost-edit" onClick={openEdit}>
-              {fee ? 'Edit' : 'Add fee'}
+              {fee ? 'Edit' : 'Add'}
             </button>
           </div>
         )}
