@@ -276,7 +276,7 @@ function ClientChoice({
             <div className="bch-chosen-name">{altTitle(picked)}</div>
             {picked.alt.description.trim() && <div className="bch-chosen-desc">{picked.alt.description.trim()}</div>}
           </div>
-          <span className="bch-chosen-price">{fmtRange(span.min, span.max)}</span>
+          <span className="bch-chosen-price">{perWork && 'Total: '}{fmtRange(span.min, span.max)}</span>
           {onPick && !locked && (
             <button type="button" className="budget-cost-edit" onClick={() => onPick(choice.id, null)}>Change</button>
           )}
@@ -314,7 +314,7 @@ function ClientChoice({
                 <div key={alt.id} className="bch-option">
                   <h4>{alt.name.trim() || 'Untitled'}</h4>
                   <span className="bch-option-desc">{alt.description.trim()}</span>
-                  <span className="bch-option-price">{fmtRange(span.min, span.max)}</span>
+                  <span className="bch-option-price">{perWork && 'Total: '}{fmtRange(span.min, span.max)}</span>
                   {perWork && priced.length > 1 && (
                     <details className="bch-option-each">
                       <summary>Price for each work</summary>
