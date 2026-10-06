@@ -584,6 +584,43 @@ const MOUNT_SIDES = [
   { key: 'mountLeftMm', label: 'Left' },
 ] as const
 
+/** A mount width box. What is typed is held as text, so the box can be
+ *  cleared on the way to a new figure — a number-only box snapped an empty
+ *  box straight back to the old width. Only a real figure saves; leaving the
+ *  box empty puts the saved width back. */
+function MountMmInput({ value, onCommit, disabled, title, style }: {
+  value: number | null
+  onCommit: (mm: number) => void
+  disabled?: boolean
+  title?: string
+  style?: React.CSSProperties
+}) {
+  const shown = value == null ? '' : String(value)
+  const [draft, setDraft] = useState(shown)
+  // Follow the saved width when it changes from elsewhere ("Same all round",
+  // another side), but leave a half-typed figure alone.
+  useEffect(() => {
+    setDraft(d => (parseFloat(d) === value ? d : shown))
+  }, [value, shown])
+  return (
+    <input
+      type="number" className="dim-input" style={style}
+      disabled={disabled}
+      value={draft}
+      placeholder="—"
+      min={0} max={500} step={5}
+      title={title}
+      onClick={e => e.stopPropagation()}
+      onChange={e => {
+        setDraft(e.target.value)
+        const v = parseFloat(e.target.value)
+        if (!Number.isNaN(v) && v >= 0) onCommit(v)
+      }}
+      onBlur={() => setDraft(shown)}
+    />
+  )
+}
+
 interface ArtworkItemProps {
   art: { id: string; name: string; imageUrl: string | null; wCm: number; hCm: number; price: number; artist: string; visible: boolean; frameType?: string | null; frameWidthMm?: number | null; mountColor?: string | null; mountTopMm?: number | null; mountRightMm?: number | null; mountBottomMm?: number | null; mountLeftMm?: number | null; brightness?: number | null; fade?: number | null; shadowAngle?: number | null; shadowBlur?: number | null; shadowOpacity?: number | null; img?: HTMLImageElement | null }
   isSelected: boolean
@@ -632,8 +669,18 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
   }
   const uniformMount = mountIsUniform(mountMm) ? mountMm.top : null
   const [sidesOpenManual, setSidesOpenManual] = useState(false)
-  const setSidesOpen = setSidesOpenManual
   const sidesOpen = sidesOpenManual || uniformMount === null
+
+  function toggleSides() {
+    if (!sidesOpen) { setSidesOpenManual(true); return }
+    // Back to one figure. If the sides differ, they take the top's width —
+    // otherwise the four would stay open and the click would do nothing.
+    if (uniformMount === null) {
+      const v = mountMm.top
+      onMountChange({ mountTopMm: v, mountRightMm: v, mountBottomMm: v, mountLeftMm: v })
+    }
+    setSidesOpenManual(false)
+  }
 
   const detail = checkArtworkDetail(art.img?.naturalWidth, art.wCm, wallPxPerCm)
 
@@ -840,22 +887,14 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
             </select>
             {art.mountColor && !sidesOpen && (
               <>
-                <input
-                  type="number" className="dim-input" style={{ width: 44, marginLeft: 5 }}
+                <MountMmInput
+                  style={{ width: 44, marginLeft: 5 }}
                   disabled={!hasScale || isLocked}
-                  value={uniformMount ?? ''}
-                  placeholder="—"
-                  min={0} max={500} step={5}
+                  value={uniformMount}
                   title="Mount width (mm)"
-                  onClick={e => e.stopPropagation()}
-                  onChange={e => {
-                    const v = parseFloat(e.target.value)
-                    if (!Number.isNaN(v) && v >= 0) {
-                      onMountChange({
-                        mountTopMm: v, mountRightMm: v, mountBottomMm: v, mountLeftMm: v,
-                      })
-                    }
-                  }}
+                  onCommit={v => onMountChange({
+                    mountTopMm: v, mountRightMm: v, mountBottomMm: v, mountLeftMm: v,
+                  })}
                 />
                 <span className="dim-unit" style={{ marginLeft: 3 }}>mm</span>
               </>
@@ -871,7 +910,7 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
                 type="button"
                 className="aw-mount-sides-btn"
                 title={sidesOpen ? 'Use one width all round' : 'Set each side separately'}
-                onClick={e => { e.stopPropagation(); setSidesOpen(o => !o) }}
+                onClick={e => { e.stopPropagation(); toggleSides() }}
               >
                 {sidesOpen ? 'Same all round' : 'Different sides'}
               </button>
@@ -883,15 +922,10 @@ const ArtworkItem = memo(function ArtworkItem({ art, isSelected, isExpanded, has
               {MOUNT_SIDES.map(({ key, label }) => (
                 <label key={key} className="aw-mount-side">
                   <span>{label}</span>
-                  <input
-                    type="number" className="dim-input"
+                  <MountMmInput
                     disabled={!hasScale || isLocked}
                     value={(art[key] ?? 0) as number}
-                    min={0} max={500} step={5}
-                    onChange={e => {
-                      const v = parseFloat(e.target.value)
-                      if (!Number.isNaN(v) && v >= 0) onMountChange({ [key]: v } as MountPatch)
-                    }}
+                    onCommit={v => onMountChange({ [key]: v } as MountPatch)}
                   />
                 </label>
               ))}

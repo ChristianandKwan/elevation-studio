@@ -309,10 +309,12 @@
 .aw-f-input:focus { border-color: var(--charcoal); background: white; }
 /* Dimensions inline group */
 .aw-dims-group { display: flex; align-items: center; gap: 5px; flex: 1; }
-.dim-unit { font-size: 10px; color: var(--mid); margin-left: 2px; }
-/* Frame select */
+.dim-unit { font-size: 10px; color: var(--mid); margin-left: 2px; flex-shrink: 0; white-space: nowrap; }
+/* Frame select. min-width: 0 lets it give way to the width box and its
+   "mm" — left alone it holds out for its longest option and pushes them
+   off the edge of the sidebar. */
 .aw-frame-select {
-  flex: 1; padding: 5px 6px; font-family: var(--font-karla, 'Karla'); font-size: 11px;
+  flex: 1; min-width: 0; padding: 5px 6px; font-family: var(--font-karla, 'Karla'); font-size: 11px;
   border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal);
   outline: none; cursor: pointer; border-radius: var(--radius-xs);
 }
