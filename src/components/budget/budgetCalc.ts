@@ -427,7 +427,7 @@ export function displayFrozenAmount(
 // ── Consultant fee ─────────────────────────────────────────────────────────────
 
 /** The fee line's name when the consultant hasn't given it one. */
-export const DEFAULT_FEE_LABEL = 'Consultancy commission'
+export const DEFAULT_FEE_LABEL = 'Consultancy Commission'
 
 export function feeLabel(fee: BudgetConsultantFee | null): string {
   return fee?.label?.trim() || DEFAULT_FEE_LABEL
