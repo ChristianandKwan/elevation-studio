@@ -132,6 +132,18 @@ _Avoid_: best case / worst case (it grades the client's own choice)
 **Confirmed / TBC**:
 Whether a discount has been agreed or is still expected.
 
+**Quoted currency**:
+The currency a work's price was given in, such as a US gallery's dollars. The
+price is kept as quoted. Wherever the budget shows it in another currency it
+is converted at the day's rate and marked as indicative. Every other cost is
+in pounds.
+
+**Client currency**:
+The one other currency a project's budget can be shown in, with a switch
+beside the VAT one. Its figures are indicative: the client pays at their
+bank's rate on the day.
+_Avoid_: second currency (in client-facing words)
+
 **Choice**:
 A budget line the client picks one alternative of, once for the whole
 project: framing from two framers, say, or two shippers. The client sees it

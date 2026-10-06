@@ -5,12 +5,13 @@ import ClientPortal from '@/components/client/ClientPortal'
 import ClientLinkExpired from '@/components/client/ClientLinkExpired'
 import type { ProjectBudget } from '@/types'
 import { labelOptions } from '@/lib/options'
-import { readOptionNoteFields } from '@/lib/lineItems'
+import { parseCurrency, readOptionNoteFields } from '@/lib/lineItems'
 import { PLACEMENT_WITH_WORK_SELECT } from '@/lib/works'
 import { placementsToArtworks, placementImagePath } from '@/lib/workRows'
 import { notesForPortal, rowToNote, type NoteRow } from '@/lib/notes'
 import { MESSAGE_COLUMNS, messagesByOption, rowToMessage, type OptionMessageRow } from '@/lib/messages'
 import { choicesForClient, readChoices, readPicks } from '@/components/budget/choices'
+import { getRates } from '@/lib/fx'
 
 interface Props {
   params: Promise<{ token: string }>
@@ -231,11 +232,19 @@ export default async function ClientPortalPage({ params }: Props) {
         customLineItems: budgetRow.custom_line_items ?? [],
         choices: choicesForClient(readChoices(budgetRow.choices)),
         choicePicks: readPicks(picksRes.data as Array<Record<string, unknown>> | null),
+        clientCurrency: budgetRow.client_currency == null ? null : parseCurrency(budgetRow.client_currency),
         vatIncludedDefault: budgetRow.vat_included_default ?? false,
         createdAt: budgetRow.created_at,
         updatedAt: budgetRow.updated_at,
       }
     : null
+
+  // Exchange rates, only where the budget needs them: a second currency for
+  // the client, or a work quoted in something other than pounds (042). Read
+  // here so the client's first sight of the budget already has them.
+  const needsRates = !!budget?.clientCurrency || elevationsWithUrls.some(e =>
+    e.elevation_options.some(o => o.artworks.some(a => a.priceCurrency !== 'GBP')))
+  const rates = needsRates ? await getRates() : null
 
   return (
     <ClientPortal
@@ -253,6 +262,7 @@ export default async function ClientPortalPage({ params }: Props) {
       approvalActivity={activity ?? []}
       clientBudget={(project as any).client_budget ?? null}
       budget={budget}
+      rates={rates}
     />
   )
 }

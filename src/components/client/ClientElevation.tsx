@@ -14,6 +14,19 @@ import { wallImageUrl } from '@/lib/wall'
 import { setPreloadPaused } from '@/lib/imagePreload'
 import Conversation from '@/components/conversation/Conversation'
 import type { OptionMessage } from '@/lib/messages'
+import type { Currency } from '@/types'
+
+
+/** How the panel shows prices (042). */
+export interface PanelMoney {
+  /** A work's price in the currency shown. */
+  amountOf: (a: { price: number; priceCurrency?: Currency }) => number
+  fmt: (n: number) => string
+  /** One pound in the currency shown, for the client's budget. */
+  poundFactor: number
+}
+
+const POUNDS: PanelMoney = { amountOf: a => a.price, fmt: formatPrice, poundFactor: 1 }
 
 interface ClientArtwork {
   id: string
@@ -25,6 +38,8 @@ interface ClientArtwork {
   yF: number
   visible: boolean
   price: number
+  /** The currency `price` was quoted in; absent means pounds (042). */
+  priceCurrency?: Currency
   artist: string
   frameType?: string | null
   frameWidthMm?: number | null
@@ -81,6 +96,12 @@ interface Props {
   rerenderKey: number
   approvalActivity: Array<{ id: string; type: string; text: string; created_at: string }>
   clientBudget: number | null
+  /**
+   * How the prices on this panel are shown: converted into the client's
+   * currency where the project has one, else pounds (042). Left out, prices
+   * are pounds as stored.
+   */
+  money?: PanelMoney
   /** Whether the client has already picked an option for this elevation */
   isPicked: boolean
   /** Whether artwork dragging should be locked (approved, or already picked on a multi-option elevation) */
@@ -101,7 +122,7 @@ interface Props {
 
 export default function ClientElevation({
   optData, elevationName, activeOpt, optionTitle, rerenderKey,
-  approvalActivity, clientBudget, isPicked, artworksLocked, onPick, onClearPick,
+  approvalActivity, clientBudget, money = POUNDS, isPicked, artworksLocked, onPick, onClearPick,
   zoom, onZoom,
   onArtworkMove, onArtworkMoveEnd, onToggleVisibility, onSendMessage, onApprove,
 }: Props) {
@@ -135,9 +156,10 @@ export default function ClientElevation({
   }, [])
 
   const visibleArts = optData.artworks.filter(a => a.visible)
-  const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + a.price, 0)
-  const budgetPct = clientBudget && clientBudget > 0 && totalCost > 0
-    ? (totalCost / clientBudget) * 100
+  const totalCost = visibleArts.filter(a => a.price).reduce((s, a) => s + money.amountOf(a), 0)
+  const budgetIn = clientBudget == null ? null : clientBudget * money.poundFactor
+  const budgetPct = budgetIn && budgetIn > 0 && totalCost > 0
+    ? (totalCost / budgetIn) * 100
     : null
 
   function handleApproveClick() {
@@ -162,6 +184,7 @@ export default function ClientElevation({
             onArtworkMove={onArtworkMove}
             onArtworkMoveEnd={onArtworkMoveEnd}
             zoom={zoom}
+            money={money}
           />
         </div>
         {/* Zoom controls — pinned to bottom-right of visible canvas frame */}
@@ -293,12 +316,12 @@ export default function ClientElevation({
                   {visibleArts.filter(a => a.price).map(a => (
                     <div key={a.id} className="approval-total-row">
                       <span>{a.name}</span>
-                      <span className="amount">{formatPrice(a.price)}</span>
+                      <span className="amount">{money.fmt(money.amountOf(a))}</span>
                     </div>
                   ))}
                   <div className="approval-total-row total">
                     <span>Total</span>
-                    <span className="amount">{formatPrice(totalCost)}</span>
+                    <span className="amount">{money.fmt(totalCost)}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 6 }}>Prices exclude VAT.</div>
                   {budgetPct !== null && (
@@ -332,12 +355,12 @@ export default function ClientElevation({
                   {visibleArts.filter(a => a.price).map(a => (
                     <div key={a.id} className="approval-total-row">
                       <span>{a.name}</span>
-                      <span className="amount">{formatPrice(a.price)}</span>
+                      <span className="amount">{money.fmt(money.amountOf(a))}</span>
                     </div>
                   ))}
                   <div className="approval-total-row total">
                     <span>Total</span>
-                    <span className="amount">{formatPrice(totalCost)}</span>
+                    <span className="amount">{money.fmt(totalCost)}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 6 }}>Prices exclude VAT.</div>
                   {budgetPct !== null && (
@@ -373,12 +396,12 @@ export default function ClientElevation({
               {visibleArts.filter(a => a.price).map(a => (
                 <div key={a.id} className="approval-total-row">
                   <span>{a.name}</span>
-                  <span className="amount">{formatPrice(a.price)}</span>
+                  <span className="amount">{money.fmt(money.amountOf(a))}</span>
                 </div>
               ))}
               <div className="approval-total-row total">
                 <span>Total</span>
-                <span className="amount">{formatPrice(totalCost)}</span>
+                <span className="amount">{money.fmt(totalCost)}</span>
               </div>
             </div>
           )}
@@ -449,6 +472,7 @@ function ClientCanvas({
   onArtworkMove,
   onArtworkMoveEnd,
   zoom,
+  money,
 }: {
   optData: ClientOption
   rerenderKey: number
@@ -457,6 +481,7 @@ function ClientCanvas({
   onArtworkMove: (artId: string, xF: number, yF: number) => void
   onArtworkMoveEnd: () => void
   zoom: number
+  money: PanelMoney
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const elevWrapRef = useRef<HTMLDivElement>(null)
@@ -647,7 +672,7 @@ function ClientCanvas({
 
         const tag = document.createElement('div')
         tag.className = 'client-aw-tag'
-        tag.textContent = art.name + (art.price ? ' · ' + formatPrice(art.price) : '')
+        tag.textContent = art.name + (art.price ? ' · ' + money.fmt(money.amountOf(art)) : '')
         aw.appendChild(tag)
 
         if (movable) {

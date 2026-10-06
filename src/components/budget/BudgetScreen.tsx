@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import BudgetHeader from './BudgetHeader'
 import ElevationSection from './ElevationSection'
 import InstallationRow from './InstallationRow'
@@ -9,13 +9,18 @@ import CustomLineItems from './CustomLineItems'
 import TotalsPanel from './TotalsPanel'
 import ChoicesSection from './ChoicesSection'
 import { useBudgetState, type SavePick } from './useBudgetState'
-import { rememberVatMode, storedVatMode } from './vatMode'
+import { rememberCurrency, rememberVatMode, storedCurrency, storedVatMode } from './vatMode'
+import {
+  CURRENCIES, CURRENCY_META, budgetIn, elevationsIn, fmtRate, fmtRateDate, quotedCurrencies, rateBetween,
+  type FxRate,
+} from './currency'
+import { MoneyProvider } from './money'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 import {
   alternativesOf, clientChoices, computeBudgetTotals, doubleFramedWorks, pickedAlternative, priceElevations,
 } from './choices'
 import { budgetOptionAnchor, type BudgetFocus } from './budgetFocus'
-import type { ProjectBudget } from '@/types'
+import type { Currency, ProjectBudget } from '@/types'
 import { InlineSpinner } from '@/components/ui/InlineSpinner'
 import { useOnline } from '@/hooks/useOnline'
 import { allDecided, decisionsFor } from '@/lib/decisions'
@@ -62,6 +67,13 @@ interface Props {
    * server route. The studio saves its own picks and leaves this out.
    */
   onPickChoice?: SavePick
+  /**
+   * Exchange rates read by the portal's server as it built the page (042).
+   * Left out in the studio, which asks /api/fx when the budget needs them.
+   */
+  initialRates?: FxRate | null
+  /** Start in this currency instead of the stored one: the export's copy only, as with VAT. */
+  initialCurrency?: Currency
 }
 
 /**
@@ -94,6 +106,8 @@ export default function BudgetScreen({
   initialVatMode,
   focus,
   onPickChoice,
+  initialRates,
+  initialCurrency,
 }: Props) {
   // VAT toggle — persisted per project in localStorage.
   //
@@ -129,13 +143,64 @@ export default function BudgetScreen({
     updateChoice,
     removeChoice,
     pickChoice,
+    setClientCurrency,
   } = useBudgetState(projectId, initialBudget, onPickChoice)
+
+  // ── Currency (042) ─────────────────────────────────────────────────────────
+  // Pounds always; one other currency where the project offers it. Works can
+  // be quoted in any currency, so pounds can need rates too.
+  const secondCurrency = budget?.clientCurrency ?? null
+  const [currencyChoice, setCurrencyChoice] = useState<Currency>(initialCurrency ?? 'GBP')
+  // Read once the budget says which currency it offers. The client opens it in
+  // their own currency, the consultant in pounds, unless either chose already.
+  // In an effect, like the VAT view, because storage is only there after mount.
+  const budgetLoaded = !!budget
+  useEffect(() => {
+    if (initialCurrency !== undefined || !budgetLoaded) return
+    const stored = storedCurrency(projectId)
+    const next: Currency = stored === 'GBP' || (secondCurrency && stored === secondCurrency)
+      ? stored as Currency
+      : isConsultant ? 'GBP' : secondCurrency ?? 'GBP'
+    setCurrencyChoice(next) // eslint-disable-line react-hooks/set-state-in-effect
+  }, [projectId, initialCurrency, budgetLoaded, secondCurrency, isConsultant])
+
+  function handleCurrencyToggle(c: Currency) {
+    setCurrencyChoice(c)
+    rememberCurrency(projectId, c)
+  }
+
+  const ratesNeeded = !!secondCurrency || quotedCurrencies(elevations, 'GBP').length > 0
+  const [fetchedRates, setFetchedRates] = useState<FxRate | null>(null)
+  const [ratesFailed, setRatesFailed] = useState(false)
+  const rates = initialRates !== undefined ? initialRates : fetchedRates
+  useEffect(() => {
+    if (initialRates !== undefined || !ratesNeeded || fetchedRates) return
+    let cancelled = false
+    fetch('/api/fx')
+      .then(r => (r.ok ? r.json() as Promise<FxRate> : null))
+      .then(r => { if (!cancelled) { if (r) setFetchedRates(r); else setRatesFailed(true) } })
+      .catch(() => { if (!cancelled) setRatesFailed(true) })
+    return () => { cancelled = true }
+  }, [initialRates, ratesNeeded, fetchedRates])
+  // Held back until the rates arrive, so nobody (the export's camera
+  // included) sees a budget drawn without them.
+  const ratesPending = ratesNeeded && !rates && initialRates === undefined && !ratesFailed
+
+  // The currency on screen: the other one only when there is a rate for it.
+  const view: Currency = secondCurrency && currencyChoice === secondCurrency
+    && rateBetween('GBP', secondCurrency, rates) != null ? secondCurrency : 'GBP'
+  const factor = rateBetween('GBP', view, rates) ?? 1
+  // Every amount moved into that currency before any arithmetic (currency.ts).
+  const viewElevations = useMemo(() => elevationsIn(elevations, view, rates), [elevations, view, rates])
+  const viewBudget = useMemo(() => (budget ? budgetIn(budget, view, rates) : null), [budget, view, rates])
+  // Works quoted in a currency there is no rate for count as nothing until there is.
+  const unconverted = quotedCurrencies(elevations, view).filter(c => rateBetween(c, view, rates) == null)
 
   // Totals are always what the client would see: hidden elevations are listed
   // for the consultant below but never counted, so the consultant's figure and
   // the client's figure are the same number. Hidden choices likewise.
-  const clientElevations = elevations.filter(e => !e.hiddenFromClient)
-  const choices = budget?.choices ?? []
+  const clientElevations = viewElevations.filter(e => !e.hiddenFromClient)
+  const choices = viewBudget?.choices ?? []
   const picks = budget?.choicePicks ?? {}
   const countedChoices = clientChoices(choices, clientElevations, picks)
 
@@ -180,11 +245,13 @@ export default function BudgetScreen({
 
   const online = useOnline()
 
-  const effectiveIsConsultant = isConsultant && !isPreviewingClientView
+  // In the client's currency the consultant sees what the client sees, and
+  // edits in pounds: a converted figure must never be saved back as pounds.
+  const effectiveIsConsultant = isConsultant && !isPreviewingClientView && view === 'GBP'
   // "Client view" preview drops hidden elevations entirely, as the portal does.
   // Each work carries what the choices cost it: picked, or a range until then.
   const listedElevations = priceElevations(
-    effectiveIsConsultant ? elevations : clientElevations, countedChoices, picks,
+    effectiveIsConsultant ? viewElevations : clientElevations, countedChoices, picks,
   )
   // Edits are offered only where the budget can be edited: never in the
   // portal, the client preview, or the export's off-screen copy.
@@ -237,7 +304,13 @@ export default function BudgetScreen({
   // then the walls speak for themselves, as they always have.
   const showDecisions = !effectiveIsConsultant && countedChoices.length > 0
 
+  // The other currency can be switched to only once there is a rate for it.
+  const currencies: Currency[] | null = secondCurrency && rateBetween('GBP', secondCurrency, rates) != null
+    ? ['GBP', secondCurrency]
+    : null
+
   return (
+    <MoneyProvider currency={view} factor={factor}>
     <div className="budget-view" ref={root}>
       <BudgetHeader
         vatMode={vatMode}
@@ -247,6 +320,9 @@ export default function BudgetScreen({
         isConsultant={isConsultant}
         isPreviewingClientView={isPreviewingClientView}
         onPreviewToggle={onPreviewToggle}
+        currencies={currencies}
+        currency={view}
+        onCurrencyToggle={handleCurrencyToggle}
       />
 
       <div className="budget-content">
@@ -270,11 +346,11 @@ export default function BudgetScreen({
           </div>
         )}
 
-        {isLoading ? (
+        {isLoading || ratesPending ? (
           <div className="budget-loading" style={{ minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <InlineSpinner size={32} />
           </div>
-        ) : !budget ? (
+        ) : !budget || !viewBudget ? (
           // Keeps `.budget-loading`: the export waits for it to go, and must
           // leave the budget picture out rather than photograph this.
           <div className="budget-loading budget-load-failed" role="alert">
@@ -345,7 +421,7 @@ export default function BudgetScreen({
               <div className="budget-section-kicker">Additional Costs</div>
               <div className="budget-costs-panel">
                 <InstallationRow
-                  installation={budget.installation}
+                  installation={viewBudget.installation}
                   artCountMin={pt.min.artCount}
                   artCountMax={pt.max.artCount}
                   isConsultant={effectiveIsConsultant}
@@ -354,7 +430,7 @@ export default function BudgetScreen({
                 />
 
                 <ConsultantFeeRow
-                  fee={budget.consultantFee}
+                  fee={viewBudget.consultantFee}
                   artMin={pt.min.artVatable + pt.min.artExempt}
                   artMax={pt.max.artVatable + pt.max.artExempt}
                   isConsultant={effectiveIsConsultant}
@@ -363,7 +439,7 @@ export default function BudgetScreen({
                 />
 
                 <CustomLineItems
-                  items={budget.customLineItems}
+                  items={viewBudget.customLineItems}
                   isConsultant={effectiveIsConsultant}
                   vatMode={vatMode}
                   onAdd={addCustomLineItem}
@@ -377,17 +453,77 @@ export default function BudgetScreen({
             {/* ── Totals ───────────────────────────────────────────────── */}
             <TotalsPanel
               totals={pt}
-              installation={budget.installation}
-              consultantFee={budget.consultantFee}
-              customLineItems={budget.customLineItems}
+              installation={viewBudget.installation}
+              consultantFee={viewBudget.consultantFee}
+              customLineItems={viewBudget.customLineItems}
               vatMode={vatMode}
               isConsultant={effectiveIsConsultant}
               clientBudget={clientBudget}
               onClientBudgetChange={effectiveIsConsultant ? onClientBudgetChange : undefined}
             />
+
+            <RateNote rates={rates} view={view} quoted={quotedCurrencies(elevations, view)} unconverted={unconverted} />
+
+            {editable && (
+              <div className="budget-currency-setting">
+                <label>
+                  <span>Also show this budget in</span>
+                  <select
+                    value={secondCurrency ?? ''}
+                    onChange={e => setClientCurrency((e.target.value || null) as Currency | null)}
+                  >
+                    <option value="">Pounds only</option>
+                    {CURRENCIES.filter(c => c !== 'GBP').map(c => (
+                      <option key={c} value={c}>{CURRENCY_META[c].name}</option>
+                    ))}
+                  </select>
+                </label>
+                <p>
+                  {secondCurrency
+                    ? `The client gets a switch between pounds and ${CURRENCY_META[secondCurrency].inSentence}, and opens the budget in ${CURRENCY_META[secondCurrency].inSentence}. Figures in it are converted at the day’s rate and marked as indicative.`
+                    : 'For a client who pays in another currency. A work’s own price can be in any currency without this: set it in the work’s price box.'}
+                </p>
+              </div>
+            )}
           </>
         )}
       </div>
+    </div>
+    </MoneyProvider>
+  )
+}
+
+/**
+ * Where any converted figure's rate comes from, under the totals. Converted
+ * figures are indicative: the client pays at their bank's rate on the day.
+ */
+function RateNote({ rates, view, quoted, unconverted }: {
+  rates: FxRate | null
+  view: Currency
+  /** Currencies works are quoted in other than the one on screen. */
+  quoted: Currency[]
+  unconverted: Currency[]
+}) {
+  const name = (c: Currency) => CURRENCY_META[c].inSentence
+  const when = rates ? `${rates.source}, ${fmtRateDate(rates.date)}` : ''
+  const lines: string[] = []
+  if (view !== 'GBP' && rates) {
+    lines.push(`Figures in ${name(view)} are indicative, converted at ${fmtRate(rates, view)} (${when}). The amount payable is set at the rate on the day of payment.`)
+  }
+  const others = quoted.filter(c => !unconverted.includes(c) && (view === 'GBP' || c !== 'GBP'))
+  if (others.length && rates) {
+    const at = others.map(c => fmtRate(rates, c)).join(', ')
+    lines.push(`Works priced in ${others.map(name).join(' and ')} are shown in ${name(view)} at ${at} (${when}), so those figures are indicative${lines.length ? ' too' : ''}.`)
+  }
+  if (lines.length === 0 && unconverted.length === 0) return null
+  return (
+    <div className="budget-rate-note">
+      {lines.map(l => <p key={l}>{l}</p>)}
+      {unconverted.length > 0 && (
+        <p className="budget-rate-note--missing">
+          The exchange rate could not be fetched, so works priced in {unconverted.map(name).join(' and ')} are left out of these figures for now.
+        </p>
+      )}
     </div>
   )
 }

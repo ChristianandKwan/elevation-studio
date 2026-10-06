@@ -107,7 +107,9 @@ export interface ExportWork {
   artistId: string | null
   wCm: number
   hCm: number
+  /** In the currency it was quoted in (042), written with `priceSymbol` (pounds if absent). */
   price: number
+  priceSymbol?: string
   discountStatus: string
   discountPercent: number | null
   subLineItems: SubLineItem[]
@@ -200,6 +202,11 @@ export interface ExportBudget {
   totalMax: number
   clientBudget: number | null
   notes: ExportNote[]
+  /** The currency every figure here is in (042): its symbol, and its name for a sentence. Pounds if absent. */
+  symbol?: string
+  currencyName?: string
+  /** Where converted figures' rate comes from, in words, or null if nothing was converted. */
+  rateNote?: string | null
 }
 
 export interface ExportSnapshot {
@@ -213,6 +220,8 @@ export interface ExportSnapshot {
   works: ExportWork[]
   artists: ExportArtist[]
   budget: ExportBudget | null
+  /** The same budget in the client's own currency, when the project has one (042). */
+  budgetInClientCurrency?: ExportBudget | null
   /** Carried through so the document can say what was left out. */
   choices: ExportChoices
 }

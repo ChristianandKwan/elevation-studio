@@ -840,3 +840,43 @@
 @media print {
   .bch-add, .bch-card-foot, .bch-alt-act, .bch-warning, .bch-option-pick { display: none !important; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   CURRENCIES (042)
+══════════════════════════════════════════════════════════ */
+
+/* The currency switch sits beside the VAT one, in the same style */
+.budget-toggles { display: flex; align-items: center; gap: 8px; }
+
+/* A price box's currency, where the £ used to be */
+.ble-currency {
+  font-family: var(--font-karla, 'Karla'); font-size: 12.5px; color: var(--charcoal);
+  border: none; background: transparent; padding: 0 2px 0 7px; cursor: pointer; outline: none;
+}
+
+/* "Priced at $10,000 · converted at today's rate" under a converted line */
+.budget-quoted-note { font-size: 11.5px; color: var(--mid); margin-top: 3px; }
+
+/* Where converted figures' rate comes from, under the totals */
+.budget-rate-note { margin-top: 14px; font-size: 11.5px; line-height: 1.55; color: var(--mid); }
+.budget-rate-note p + p { margin-top: 4px; }
+.budget-rate-note--missing { color: var(--red); }
+
+/* The consultant's setting for the client's currency */
+.budget-currency-setting {
+  margin-top: 22px; padding: 12px 16px; border: 1px dashed var(--border); border-radius: var(--radius);
+  font-size: 12.5px; color: var(--charcoal);
+}
+.budget-currency-setting label { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.budget-currency-setting select {
+  font-family: var(--font-karla, 'Karla'); font-size: 12.5px; color: var(--charcoal);
+  border: 1px solid var(--border); background: var(--warm-white); border-radius: var(--radius-xs); padding: 4px 8px;
+}
+.budget-currency-setting p { margin: 6px 0 0; font-size: 11.5px; color: var(--mid); line-height: 1.5; }
+
+@media print {
+  .budget-currency-setting { display: none !important; }
+}
+@media (max-width: 640px) {
+  .budget-toggles { gap: 6px; }
+}

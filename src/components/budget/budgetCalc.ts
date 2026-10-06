@@ -1,6 +1,6 @@
 import type {
   BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem,
-  BudgetChoiceKind, DiscountStatus, SubLineItem,
+  BudgetChoiceKind, Currency, DiscountStatus, SubLineItem,
 } from '@/types'
 
 // ── Types used across budget components ───────────────────────────────────────
@@ -14,8 +14,18 @@ export interface BudgetArtwork {
   artist: string
   wCm: number
   hCm: number
-  /** The list price, ex-VAT, before any discount. */
+  /**
+   * The list price, ex-VAT, before any discount. In `priceCurrency` as
+   * stored; in the currency on screen once the budget has converted it
+   * (currency.ts).
+   */
   price: number
+  /** The currency the price was quoted in. Absent means pounds. */
+  priceCurrency?: Currency
+  /** The price as quoted, kept when the budget converted it for the screen. */
+  quotedPrice?: number
+  /** The price needed a rate and there was none, so it counts as nothing. */
+  priceUnconverted?: boolean
   visible: boolean
   note: string
   noteShownToClient: boolean
@@ -62,7 +72,7 @@ export interface ChoiceLine {
  */
 export type BudgetArtworkPatch = Partial<Pick<
   BudgetArtwork,
-  'price' | 'vatApplies' | 'discountStatus' | 'discountPercent'
+  'price' | 'priceCurrency' | 'vatApplies' | 'discountStatus' | 'discountPercent'
   | 'subLineItems' | 'note' | 'noteShownToClient'
 >>
 
@@ -169,7 +179,13 @@ export function fmtRange(min: number, max: number): string {
 
 // ── Installation tiers ─────────────────────────────────────────────────────────
 
-export function installRange(count: number): { min: number; max: number } {
+/** The tiers in pounds. `factor` moves them into the currency on screen. */
+export function installRange(count: number, factor = 1): { min: number; max: number } {
+  const r = installRangeGbp(count)
+  return factor === 1 ? r : { min: Math.round(r.min * factor), max: Math.round(r.max * factor) }
+}
+
+function installRangeGbp(count: number): { min: number; max: number } {
   if (count === 0) return { min: 0, max: 0 }
   if (count <= 5) return { min: 125, max: 185 }
   if (count <= 15) return { min: 250, max: 350 }
@@ -186,13 +202,15 @@ export function installCostDisplay(
   installation: BudgetInstallation,
   artCountMin: number,
   artCountMax: number,
+  /** Pounds to the currency on screen, for the indicative tiers. */
+  factor = 1,
 ): InstallCostDisplay {
   if (!installation.indicative && installation.confirmedAmount != null) {
     const v = installation.confirmedAmount
     return { min: v, max: v, isIndicative: false }
   }
-  const rMin = installRange(artCountMin)
-  const rMax = installRange(artCountMax)
+  const rMin = installRange(artCountMin, factor)
+  const rMax = installRange(artCountMax, factor)
   return {
     min: Math.min(rMin.min, rMax.min),
     max: Math.max(rMin.max, rMax.max),

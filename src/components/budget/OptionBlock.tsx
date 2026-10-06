@@ -1,9 +1,10 @@
 'use client'
 
+import { useMoney } from './money'
 import { useState } from 'react'
 import ArtworkLine from './ArtworkLine'
 import OptionNote from './OptionNote'
-import { fmtRange, optionSpan } from './budgetCalc'
+import { optionSpan } from './budgetCalc'
 import type { BudgetOptionData, BudgetArtworkPatch } from './budgetCalc'
 
 interface Props {
@@ -27,6 +28,7 @@ interface Props {
 export default function OptionBlock({
   option, vatMode, isConsultant, onArtworkChange, onNoteChange, layout = 'block', anchor,
 }: Props) {
+  const { fmtRange } = useMoney()
   const [open, setOpen] = useState(true)
   // A range while a budget choice is open: see optionSpan.
   const span = optionSpan(option.artworks, vatMode)

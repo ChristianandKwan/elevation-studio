@@ -1,7 +1,8 @@
 'use client'
 
+import { useMoney } from './money'
 import { useState } from 'react'
-import { fmtGbp, fmtRange, installCostDisplay, displayFrozenAmount } from './budgetCalc'
+import { installCostDisplay, displayFrozenAmount } from './budgetCalc'
 import type { BudgetInstallation } from '@/types'
 
 interface Props {
@@ -21,12 +22,13 @@ export default function InstallationRow({
   vatMode,
   onChange,
 }: Props) {
+  const { fmt, fmtRange, factor } = useMoney()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
 
   const vatApplies = installation.vatApplies ?? true
   const shownToClient = installation.shownToClient ?? true
-  const displayRaw = installCostDisplay(installation, artCountMin, artCountMax)
+  const displayRaw = installCostDisplay(installation, artCountMin, artCountMax, factor)
 
   // Indicative is always treated as VAT-applicable; its raw range is ex-VAT so
   // in inc-VAT view we multiply by 1.2 regardless of any stored vatApplies flag.
@@ -82,7 +84,7 @@ export default function InstallationRow({
 
   const valueStr = displayRaw.isIndicative
     ? fmtRange(displayMin, displayMax)
-    : fmtGbp(displayMin)
+    : fmt(displayMin)
 
   const showControls = isConsultant && !displayRaw.isIndicative && !editing
 

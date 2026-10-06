@@ -1,9 +1,10 @@
 'use client'
 
+import { useMoney } from './money'
 import ArtworkLine from './ArtworkLine'
 import OptionBlock from './OptionBlock'
 import OptionNote from './OptionNote'
-import { fmtRange, optionSpan } from './budgetCalc'
+import { optionSpan } from './budgetCalc'
 import type { BudgetElevationData, BudgetArtworkPatch } from './budgetCalc'
 import { budgetOptionAnchor } from './budgetFocus'
 
@@ -24,6 +25,7 @@ interface Props {
 const SIDE_BY_SIDE_MAX = 3
 
 export default function ElevationSection({ elevation, vatMode, isConsultant, onArtworkChange, onNoteChange }: Props) {
+  const { fmtRange } = useMoney()
   const picked = elevation.clientPickedOption
   const hidden = !!elevation.hiddenFromClient
   const hiddenClass = hidden ? ' budget-elev-block--hidden' : ''

@@ -4,9 +4,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSaver } from '@/hooks/useSaver'
 import { newChoice, readChoices, readPicks } from './choices'
+import { parseCurrency } from '@/lib/lineItems'
 import type {
   ProjectBudget, BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem,
-  BudgetChoice, BudgetChoiceKind, BudgetChoicePick,
+  BudgetChoice, BudgetChoiceKind, BudgetChoicePick, Currency,
 } from '@/types'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -24,6 +25,8 @@ export interface UseBudgetStateResult {
   updateCustomLineItem: (id: string, patch: Partial<BudgetCustomLineItem>) => void
   removeCustomLineItem: (id: string) => void
   setVatIncludedDefault: (v: boolean) => void
+  /** The second currency this project's budget can be shown in, or null (042). */
+  setClientCurrency: (v: Currency | null) => void
   /** Adds a choice of this kind and returns its id, for the editor to open on. */
   addChoice: (kind: BudgetChoiceKind) => string
   updateChoice: (id: string, update: (prev: BudgetChoice) => BudgetChoice) => void
@@ -50,6 +53,7 @@ export function mapRow(row: Record<string, unknown>, pickRows?: ReadonlyArray<Re
     customLineItems: (row.custom_line_items ?? []) as BudgetCustomLineItem[],
     choices: readChoices(row.choices),
     choicePicks: readPicks(pickRows),
+    clientCurrency: row.client_currency == null ? null : parseCurrency(row.client_currency),
     vatIncludedDefault: (row.vat_included_default ?? false) as boolean,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -165,6 +169,7 @@ export function useBudgetState(
         // Never the picks: they are rows of their own (041), so a page opened
         // before the client picked cannot write the pick away.
         choices: next.choices,
+        client_currency: next.clientCurrency,
         vat_included_default: next.vatIncludedDefault,
         updated_at: new Date().toISOString(),
       })
@@ -223,6 +228,10 @@ export function useBudgetState(
 
   function setVatIncludedDefault(v: boolean) {
     mutateBudget(prev => ({ ...prev, vatIncludedDefault: v }))
+  }
+
+  function setClientCurrency(v: Currency | null) {
+    mutateBudget(prev => ({ ...prev, clientCurrency: v === 'GBP' ? null : v }))
   }
 
   function addChoice(kind: BudgetChoiceKind): string {
@@ -290,6 +299,7 @@ export function useBudgetState(
     setInstallation, setConsultantFee,
     addCustomLineItem, updateCustomLineItem, removeCustomLineItem,
     setVatIncludedDefault,
+    setClientCurrency,
     addChoice, updateChoice, removeChoice, pickChoice,
   }
 }

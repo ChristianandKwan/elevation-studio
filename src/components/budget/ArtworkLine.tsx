@@ -1,8 +1,10 @@
 'use client'
 
+import { useMoney } from './money'
+import { fmtMoney } from './currency'
 import { useState } from 'react'
 import ArtworkLineEditor from './ArtworkLineEditor'
-import { fmtGbp, fmtRange, netPrice, tbcNetPrice, subItemAmount, applyVat } from './budgetCalc'
+import { netPrice, tbcNetPrice, subItemAmount, applyVat } from './budgetCalc'
 import type { BudgetArtwork, BudgetArtworkPatch } from './budgetCalc'
 import { SHARE_META } from '@/lib/notes'
 
@@ -34,6 +36,7 @@ function NoteIcon({ hidden }: { hidden: boolean }) {
 }
 
 export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }: Props) {
+  const { fmt, fmtRange } = useMoney()
   const [editing, setEditing] = useState(false)
 
   if (editing && onChange) {
@@ -75,8 +78,8 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
         </div>
         <span className="budget-artwork-dims">{dims}</span>
         <span className="budget-artwork-price">
-          {discounted && <span className="budget-price-was">{fmtGbp(displayWas)}</span>}
-          {fmtGbp(displayPrice)}
+          {discounted && <span className="budget-price-was">{fmt(displayWas)}</span>}
+          {fmt(displayPrice)}
         </span>
         {onChange && (
           <button
@@ -89,6 +92,15 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
         )}
       </div>
 
+      {/* Quoted in another currency and converted for the screen: say so,
+          with the price as the gallery gave it. */}
+      {artwork.quotedPrice != null && (artwork.priceCurrency ?? 'GBP') !== 'GBP' && (
+        <p className="budget-quoted-note">
+          Priced at {fmtMoney(artwork.quotedPrice, artwork.priceCurrency!)}
+          {artwork.priceUnconverted ? ' · no exchange rate yet, so not counted' : ' · converted at today’s rate'}
+        </p>
+      )}
+
       {subs.map(({ item, amount }) => (
         <div key={item.id} className="budget-sub-row">
           <span className="budget-sub-label">
@@ -97,7 +109,7 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
             {vatMode && !item.vatApplies && <span className="budget-sub-tag">no VAT</span>}
           </span>
           <span className="budget-sub-cost">
-            {fmtGbp(applyVat(amount, item.vatApplies, vatMode))}
+            {fmt(applyVat(amount, item.vatApplies, vatMode))}
           </span>
         </div>
       ))}
@@ -113,7 +125,7 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
                 {vatMode && !line.picked.vatApplies && <span className="budget-sub-tag">no VAT</span>}
               </span>
               <span className="budget-sub-cost">
-                {fmtGbp(applyVat(line.picked.amount, line.picked.vatApplies, vatMode))}
+                {fmt(applyVat(line.picked.amount, line.picked.vatApplies, vatMode))}
               </span>
             </div>
           )
@@ -152,7 +164,7 @@ export default function ArtworkLine({ artwork, vatMode, isConsultant, onChange }
       {tbcNet != null && (
         <p className="budget-tbc-note">
           Not yet agreed. Would bring this work to{' '}
-          {fmtGbp(applyVat(tbcNet, artwork.vatApplies, vatMode))}.
+          {fmt(applyVat(tbcNet, artwork.vatApplies, vatMode))}.
         </p>
       )}
 

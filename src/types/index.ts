@@ -14,6 +14,14 @@ export type OptionKey = string
 export type DiscountStatus = 'none' | 'confirmed' | 'tbc'
 
 /**
+ * The currencies the budget knows (042): a work can be quoted in any of them,
+ * and a project's budget can also be shown in one of them. Every cost other
+ * than a work's price is in pounds. The list itself, with names and symbols,
+ * is in src/components/budget/currency.ts.
+ */
+export type Currency = 'GBP' | 'EUR' | 'USD' | 'JPY' | 'CNY' | 'HKD' | 'CHF' | 'CAD' | 'AUD'
+
+/**
  * Who set a work aside. Null — the usual case — means it is live.
  *
  * This replaced proposed / considered / declined in 034. That set conflated
@@ -73,8 +81,9 @@ export interface Work {
   imageUrl: string | null
   wCm: number
   hCm: number
-  /** List price, ex-VAT, before any discount. */
+  /** List price, ex-VAT, before any discount, in `priceCurrency`. */
   price: number
+  priceCurrency: Currency
   vatApplies: boolean
   discountStatus: DiscountStatus
   discountPercent: number | null
@@ -114,6 +123,8 @@ export interface Artwork {
   yF: number
   visible: boolean
   price: number
+  /** The currency `price` is in. Every other cost is in pounds. */
+  priceCurrency: Currency
   artist: string
   /** Free text against the line: gallery, availability, advice, caveats. */
   note: string
@@ -363,6 +374,12 @@ export interface ProjectBudget {
   customLineItems: BudgetCustomLineItem[]
   choices: BudgetChoice[]
   choicePicks: BudgetChoicePicks
+  /**
+   * The currency this project's budget can also be shown in, with a switch
+   * beside the VAT one for the consultant and the client (042). Null for
+   * pounds only, which is every project until a consultant sets one.
+   */
+  clientCurrency: Currency | null
   /** Consultant-set VAT default for the client view */
   vatIncludedDefault: boolean
   createdAt: string

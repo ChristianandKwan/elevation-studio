@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import WorkEditor from './WorkEditor'
 import BudgetNoteRef from '@/components/notes/BudgetNoteRef'
-import { fmtGbp, netPrice, tbcNetPrice } from '@/components/budget/budgetCalc'
+import { netPrice, tbcNetPrice } from '@/components/budget/budgetCalc'
+import { fmtMoney } from '@/components/budget/currency'
 import { SET_ASIDE_BADGE } from '@/lib/works'
 import type { IndexElevation, Placed, WorkPatch } from '@/lib/works'
 import type { Work } from '@/types'
@@ -66,8 +67,8 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
           </div>
           <span className="budget-artwork-dims">{work.wCm} × {work.hCm} cm</span>
           <span className="budget-artwork-price">
-            {discounted && <span className="budget-price-was">{fmtGbp(work.price)}</span>}
-            {fmtGbp(net)}
+            {discounted && <span className="budget-price-was">{fmtMoney(work.price, work.priceCurrency)}</span>}
+            {fmtMoney(net, work.priceCurrency)}
           </span>
           {work.setAside
             ? <span className={`index-status index-status--${work.setAside}`}>{SET_ASIDE_BADGE[work.setAside]}</span>
@@ -107,7 +108,7 @@ export default function WorkRow({ work, placed, elevations, onChange, onArtistCh
         </div>
 
         {tbcNet != null && (
-          <p className="budget-tbc-note">Not yet agreed. Would bring this work to {fmtGbp(tbcNet)}.</p>
+          <p className="budget-tbc-note">Not yet agreed. Would bring this work to {fmtMoney(tbcNet, work.priceCurrency)}.</p>
         )}
 
         <BudgetNoteRef

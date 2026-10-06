@@ -1,12 +1,9 @@
 'use client'
 
+import { useMoney } from './money'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import {
-  fmtGbp,
-  installCostDisplay, consultantFeeRange,
-  displayFrozenAmount, applyVat,
-} from './budgetCalc'
+import { installCostDisplay, consultantFeeRange, displayFrozenAmount, applyVat } from './budgetCalc'
 import type { ProjectTotals } from './budgetCalc'
 import type { BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem } from '@/types'
 
@@ -36,6 +33,9 @@ export default function TotalsPanel({
   clientBudget,
   onClientBudgetChange,
 }: Props) {
+  // `factor` moves the figures worked out here in pounds (indicative
+  // installation, the client's budget) into the currency on screen.
+  const { fmt, factor } = useMoney()
   const [settingBudget, setSettingBudget] = useState(false)
   const [budgetDraft, setBudgetDraft] = useState('')
 
@@ -49,7 +49,7 @@ export default function TotalsPanel({
   const artCountMin = min.artCount
   const artCountMax = max.artCount
 
-  const install = installCostDisplay(installation, artCountMin, artCountMax)
+  const install = installCostDisplay(installation, artCountMin, artCountMax, factor)
   const installIsRange = install.isIndicative && install.min !== install.max
   const installVatApplies = installation.vatApplies ?? true
   const installShownToClient = installation.shownToClient ?? true
@@ -138,9 +138,9 @@ export default function TotalsPanel({
     + totalInstallMax + dispCustomTotal + dispFeeMax
 
   // ── Client budget variance ──────────────────────────────────────────────────
-  const budgetDisplay = clientBudget != null && vatMode
-    ? Math.round(clientBudget * 1.2)
-    : clientBudget
+  const budgetDisplay = clientBudget == null
+    ? null
+    : Math.round(clientBudget * factor * (vatMode ? 1.2 : 1))
 
   function saveBudget() {
     const parsed = parseInt(budgetDraft.replace(/[^0-9]/g, ''), 10)
@@ -158,8 +158,8 @@ export default function TotalsPanel({
       const cell = (diff: number) => {  // positive = under budget
         if (diff === 0) return { label: 'On budget', color: 'var(--mid)' }
         return diff > 0
-          ? { label: `${fmtGbp(diff)} under`, color: 'var(--green)' }
-          : { label: `${fmtGbp(-diff)} over`, color: 'var(--red)' }
+          ? { label: `${fmt(diff)} under`, color: 'var(--green)' }
+          : { label: `${fmt(-diff)} over`, color: 'var(--red)' }
       }
       const low = cell(budgetDisplay - totalMin)
       const high = cell(budgetDisplay - totalMax)
@@ -176,7 +176,7 @@ export default function TotalsPanel({
       return <div className="budget-variance-row" style={{ color: 'var(--mid)' }}>On budget</div>
     }
     const color = diff > 0 ? 'var(--green)' : 'var(--red)'
-    const label = diff > 0 ? `${fmtGbp(diff)} under budget` : `${fmtGbp(-diff)} over budget`
+    const label = diff > 0 ? `${fmt(diff)} under budget` : `${fmt(-diff)} over budget`
     return <div className="budget-variance-row" style={{ color }}>{label}</div>
   }
 
@@ -184,8 +184,8 @@ export default function TotalsPanel({
     return (
       <div className={`budget-totals-row${twoColumn ? ' budget-totals-row--split' : ''}`}>
         <span className="budget-totals-label">{label}</span>
-        <span className="budget-totals-value">{fmtGbp(min)}</span>
-        {twoColumn && <span className="budget-totals-value">{fmtGbp(max)}</span>}
+        <span className="budget-totals-value">{fmt(min)}</span>
+        {twoColumn && <span className="budget-totals-value">{fmt(max)}</span>}
       </div>
     )
   }
@@ -259,11 +259,11 @@ export default function TotalsPanel({
         </span>
         {twoColumn ? (
           <>
-            <span className="budget-grand-total-value">{fmtGbp(totalMin)}</span>
-            <span className="budget-grand-total-value">{fmtGbp(totalMax)}</span>
+            <span className="budget-grand-total-value">{fmt(totalMin)}</span>
+            <span className="budget-grand-total-value">{fmt(totalMax)}</span>
           </>
         ) : (
-          <span className="budget-grand-total-value">{fmtGbp(totalMin)}</span>
+          <span className="budget-grand-total-value">{fmt(totalMin)}</span>
         )}
       </div>
 
@@ -275,7 +275,7 @@ export default function TotalsPanel({
               <div className="budget-totals-row budget-client-budget-row">
                 <span className="budget-totals-label">Client budget</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="budget-totals-value">{fmtGbp(budgetDisplay!)}</span>
+                  <span className="budget-totals-value">{fmt(budgetDisplay!)}</span>
                   {isConsultant && onClientBudgetChange && (
                     <button
                       className="budget-cost-edit"

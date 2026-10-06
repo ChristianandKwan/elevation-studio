@@ -19,7 +19,7 @@ function fakeDb() {
 function art(id: string, workId: string, xF: number, name = 'Street 1'): Artwork {
   return {
     id, workId, name, imageUrl: null, imagePath: null, wCm: 60, hCm: 80, xF, yF: 0.5,
-    visible: true, price: 4000, artist: 'Julian Opie', note: '', noteShownToClient: true,
+    visible: true, price: 4000, priceCurrency: 'GBP', artist: 'Julian Opie', note: '', noteShownToClient: true,
     vatApplies: true, discountStatus: 'none', discountPercent: null, subLineItems: [],
   }
 }

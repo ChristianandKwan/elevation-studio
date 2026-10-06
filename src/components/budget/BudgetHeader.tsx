@@ -1,6 +1,8 @@
 'use client'
 
 import type { SaveStatus } from './useBudgetState'
+import { CURRENCY_META } from './currency'
+import type { Currency } from '@/types'
 
 interface Props {
   vatMode: boolean
@@ -10,6 +12,10 @@ interface Props {
   isConsultant?: boolean
   isPreviewingClientView?: boolean
   onPreviewToggle?: () => void
+  /** Pounds and the project's other currency, when it offers one and there is a rate (042). */
+  currencies?: Currency[] | null
+  currency?: Currency
+  onCurrencyToggle?: (c: Currency) => void
 }
 
 export default function BudgetHeader({
@@ -20,6 +26,9 @@ export default function BudgetHeader({
   isConsultant = false,
   isPreviewingClientView = false,
   onPreviewToggle,
+  currencies,
+  currency = 'GBP',
+  onCurrencyToggle,
 }: Props) {
   return (
     // One sticky block, so the client-view band stays in sight with the bar.
@@ -29,6 +38,14 @@ export default function BudgetHeader({
         <EyeIcon />
         What the client sees
         <button onClick={onPreviewToggle}>Back to editing</button>
+      </div>
+    )}
+    {/* In the client's currency the consultant reads the client's view, and
+        edits in pounds, so nothing converted is ever saved as pounds. */}
+    {isConsultant && !isPreviewingClientView && currency !== 'GBP' && onCurrencyToggle && (
+      <div className="budget-client-band" role="status">
+        In {CURRENCY_META[currency].inSentence}, as the client sees it
+        <button onClick={() => onCurrencyToggle('GBP')}>Back to pounds to edit</button>
       </div>
     )}
     <div className="budget-header">
@@ -44,6 +61,22 @@ export default function BudgetHeader({
         )}
       </div>
 
+      <div className="budget-toggles">
+      {currencies && onCurrencyToggle && (
+        <div className="budget-vat-toggle" role="group" aria-label="Currency">
+          {currencies.map(c => (
+            <button
+              key={c}
+              className={`budget-vat-btn${currency === c ? ' active' : ''}`}
+              aria-pressed={currency === c}
+              title={CURRENCY_META[c].name}
+              onClick={() => onCurrencyToggle(c)}
+            >
+              {CURRENCY_META[c].symbol.trim()}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="budget-vat-toggle">
         <button
           className={`budget-vat-btn${!vatMode ? ' active' : ''}`}
@@ -57,6 +90,7 @@ export default function BudgetHeader({
         >
           Inc VAT
         </button>
+      </div>
       </div>
 
       <div className="budget-header-right">

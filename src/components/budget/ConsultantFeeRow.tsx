@@ -1,7 +1,8 @@
 'use client'
 
+import { useMoney } from './money'
 import { useState } from 'react'
-import { fmtGbp, consultantFeeRange, displayFrozenAmount } from './budgetCalc'
+import { consultantFeeRange, displayFrozenAmount } from './budgetCalc'
 import type { BudgetConsultantFee } from '@/types'
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, vatMode, onChange }: Props) {
+  const { fmt } = useMoney()
   const [editing, setEditing] = useState(false)
   const [draftMode, setDraftMode] = useState<'flat' | 'percentage'>('flat')
   const [draftAmount, setDraftAmount] = useState('')
@@ -84,15 +86,15 @@ export default function ConsultantFeeRow({ fee, artMin, artMax, isConsultant, va
   if (fee) {
     if (fee.mode === 'flat') {
       const disp = displayFrozenAmount(fee.amount, fee.amountIncludesVat, vatApplies, vatMode)
-      valueStr = fmtGbp(disp)
+      valueStr = fmt(disp)
     } else {
       const range = consultantFeeRange(fee, artMin, artMax)
       const displayVatMult = vatMode && vatApplies ? 1.2 : 1
       const dispMin = Math.round(range.min * displayVatMult)
       const dispMax = Math.round(range.max * displayVatMult)
       const rangeStr = dispMin === dispMax
-        ? fmtGbp(dispMin)
-        : `${fmtGbp(dispMin)} – ${fmtGbp(dispMax)}`
+        ? fmt(dispMin)
+        : `${fmt(dispMin)} – ${fmt(dispMax)}`
       valueStr = `${fee.amount}% (${rangeStr})`
     }
   }

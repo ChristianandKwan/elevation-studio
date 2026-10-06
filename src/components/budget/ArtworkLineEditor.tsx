@@ -3,9 +3,11 @@
 import { newSubLineItem } from '@/lib/lineItems'
 import { BUDGET_SHARE_TITLES, budgetNoteShare } from '@/lib/notes'
 import ShareSwitch from '@/components/notes/ShareSwitch'
-import { fmtGbp, netPrice, tbcNetPrice, subItemAmount, artworkLineTotal } from './budgetCalc'
+import { netPrice, tbcNetPrice, subItemAmount, artworkLineTotal } from './budgetCalc'
 import type { BudgetArtwork, BudgetArtworkPatch } from './budgetCalc'
-import type { DiscountStatus, SubLineItem, SubLineItemKind } from '@/types'
+import { CURRENCIES, CURRENCY_META, fmtMoney } from './currency'
+import { useMoney } from './money'
+import type { Currency, DiscountStatus, SubLineItem, SubLineItemKind } from '@/types'
 
 interface Props {
   artwork: BudgetArtwork
@@ -34,6 +36,7 @@ const DISCOUNT_HINT: Record<DiscountStatus, string> = {
 }
 
 export default function ArtworkLineEditor({ artwork, vatMode, onChange, onDone }: Props) {
+  const { fmt } = useMoney()
   return (
     <div className="ble">
       <div className="ble-head">
@@ -48,7 +51,7 @@ export default function ArtworkLineEditor({ artwork, vatMode, onChange, onDone }
 
       <div className="ble-foot">
         <span>This work in the budget</span>
-        <strong>{fmtGbp(artworkLineTotal(artwork, vatMode))}</strong>
+        <strong>{fmt(artworkLineTotal(artwork, vatMode))}</strong>
       </div>
     </div>
   )
@@ -60,8 +63,14 @@ export default function ArtworkLineEditor({ artwork, vatMode, onChange, onDone }
  * about what a discount means.
  */
 export function MoneyFields({ artwork, onChange }: Pick<Props, 'artwork' | 'onChange'>) {
-  const net = netPrice(artwork)
-  const tbcNet = tbcNetPrice(artwork)
+  // The price as quoted, in its own currency (042). On the budget the line may
+  // have been converted for the screen; what is edited is always what the
+  // gallery gave, so a converted figure is never saved back as the price.
+  const currency: Currency = artwork.priceCurrency ?? 'GBP'
+  const quoted = { ...artwork, price: artwork.quotedPrice ?? artwork.price }
+  const money = (n: number) => fmtMoney(n, currency)
+  const net = netPrice(quoted)
+  const tbcNet = tbcNetPrice(quoted)
 
   function patchSub(id: string, patch: Partial<SubLineItem>) {
     onChange({ subLineItems: artwork.subLineItems.map(i => (i.id === id ? { ...i, ...patch } : i)) })
@@ -81,11 +90,24 @@ export function MoneyFields({ artwork, onChange }: Pick<Props, 'artwork' | 'onCh
         <div className="ble-field">
           <span className="ble-label">Price</span>
           <div className="ble-input-wrap">
-            <span className="ble-prefix">£</span>
+            <select
+              className="ble-currency"
+              value={currency}
+              aria-label="Currency the price is quoted in"
+              title="The currency the price is quoted in. Changing it clears the price, so the figure can be typed as quoted."
+              onChange={e => {
+                const next = e.target.value as Currency
+                if (next !== currency) onChange({ priceCurrency: next, price: 0 })
+              }}
+            >
+              {CURRENCIES.map(c => (
+                <option key={c} value={c}>{CURRENCY_META[c].symbol.trim()}</option>
+              ))}
+            </select>
             <input
               type="number"
               className="ble-input"
-              value={artwork.price || ''}
+              value={quoted.price || ''}
               min={0}
               step={50}
               placeholder="0"
@@ -94,6 +116,11 @@ export function MoneyFields({ artwork, onChange }: Pick<Props, 'artwork' | 'onCh
             />
             <span className="ble-suffix">ex-VAT</span>
           </div>
+          {currency !== 'GBP' && (
+            <p className="ble-hint">
+              Kept in {CURRENCY_META[currency].inSentence} as quoted. The budget converts it at the day’s rate, so its pound figure is indicative.
+            </p>
+          )}
         </div>
 
         {/* ── VAT ───────────────────────────────────────────────────── */}
@@ -161,10 +188,10 @@ export function MoneyFields({ artwork, onChange }: Pick<Props, 'artwork' | 'onCh
               </div>
             )}
             {artwork.discountStatus === 'confirmed' && (
-              <span className="ble-result">nets to <strong>{fmtGbp(net)}</strong></span>
+              <span className="ble-result">nets to <strong>{money(net)}</strong></span>
             )}
             {tbcNet != null && (
-              <span className="ble-result">would be <strong>{fmtGbp(tbcNet)}</strong></span>
+              <span className="ble-result">would be <strong>{money(tbcNet)}</strong></span>
             )}
           </div>
           <p className="ble-hint">{DISCOUNT_HINT[artwork.discountStatus]}</p>
@@ -199,7 +226,7 @@ export function MoneyFields({ artwork, onChange }: Pick<Props, 'artwork' | 'onCh
                       aria-label="Percentage of the work"
                       onChange={e => patchSub(item.id, { percent: Number(e.target.value) || 0 })}
                     />
-                    <span className="ble-suffix">% = {fmtGbp(subItemAmount(item, net))}</span>
+                    <span className="ble-suffix">% = {money(subItemAmount(item, net))}</span>
                   </>
                 ) : (
                   <>

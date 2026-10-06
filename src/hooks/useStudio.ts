@@ -1973,6 +1973,7 @@ export function useStudio({ projectId, optionId, onStatus, projectName = '', ele
       yF,
       visible: true,
       price: work.price,
+      priceCurrency: work.priceCurrency,
       artist: work.artist,
       note: work.note,
       noteShownToClient: work.noteShownToClient,

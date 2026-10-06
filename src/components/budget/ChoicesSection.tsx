@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import ChoiceEditor, { type EditorWork } from './ChoiceEditor'
-import { applyVat, fmtGbp, fmtRange } from './budgetCalc'
+import { applyVat } from './budgetCalc'
+import { useMoney } from './money'
 import type { BudgetElevationData } from './budgetCalc'
 import {
   alternativeSpan, alternativesOf, clientChoices, missingPrices, offeredAlternatives,
@@ -121,6 +122,7 @@ function editorWorks(all: BudgetElevationData[], clientElevations: BudgetElevati
 function ConsultantChoice({
   choice, picks, clientElevations, vatMode, doubleFramed, onPick, onUpdate, onRemove, onRemoveFramingLines, onEdit,
 }: Props & { choice: BudgetChoice; onEdit?: () => void }) {
+  const { fmtRange } = useMoney()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const inPlay = useMemo(() => worksInPlay(clientElevations), [clientElevations])
   const picked = pickedAlternative(choice, picks)
@@ -246,6 +248,7 @@ function listNames(names: string[]): string {
 function ClientChoice({
   choice, picks, clientElevations, vatMode, locked, lastDecisionId, onPick,
 }: Props & { choice: BudgetChoice }) {
+  const { fmt, fmtRange } = useMoney()
   const inPlay = worksInPlay(clientElevations)
   const picked = pickedAlternative(choice, picks)
   const offered = offeredAlternatives(choice, inPlay)
@@ -318,7 +321,7 @@ function ClientChoice({
                       {priced.map(([id, workName]) => (
                         <div key={id}>
                           <span>{workName}</span>
-                          <span>{fmtGbp(applyVat(alt.prices[id], alt.vatApplies, vatMode))}</span>
+                          <span>{fmt(applyVat(alt.prices[id], alt.vatApplies, vatMode))}</span>
                         </div>
                       ))}
                     </details>
