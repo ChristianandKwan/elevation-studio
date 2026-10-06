@@ -34,7 +34,7 @@ import { notesForExport, notesMentioning, notesOn, rowToNote, workSetLabel, type
 import { MESSAGE_COLUMNS, messagesByOption, rowToMessage, type OptionMessage, type OptionMessageRow } from '@/lib/messages'
 import { sortOptions, optionTitleFor } from '@/lib/options'
 import {
-  netPrice, subItemAmount, installCostDisplay, consultantFeeRange,
+  netPrice, subItemAmount, installCostDisplay, consultantFeeRange, feeLabel,
   displayFrozenAmount, getOptionTotals, bucketTotal, optionSpan,
   type BudgetArtwork, type BudgetElevationData,
 } from '@/components/budget/budgetCalc'
@@ -634,7 +634,7 @@ function buildBudget(
       const amount = displayFrozenAmount(
         fee.amount * f, fee.amountIncludesVat, fee.vatApplies ?? true, false,
       )
-      lines.push({ label: 'Consultant fee', amount })
+      lines.push({ label: feeLabel(fee), amount })
       total += amount
       totalMax += amount
     } else {
@@ -643,7 +643,7 @@ function buildBudget(
       // framing and the installation too.
       const range = consultantFeeRange(fee, artMin, artMax)
       lines.push({
-        label: `Consultant fee (${fee.amount}%)`,
+        label: `${feeLabel(fee)} (${fee.amount}%)`,
         amount: range.min,
         ...(range.max !== range.min ? { amountMax: range.max } : {}),
       })

@@ -3,7 +3,7 @@
 import { useMoney } from './money'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { installCostDisplay, consultantFeeRange, displayFrozenAmount, applyVat } from './budgetCalc'
+import { installCostDisplay, consultantFeeRange, displayFrozenAmount, applyVat, feeLabel } from './budgetCalc'
 import type { ProjectTotals } from './budgetCalc'
 import type { BudgetInstallation, BudgetConsultantFee, BudgetCustomLineItem } from '@/types'
 
@@ -246,7 +246,7 @@ export default function TotalsPanel({
 
         {dispCustomTotal > 0 && summaryRow('Other', dispCustomTotal, dispCustomTotal)}
 
-        {showFee && summaryRow('Consultant fee', dispFeeMin, dispFeeMax)}
+        {showFee && summaryRow(feeLabel(consultantFee), dispFeeMin, dispFeeMax)}
       </div>
 
       {/* Grand total */}
